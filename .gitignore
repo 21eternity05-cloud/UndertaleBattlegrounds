@@ -1,0 +1,12 @@
+# Roblox binary place/model files
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+
+# Rojo generated files
+sourcemap.json
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
