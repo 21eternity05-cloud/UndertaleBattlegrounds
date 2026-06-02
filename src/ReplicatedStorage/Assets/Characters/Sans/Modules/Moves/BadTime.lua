@@ -1,0 +1,15 @@
+return {
+	DisplayName = "Bad Time",
+	AnimationName = "BadTime",
+	Cooldown = 35,
+	Duration = 1.6,
+	LockTime = 1.6,
+	HitDelay = 0.55,
+	Damage = 26,
+	Stun = 1.75,
+	Radius = 13,
+	Offset = CFrame.new(0, 0, -8),
+	Blockable = true,
+	Guardbreak = true,
+	GuardbreakStun = 1.8,
+}

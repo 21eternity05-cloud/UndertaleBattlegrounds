@@ -7,30 +7,32 @@ local combatRemote = remotes:WaitForChild("CombatRemote")
 local characterRemote = remotes:WaitForChild("CharacterRemote")
 local moveRemote = remotes:WaitForChild("MoveRemote")
 
-local Config = require(script:WaitForChild("CombatConfig"))
+local combatFolder = script.Parent
 
-local AnimationService = require(script:WaitForChild("AnimationService")).new(Config)
-local VFXService = require(script:WaitForChild("VFXService")).new(Config)
-local StateService = require(script:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
-local HitboxService = require(script:WaitForChild("HitboxService")).new(Config)
-local MovementService = require(script:WaitForChild("MovementService")).new(Config)
-local BlockService = require(script:WaitForChild("BlockService")).new(Config, StateService, VFXService)
-local WeaponService = require(script:WaitForChild("WeaponService")).new(Config)
-local CharacterService = require(script:WaitForChild("CharacterService")).new(Config, WeaponService)
-local UltService = require(script:WaitForChild("UltService")).new(Config)
-local DebugService = require(script:WaitForChild("DebugService")).new(Config)
+local Config = require(combatFolder:WaitForChild("CombatConfig"))
 
-local CombatStatusService = require(script:WaitForChild("CombatStatusService")).new(Config)
-local CinematicService = require(script:WaitForChild("CinematicService")).new(Config)
+local AnimationService = require(combatFolder:WaitForChild("AnimationService")).new(Config)
+local VFXService = require(combatFolder:WaitForChild("VFXService")).new(Config)
+local StateService = require(combatFolder:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
+local HitboxService = require(combatFolder:WaitForChild("HitboxService")).new(Config)
+local MovementService = require(combatFolder:WaitForChild("MovementService")).new(Config)
+local BlockService = require(combatFolder:WaitForChild("BlockService")).new(Config, StateService, VFXService)
+local WeaponService = require(combatFolder:WaitForChild("WeaponService")).new(Config)
+local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(Config, WeaponService)
+local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
+local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
 
-local CounterService = require(script:WaitForChild("CounterService")).new(
+local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
+local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
+
+local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
 	StateService,
 	MovementService,
 	VFXService
 )
 
-local ProjectileService = require(script:WaitForChild("ProjectileService")).new(
+local ProjectileService = require(combatFolder:WaitForChild("ProjectileService")).new(
 	Config,
 	HitboxService,
 	BlockService,
@@ -47,7 +49,7 @@ StateService.ProjectileService = ProjectileService
 StateService.UltService = UltService
 StateService.CinematicService = CinematicService
 
-local M1Service = require(script:WaitForChild("M1Service")).new(
+local M1Service = require(combatFolder:WaitForChild("M1Service")).new(
 	Config,
 	StateService,
 	HitboxService,
@@ -58,7 +60,7 @@ local M1Service = require(script:WaitForChild("M1Service")).new(
 	CombatStatusService
 )
 
-local MoveService = require(script:WaitForChild("MoveService")).new(
+local MoveService = require(combatFolder:WaitForChild("MoveService")).new(
 	Config,
 	StateService,
 	HitboxService,

@@ -1,0 +1,15 @@
+return {
+	DisplayName = "Gaster Blaster",
+	AnimationName = "GasterBlaster",
+	Cooldown = 14,
+	Duration = 1.1,
+	LockTime = 1.1,
+	HitDelay = 0.45,
+	Damage = 17,
+	Stun = 1.3,
+	Radius = 10,
+	Offset = CFrame.new(0, 0, -8),
+	Blockable = true,
+	Guardbreak = true,
+	GuardbreakStun = 1.45,
+}

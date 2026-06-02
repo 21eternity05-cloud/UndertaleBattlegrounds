@@ -1,0 +1,87 @@
+local CharaWeapon = {}
+CharaWeapon.__index = CharaWeapon
+
+function CharaWeapon.new(config, characterFolder)
+	local self = setmetatable({}, CharaWeapon)
+	self.Config = config
+	self.CharacterFolder = characterFolder
+	return self
+end
+
+function CharaWeapon:PrepareWeaponModel(model)
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = false
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+			descendant.Massless = true
+		end
+	end
+end
+
+function CharaWeapon:WeldWeaponPartsToHandle(weaponModel, handle)
+	for _, part in ipairs(weaponModel:GetDescendants()) do
+		if part:IsA("BasePart") and part ~= handle then
+			local alreadyConnected = false
+
+			for _, child in ipairs(part:GetChildren()) do
+				if child:IsA("WeldConstraint") or child:IsA("Weld") or child:IsA("Motor6D") then
+					alreadyConnected = true
+					break
+				end
+			end
+
+			if not alreadyConnected then
+				local weld = Instance.new("WeldConstraint")
+				weld.Name = "AutoWeaponWeld"
+				weld.Part0 = handle
+				weld.Part1 = part
+				weld.Parent = handle
+			end
+		end
+	end
+end
+
+function CharaWeapon:Equip(character)
+	if not character or not character.Parent then return end
+
+	local rightArm = character:FindFirstChild("Right Arm")
+	if not rightArm then return end
+
+	local weaponsFolder = self.CharacterFolder:FindFirstChild("Weapons")
+	if not weaponsFolder then return end
+
+	local knifeTemplate = weaponsFolder:FindFirstChild("RealKnife")
+	local motorTemplate = weaponsFolder:FindFirstChild("KnifeMotorTemplate")
+
+	if not knifeTemplate then return end
+	if not motorTemplate or not motorTemplate:IsA("Motor6D") then return end
+
+	local knife = knifeTemplate:Clone()
+	knife.Name = "EquippedWeapon"
+	knife.Parent = character
+
+	local handle = knife:FindFirstChild("HandleKnife", true)
+	if not handle or not handle:IsA("BasePart") then
+		knife:Destroy()
+		return
+	end
+
+	self:PrepareWeaponModel(knife)
+	self:WeldWeaponPartsToHandle(knife, handle)
+
+	local oldMotor = rightArm:FindFirstChild("HandleKnife")
+	if oldMotor then
+		oldMotor:Destroy()
+	end
+
+	local motor = motorTemplate:Clone()
+	motor.Name = "HandleKnife"
+	motor.Part0 = rightArm
+	motor.Part1 = handle
+	motor:SetAttribute("CharacterWeaponMotor", true)
+	motor.Parent = rightArm
+end
+
+return CharaWeapon
