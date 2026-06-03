@@ -75,6 +75,36 @@ function UltService:CleanupPlayer(player)
 	self.PlayerUlt[player] = nil
 end
 
+function UltService:SetupDebugUltButton()
+	local button = workspace:FindFirstChild("ULT_BUTTON")
+
+	if not button or not button:IsA("BasePart") then
+		warn("[UltService] No workspace ULT_BUTTON found")
+		return
+	end
+
+	local debounce = {}
+
+	button.Touched:Connect(function(hit)
+		local character = hit and hit:FindFirstAncestorOfClass("Model")
+		if not character then return end
+
+		local player = Players:GetPlayerFromCharacter(character)
+		if not player then return end
+
+		if debounce[player] then return end
+		debounce[player] = true
+
+		self:SetUlt(player, self.UltMax, "DebugButton")
+
+		task.delay(0.75, function()
+			debounce[player] = nil
+		end)
+	end)
+
+	print("[UltService] Debug ULT_BUTTON connected")
+end
+
 function UltService:Start()
 	Players.PlayerAdded:Connect(function(player)
 		self:SetupPlayer(player)
@@ -95,6 +125,8 @@ function UltService:Start()
 			self:SendUpdate(player)
 		end)
 	end
+
+	self:SetupDebugUltButton()
 end
 
 function UltService:GetUlt(player)

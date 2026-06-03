@@ -6,7 +6,7 @@ local BadTime = {
 	DisplayName = "Bad Time",
 	AnimationName = "BadTime",
 
-	Cooldown = 1, -- TESTING. Later set this back to 35.
+	Cooldown = 1, -- TESTING. Set back to 35 later.
 	Duration = 11,
 	LockTime = 11,
 	MaxLockTime = 11.5,
@@ -39,29 +39,50 @@ local BadTime = {
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
 
-	BoneShotCount = 18,
-	BoneShotDamage = 3,
+	BoneShotCount = 18, 
+	BoneShotDamage = .2,
+	BoneShotRadius = 7.5,
+	BoneShotSpawnMinRadius = 38,
+	BoneShotSpawnMaxRadius = 52,
+	BoneShotTravelTime = 0.34,
 
 	BoneZoneCount = 4,
-	BoneZoneDamage = 6,
+	BoneZoneDamage = 2.5,
 
-	BoneWallCount = 4,
-	BoneWallDamage = 6,
+	BoneWallCount = 8,
+	BoneWallDamage = 3,
+	BoneWallFireInterval = 0.4,
+	BoneWallTravelTime = 0.48,
 
-	BlasterRingCount = 8,
-	BlasterDamage = 7,
+	BlasterCircleRounds = 6,
+	BlasterRingCount = 14,
+	BlasterDamage = .5,
 	BlasterScale = 1,
-	BlasterChargeTime = 0.55,
-	BlasterShotInterval = 0.18,
+	BlasterChargeTime = 0.52,
+	BlasterShotInterval = 0.055,
+	BlasterBeamRadius = 5.2,
+	BlasterBeamStep = 6,
+	BlasterBeamLength = 78,
+	BlasterSpawnRadius = 36, -- farther normal blaster ring
 
-	GiantBlasterDamage = 12,
+	BlasterSpawnTweenTime = 0.12,
+	BlasterFadeOutTime = 0.16,
+	BlasterMoveInDistance = 6,
+	BlasterMoveOutDistance = 7,
+
+	GiantBlasterDamage = 5,
 	GiantBlasterScale = 2.2,
-	GiantBlasterChargeTime = 0.7,
-	GiantBlasterBeamRadius = 12,
-	GiantBlasterBeamLength = 115,
+	GiantBlasterChargeTime = 0.72,
+	GiantBlasterBeamRadius = 9,
+	GiantBlasterBeamStep = 7,
+	GiantBlasterBeamLength = 120,
+	GiantBlasterSpawnTweenTime = 0.18,
+	GiantBlasterMoveInDistance = 8,
+	GiantBlasterMoveOutDistance = 10,
+	GiantBlasterSpawnRadius = 36, -- farther normal blaster ring
 
-	GravitySpamTotalDamage = 20,
-	FinalSlamDamage = 999,
+	GravitySpamTotalDamage = 8,
+	FinalSlamDamage = 1,
 }
 
 local function getSansVFXFolder(ctx)
@@ -129,12 +150,14 @@ local function ensurePrimaryPart(model)
 	end
 
 	local primary = model:FindFirstChild("PrimaryPart", true)
+
 	if primary and primary:IsA("BasePart") then
 		model.PrimaryPart = primary
 		return primary
 	end
 
 	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
+
 	if firstPart then
 		model.PrimaryPart = firstPart
 		return firstPart
@@ -147,6 +170,7 @@ local function forcePrimaryInvisible(model)
 	if not model or not model:IsA("Model") then return end
 
 	local primary = ensurePrimaryPart(model)
+
 	if primary then
 		primary.Transparency = 1
 		primary.CanCollide = false
@@ -156,6 +180,8 @@ local function forcePrimaryInvisible(model)
 end
 
 local function pivotObject(object, cframe)
+	if not object then return end
+
 	if object:IsA("Model") then
 		ensurePrimaryPart(object)
 		object:PivotTo(cframe)
@@ -203,7 +229,7 @@ local function fadeOutObject(object, fadeTime)
 	Debris:AddItem(object, fadeTime + 0.08)
 end
 
-local function emitAttachmentToPart(template, part, lifetime, name)
+local function emitAttachmentToPart(template, part, lifetime, name, keepEnabled)
 	if not template or not part or not part.Parent then return nil end
 
 	if not template:IsA("Attachment") then
@@ -217,7 +243,7 @@ local function emitAttachmentToPart(template, part, lifetime, name)
 
 	for _, descendant in ipairs(attachment:GetDescendants()) do
 		if descendant:IsA("ParticleEmitter") then
-			descendant.Enabled = false
+			descendant.Enabled = keepEnabled == true
 
 			local emitCount = descendant:GetAttribute("EmitCount")
 			if typeof(emitCount) ~= "number" then
@@ -235,7 +261,7 @@ local function emitAttachmentToPart(template, part, lifetime, name)
 	return attachment
 end
 
-local function startHeadAttachment(ctx, character, templateName, lifetime)
+local function startHeadAttachment(ctx, character, templateName, lifetime, keepEnabled)
 	local template = getVFXTemplate(ctx, templateName)
 	if not template then return nil end
 
@@ -245,7 +271,7 @@ local function startHeadAttachment(ctx, character, templateName, lifetime)
 		return nil
 	end
 
-	return emitAttachmentToPart(template, head, lifetime, "Active" .. templateName)
+	return emitAttachmentToPart(template, head, lifetime, "Active" .. templateName, keepEnabled)
 end
 
 local function getVictim(ctx)
@@ -260,17 +286,6 @@ local function getVictim(ctx)
 	end
 
 	return targetCharacter, targetHumanoid, targetRoot
-end
-
-local function getFlatDirection(fromPosition, toPosition)
-	local direction = toPosition - fromPosition
-	direction = Vector3.new(direction.X, 0, direction.Z)
-
-	if direction.Magnitude < 0.05 then
-		return Vector3.new(0, 0, -1)
-	end
-
-	return direction.Unit
 end
 
 local function makeConfirmAttackData(data)
@@ -317,17 +332,16 @@ local function wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePo
 	return false
 end
 
-local function nonlethalDamage(ctx, targetCharacter, targetHumanoid, damage)
+local function nonlethalDamage(targetCharacter, targetHumanoid, damage)
 	if not targetCharacter or not targetCharacter.Parent then return end
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
 
 	targetHumanoid.Health = math.max(1, targetHumanoid.Health - (damage or 0))
-
-	-- Important: do NOT award ult meter during an ultimate.
 end
 
 local function lethalDamage(targetHumanoid, damage)
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+
 	targetHumanoid:TakeDamage(damage or 999)
 end
 
@@ -336,7 +350,7 @@ local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, tar
 		return false
 	end
 
-	nonlethalDamage(ctx, targetCharacter, targetHumanoid, damage)
+	nonlethalDamage(targetCharacter, targetHumanoid, damage)
 
 	if ctx.VFXService then
 		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
@@ -375,7 +389,7 @@ local function cloneM1Bone(ctx)
 	return bone
 end
 
-local function spawnBoneShotAtVictim(ctx, damage, index, count)
+local function spawnBoneShotAtVictim(ctx, data, index, count)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then return end
 
@@ -383,11 +397,15 @@ local function spawnBoneShotAtVictim(ctx, damage, index, count)
 	if not bone then return end
 
 	local angle = math.rad((360 / math.max(count, 1)) * index + math.random(-12, 12))
-	local radius = math.random(13, 19)
-	local height = math.random(5, 9)
+	local radius = math.random(data.BoneShotSpawnMinRadius or 38, data.BoneShotSpawnMaxRadius or 52)
+	local height = math.random(9, 14)
 
 	local targetPosition = targetRoot.Position + Vector3.new(0, 1.4, 0)
-	local startPosition = targetRoot.Position + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
+	local startPosition = targetRoot.Position + Vector3.new(
+		math.cos(angle) * radius,
+		height,
+		math.sin(angle) * radius
+	)
 
 	local startCFrame = CFrame.lookAt(startPosition, targetPosition)
 	local endCFrame = CFrame.lookAt(targetPosition, targetPosition + (targetPosition - startPosition).Unit)
@@ -412,7 +430,7 @@ local function spawnBoneShotAtVictim(ctx, damage, index, count)
 
 	local tween = TweenService:Create(
 		cframeValue,
-		TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(data.BoneShotTravelTime or 0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{
 			Value = endCFrame,
 		}
@@ -421,20 +439,39 @@ local function spawnBoneShotAtVictim(ctx, damage, index, count)
 	tween:Play()
 
 	tween.Completed:Connect(function()
-		if connection then connection:Disconnect() end
+		if connection then
+			connection:Disconnect()
+		end
+
 		cframeValue:Destroy()
 
-		local currentCharacter, currentHumanoid, currentRoot = getVictim(ctx)
-		if currentCharacter and (currentRoot.Position - targetPosition).Magnitude <= 5.5 then
-			blockableSequenceDamage(ctx, currentCharacter, currentHumanoid, currentRoot, startPosition, damage)
-		end
+		local hitOnce = false
+
+		ctx.HitboxService:PerformSphereAtPosition(
+			ctx.Character,
+			targetPosition,
+			data.BoneShotRadius or 7.5,
+			function(hitCharacter, hitHumanoid, hitRoot)
+				if hitOnce then return end
+				hitOnce = true
+
+				blockableSequenceDamage(
+					ctx,
+					hitCharacter,
+					hitHumanoid,
+					hitRoot,
+					startPosition,
+					data.BoneShotDamage or 3
+				)
+			end
+		)
 
 		playSansSFX(ctx, "M1", targetRoot, 2)
 		fadeOutObject(bone, 0.08)
 	end)
 end
 
-local function spawnBoneZoneAtVictim(ctx, damage)
+local function spawnBoneZoneAtVictim(ctx, data)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then return end
 
@@ -461,6 +498,7 @@ local function spawnBoneZoneAtVictim(ctx, damage)
 	playSansSFX(ctx, "BoneUp", targetRoot, 2)
 
 	local bones = zoneModel:FindFirstChild("Bones", true)
+
 	if bones and bones:IsA("Model") then
 		ensurePrimaryPart(bones)
 
@@ -490,15 +528,34 @@ local function spawnBoneZoneAtVictim(ctx, damage)
 		tween:Play()
 
 		tween.Completed:Connect(function()
-			if connection then connection:Disconnect() end
+			if connection then
+				connection:Disconnect()
+			end
+
 			cframeValue:Destroy()
 		end)
 	end
 
-	local currentCharacter, currentHumanoid, currentRoot = getVictim(ctx)
-	if currentCharacter and (currentRoot.Position - position).Magnitude <= 10 then
-		blockableSequenceDamage(ctx, currentCharacter, currentHumanoid, currentRoot, position, damage)
-	end
+	local hitOnce = false
+
+	ctx.HitboxService:PerformSphereAtPosition(
+		ctx.Character,
+		position,
+		10,
+		function(hitCharacter, hitHumanoid, hitRoot)
+			if hitOnce then return end
+			hitOnce = true
+
+			blockableSequenceDamage(
+				ctx,
+				hitCharacter,
+				hitHumanoid,
+				hitRoot,
+				position,
+				data.BoneZoneDamage or 6
+			)
+		end
+	)
 
 	task.delay(0.5, function()
 		fadeOutObject(zoneModel, 0.16)
@@ -507,7 +564,7 @@ local function spawnBoneZoneAtVictim(ctx, damage)
 	Debris:AddItem(zoneModel, 1.2)
 end
 
-local function spawnTrackingBoneWall(ctx, damage)
+local function spawnTrackingBoneWall(ctx, data, sideIndex)
 	local template = getVFXTemplate(ctx, "BoneWall")
 	if not template then return end
 
@@ -528,9 +585,13 @@ local function spawnTrackingBoneWall(ctx, damage)
 
 	playSansSFX(ctx, "BoneUp", targetRoot, 2)
 
+	local duration = data.BoneWallTravelTime or 0.48
 	local startTime = os.clock()
-	local duration = 0.52
 	local hitDone = false
+
+	local baseAngle = math.rad((sideIndex - 1) * 180)
+	local angle = baseAngle + math.rad(math.random(-15, 15))
+	local sideDirection = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
 
 	local function getWallCFrame(alpha)
 		local _, _, currentRoot = getVictim(ctx)
@@ -539,17 +600,17 @@ local function spawnTrackingBoneWall(ctx, damage)
 			return wall:GetPivot()
 		end
 
-		local rootCFrame = currentRoot.CFrame
-		local base = rootCFrame * CFrame.new(0, 0, -6)
+		local center = currentRoot.Position
 
-		local startCFrame = base * CFrame.new(0, -4.8, 5)
-		local peakCFrame = base * CFrame.new(0, 3.5, -2.5)
-		local endCFrame = base * CFrame.new(0, -5.2, -9.5)
+		local startPosition = center + (sideDirection * 22) + Vector3.new(0, -4.8, 0)
+		local peakPosition = center + (sideDirection * 7) + Vector3.new(0, 3.8, 0)
+		local endPosition = center - (sideDirection * 10) + Vector3.new(0, -5.2, 0)
 
-		local first = startCFrame:Lerp(peakCFrame, alpha)
-		local second = peakCFrame:Lerp(endCFrame, alpha)
+		local first = startPosition:Lerp(peakPosition, alpha)
+		local second = peakPosition:Lerp(endPosition, alpha)
+		local position = first:Lerp(second, alpha)
 
-		return first:Lerp(second, alpha)
+		return CFrame.lookAt(position, center)
 	end
 
 	while os.clock() - startTime < duration do
@@ -563,12 +624,25 @@ local function spawnTrackingBoneWall(ctx, damage)
 			forcePrimaryInvisible(wall)
 		end
 
-		local currentCharacter, currentHumanoid, currentRoot = getVictim(ctx)
-		if currentCharacter and not hitDone then
-			if (currentRoot.Position - wallCFrame.Position).Magnitude <= 9 then
-				hitDone = true
-				blockableSequenceDamage(ctx, currentCharacter, currentHumanoid, currentRoot, wallCFrame.Position, damage)
-			end
+		if not hitDone then
+			ctx.HitboxService:PerformSphereAtPosition(
+				ctx.Character,
+				wallCFrame.Position,
+				8,
+				function(hitCharacter, hitHumanoid, hitRoot)
+					if hitDone then return end
+					hitDone = true
+
+					blockableSequenceDamage(
+						ctx,
+						hitCharacter,
+						hitHumanoid,
+						hitRoot,
+						wallCFrame.Position,
+						data.BoneWallDamage or 6
+					)
+				end
+			)
 		end
 
 		task.wait()
@@ -622,6 +696,7 @@ local function getBeamStart(blaster)
 
 	if blaster:IsA("Model") then
 		local primary = ensurePrimaryPart(blaster)
+
 		if primary then
 			return primary.Position
 		end
@@ -687,32 +762,157 @@ local function createBeamVisual(startPosition, direction, length, radius, fadeTi
 	Debris:AddItem(beam, (fadeTime or 0.18) + 0.08)
 end
 
-local function hitVictimWithBeam(ctx, startPosition, direction, length, radius, damage, blockable)
-	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then return end
-
-	local toTarget = targetRoot.Position - startPosition
-	local projected = toTarget:Dot(direction.Unit)
-
-	if projected < 0 or projected > length then return end
-
-	local closest = startPosition + direction.Unit * projected
-	local distance = (targetRoot.Position - closest).Magnitude
-
-	if distance > radius then return end
-
-	if blockable ~= false then
-		blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, targetRoot, startPosition, damage)
-	else
-		nonlethalDamage(ctx, targetCharacter, targetHumanoid, damage)
-
-		if ctx.VFXService then
-			ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
-		end
+local function hitVictimWithBeam(ctx, data, startPosition, direction, length, radius, damage, blockable)
+	if not ctx.HitboxService or not ctx.HitboxService.PerformSphereChain then
+		warn("[BadTime] Missing HitboxService:PerformSphereChain")
+		return
 	end
+
+	local hitOnce = false
+
+	ctx.HitboxService:PerformSphereChain(
+		ctx.Character,
+		startPosition,
+		direction,
+		length,
+		data.BlasterBeamStep or 6,
+		radius,
+		function(hitCharacter, hitHumanoid, hitRoot, hitPosition)
+			if hitOnce then return end
+			hitOnce = true
+
+			if blockable ~= false then
+				blockableSequenceDamage(
+					ctx,
+					hitCharacter,
+					hitHumanoid,
+					hitRoot,
+					hitPosition,
+					damage
+				)
+			else
+				nonlethalDamage(hitCharacter, hitHumanoid, damage)
+
+				if ctx.VFXService then
+					ctx.VFXService:EmitHitVFXOnVictim(hitRoot, ctx.Character)
+				end
+			end
+		end
+	)
 end
 
-local function spawnGasterBlasterAtVictim(ctx, victimSpotCFrame, angle, scale, damage, chargeTime, beamLength, beamRadius, giant)
+local function tweenBlasterIn(blaster, startCFrame, finalCFrame, tweenTime)
+	if not blaster or not blaster.Parent then return nil, nil end
+
+	local cframeValue = Instance.new("CFrameValue")
+	cframeValue.Value = startCFrame
+
+	local connection
+	connection = cframeValue:GetPropertyChangedSignal("Value"):Connect(function()
+		if blaster and blaster.Parent then
+			pivotObject(blaster, cframeValue.Value)
+
+			if blaster:IsA("Model") then
+				forcePrimaryInvisible(blaster)
+			end
+		end
+	end)
+
+	for _, part in ipairs(getVisualParts(blaster)) do
+		part.Transparency = 1
+	end
+
+	if blaster:IsA("Model") then
+		forcePrimaryInvisible(blaster)
+	end
+
+	local moveTween = TweenService:Create(
+		cframeValue,
+		TweenInfo.new(tweenTime or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Value = finalCFrame,
+		}
+	)
+
+	for _, part in ipairs(getVisualParts(blaster)) do
+		TweenService:Create(
+			part,
+			TweenInfo.new(tweenTime or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Transparency = 0,
+			}
+		):Play()
+	end
+
+	moveTween:Play()
+
+	return cframeValue, connection
+end
+
+local function tweenBlasterOut(blaster, currentCFrame, moveDirection, distance, fadeTime)
+	if not blaster or not blaster.Parent then return end
+
+	fadeTime = fadeTime or 0.16
+	distance = distance or 7
+
+	local direction = moveDirection
+
+	if direction.Magnitude < 0.05 then
+		direction = currentCFrame.LookVector
+	else
+		direction = direction.Unit
+	end
+
+	local endCFrame = currentCFrame + (direction * distance)
+
+	local cframeValue = Instance.new("CFrameValue")
+	cframeValue.Value = currentCFrame
+
+	local connection
+	connection = cframeValue:GetPropertyChangedSignal("Value"):Connect(function()
+		if blaster and blaster.Parent then
+			pivotObject(blaster, cframeValue.Value)
+
+			if blaster:IsA("Model") then
+				forcePrimaryInvisible(blaster)
+			end
+		end
+	end)
+
+	TweenService:Create(
+		cframeValue,
+		TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{
+			Value = endCFrame,
+		}
+	):Play()
+
+	for _, part in ipairs(getVisualParts(blaster)) do
+		TweenService:Create(
+			part,
+			TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Transparency = 1,
+			}
+		):Play()
+	end
+
+	task.delay(fadeTime + 0.03, function()
+		if connection then
+			connection:Disconnect()
+		end
+
+		if cframeValue then
+			cframeValue:Destroy()
+		end
+
+		if blaster and blaster.Parent then
+			blaster:Destroy()
+		end
+	end)
+end
+
+local function spawnGasterBlasterAtVictim(ctx, data, angle, scale, damage, chargeTime, beamLength, beamRadius, beamStep, giant)
 	local template = getVFXTemplate(ctx, "GasterBlaster")
 	if not template then return end
 
@@ -726,15 +926,23 @@ local function spawnGasterBlasterAtVictim(ctx, victimSpotCFrame, angle, scale, d
 
 	local center = targetRoot.Position
 	local directionToCenter = Vector3.new(math.cos(angle), 0, math.sin(angle))
-	local spawnRadius = giant and 36 or 24
+
+	local spawnRadius = giant and (data.GiantBlasterSpawnRadius or 38) or (data.BlasterSpawnRadius or 36)
 	local height = giant and 8.5 or 5.25
-	local spawnPosition = center + directionToCenter * spawnRadius + Vector3.new(0, height, 0)
+
+	local finalPosition = center + directionToCenter * spawnRadius + Vector3.new(0, height, 0)
 	local lookTarget = center + Vector3.new(0, 2, 0)
 
-	local blasterCFrame = CFrame.lookAt(spawnPosition, lookTarget)
+	local finalCFrame = CFrame.lookAt(finalPosition, lookTarget)
+
+	local moveInDistance = giant and (data.GiantBlasterMoveInDistance or 8) or (data.BlasterMoveInDistance or 6)
+	local spawnPosition = finalPosition + directionToCenter * moveInDistance
+	local spawnCFrame = CFrame.lookAt(spawnPosition, lookTarget)
+
+	local tweenTime = giant and (data.GiantBlasterSpawnTweenTime or 0.18) or (data.BlasterSpawnTweenTime or 0.12)
 
 	blaster.Parent = workspace
-	pivotObject(blaster, blasterCFrame)
+	pivotObject(blaster, spawnCFrame)
 
 	if blaster:IsA("Model") then
 		forcePrimaryInvisible(blaster)
@@ -742,16 +950,43 @@ local function spawnGasterBlasterAtVictim(ctx, victimSpotCFrame, angle, scale, d
 
 	local primary = blaster:IsA("Model") and ensurePrimaryPart(blaster) or blaster
 
+	local cframeValue, tweenConnection = tweenBlasterIn(blaster, spawnCFrame, finalCFrame, tweenTime)
+
+	task.wait(tweenTime)
+
+	if tweenConnection then
+		tweenConnection:Disconnect()
+	end
+
+	if cframeValue then
+		cframeValue:Destroy()
+	end
+
+	if not blaster.Parent then return end
+
+	pivotObject(blaster, finalCFrame)
+
+	if blaster:IsA("Model") then
+		forcePrimaryInvisible(blaster)
+	end
+
 	playSansSFX(ctx, "GasterBlasterCharge", primary, 3)
 	openBlasterJaws(blaster)
 
-	task.wait(chargeTime or 0.55)
+	task.wait(chargeTime or 0.75)
 
 	if not blaster.Parent then return end
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
+
 	if not targetCharacter then
-		fadeOutObject(blaster, 0.15)
+		tweenBlasterOut(
+			blaster,
+			finalCFrame,
+			directionToCenter,
+			giant and (data.GiantBlasterMoveOutDistance or 10) or (data.BlasterMoveOutDistance or 7),
+			data.BlasterFadeOutTime or 0.16
+		)
 		return
 	end
 
@@ -759,7 +994,7 @@ local function spawnGasterBlasterAtVictim(ctx, victimSpotCFrame, angle, scale, d
 	local beamDirection = (targetRoot.Position + Vector3.new(0, 2, 0)) - beamStart
 
 	if beamDirection.Magnitude < 0.05 then
-		beamDirection = blasterCFrame.LookVector
+		beamDirection = finalCFrame.LookVector
 	else
 		beamDirection = beamDirection.Unit
 	end
@@ -770,35 +1005,45 @@ local function spawnGasterBlasterAtVictim(ctx, victimSpotCFrame, angle, scale, d
 	createBeamVisual(
 		beamStart,
 		beamDirection,
-		beamLength or 75,
-		beamRadius or 5,
+		beamLength or 78,
+		beamRadius or 5.5,
 		giant and 0.24 or 0.18
 	)
 
+	local oldStep = data.BlasterBeamStep
+	data.BlasterBeamStep = beamStep or oldStep or 6
+
 	hitVictimWithBeam(
 		ctx,
+		data,
 		beamStart,
 		beamDirection,
-		beamLength or 75,
-		(beamRadius or 5) + 2,
+		beamLength or 78,
+		beamRadius or 5.5,
 		damage,
 		true
 	)
 
-	task.delay(0.3, function()
-		fadeOutObject(blaster, 0.15)
-	end)
+	data.BlasterBeamStep = oldStep
 
-	Debris:AddItem(blaster, 1.8)
+	tweenBlasterOut(
+		blaster,
+		finalCFrame,
+		directionToCenter,
+		giant and (data.GiantBlasterMoveOutDistance or 10) or (data.BlasterMoveOutDistance or 7),
+		giant and 0.2 or (data.BlasterFadeOutTime or 0.16)
+	)
+
+	Debris:AddItem(blaster, 2)
 end
 
 local function runBoneShotSpam(ctx, data)
 	for index = 1, data.BoneShotCount or 18 do
 		if not ctx:IsActive() then return end
 
-		spawnBoneShotAtVictim(ctx, data.BoneShotDamage or 3, index, data.BoneShotCount or 18)
+		spawnBoneShotAtVictim(ctx, data, index, data.BoneShotCount or 18)
 
-		task.wait(0.055)
+		task.wait(0.075)
 	end
 
 	task.wait(0.35)
@@ -808,7 +1053,7 @@ local function runBoneZones(ctx, data)
 	for _ = 1, data.BoneZoneCount or 4 do
 		if not ctx:IsActive() then return end
 
-		spawnBoneZoneAtVictim(ctx, data.BoneZoneDamage or 6)
+		spawnBoneZoneAtVictim(ctx, data)
 
 		task.wait(0.2)
 	end
@@ -817,46 +1062,57 @@ local function runBoneZones(ctx, data)
 end
 
 local function runBoneWalls(ctx, data)
-	for _ = 1, data.BoneWallCount or 4 do
+	for index = 1, data.BoneWallCount or 2 do
 		if not ctx:IsActive() then return end
-
-		spawnTrackingBoneWall(ctx, data.BoneWallDamage or 6)
-
-		task.wait(0.32)
-	end
-
-	task.wait(0.35)
-end
-
-local function runBlasterRing(ctx, victimSpotCFrame, data)
-	local count = data.BlasterRingCount or 8
-
-	for index = 1, count do
-		if not ctx:IsActive() then return end
-
-		local angle = math.rad((360 / count) * index)
 
 		task.spawn(function()
-			spawnGasterBlasterAtVictim(
-				ctx,
-				victimSpotCFrame,
-				angle,
-				data.BlasterScale or 1,
-				data.BlasterDamage or 7,
-				data.BlasterChargeTime or 0.55,
-				78,
-				5.2,
-				false
-			)
+			spawnTrackingBoneWall(ctx, data, index)
 		end)
 
-		task.wait(data.BlasterShotInterval or 0.18)
+		task.wait(data.BoneWallFireInterval or 0.18)
 	end
 
-	task.wait(1.25)
+	task.wait(0.55)
 end
 
-local function runGiantBlasters(ctx, victimSpotCFrame, data)
+local function runBlasterRing(ctx, data)
+	local count = data.BlasterRingCount or 14
+	local rounds = data.BlasterCircleRounds or 6
+
+	for round = 1, rounds do
+		if not ctx:IsActive() then return end
+
+		for index = 1, count do
+			if not ctx:IsActive() then return end
+
+			local angleOffset = (round - 1) * (math.pi / count)
+			local angle = math.rad((360 / count) * index) + angleOffset
+
+			task.spawn(function()
+				spawnGasterBlasterAtVictim(
+					ctx,
+					data,
+					angle,
+					data.BlasterScale or 1,
+					data.BlasterDamage or 7,
+					data.BlasterChargeTime or 0.52,
+					data.BlasterBeamLength or 78,
+					data.BlasterBeamRadius or 5.2,
+					data.BlasterBeamStep or 6,
+					false
+				)
+			end)
+
+			task.wait(data.BlasterShotInterval or 0.055)
+		end
+
+		task.wait(0.12)
+	end
+
+	task.wait(0.8)
+end
+
+local function runGiantBlasters(ctx, data)
 	local angles = {
 		0,
 		math.pi / 2,
@@ -870,25 +1126,27 @@ local function runGiantBlasters(ctx, victimSpotCFrame, data)
 		task.spawn(function()
 			spawnGasterBlasterAtVictim(
 				ctx,
-				victimSpotCFrame,
+				data,
 				angle,
 				data.GiantBlasterScale or 2.2,
 				data.GiantBlasterDamage or 12,
-				data.GiantBlasterChargeTime or 0.7,
-				data.GiantBlasterBeamLength or 115,
-				data.GiantBlasterBeamRadius or 12,
+				data.GiantBlasterChargeTime or 0.72,
+				data.GiantBlasterBeamLength or 120,
+				data.GiantBlasterBeamRadius or 9,
+				data.GiantBlasterBeamStep or 7,
 				true
 			)
 		end)
 
-		task.wait(0.34)
+		task.wait(0.28)
 	end
 
-	task.wait(1.5)
+	task.wait(1.35)
 end
 
 local function runBlueGravityFinale(ctx, data)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
+
 	if not targetCharacter then return end
 
 	local totalDamage = data.GravitySpamTotalDamage or 20
@@ -905,10 +1163,11 @@ local function runBlueGravityFinale(ctx, data)
 		if not ctx:IsActive() then return end
 
 		targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
+
 		if not targetCharacter then return end
 
 		targetRoot.AssemblyLinearVelocity = velocity
-		nonlethalDamage(ctx, targetCharacter, targetHumanoid, perHit)
+		nonlethalDamage(targetCharacter, targetHumanoid, perHit)
 		playSansMoveVFX(ctx, "BlueHeart", targetCharacter, targetRoot)
 		playSansSFX(ctx, "Teleport", targetRoot, 2)
 
@@ -918,6 +1177,7 @@ end
 
 local function finalSlam(ctx, data)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
+
 	if not targetCharacter then return end
 
 	targetRoot.AssemblyLinearVelocity = Vector3.new(0, -170, 0)
@@ -1028,9 +1288,9 @@ function BadTime.Execute(ctx)
 	end
 
 	playSansSFX(ctx, "EyeFlash", root, 2)
-	eyeGlowAttachment = startHeadAttachment(ctx, character, "EyeGlow", nil)
+	eyeGlowAttachment = startHeadAttachment(ctx, character, "EyeGlow", nil, true)
 
-	startHeadAttachment(ctx, targetCharacter, "RedWarningHead", data.WarningTime or 1)
+	startHeadAttachment(ctx, targetCharacter, "RedWarningHead", data.WarningTime or 1, false)
 
 	task.wait(data.WarningTime or 1)
 
@@ -1116,30 +1376,47 @@ function BadTime.Execute(ctx)
 	runBoneShotSpam(ctx, data)
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then cleanup() ctx:FinishMove(0) return end
+	if not targetCharacter then
+		cleanup()
+		ctx:FinishMove(0)
+		return
+	end
 
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runBoneZones(ctx, data)
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then cleanup() ctx:FinishMove(0) return end
+	if not targetCharacter then
+		cleanup()
+		ctx:FinishMove(0)
+		return
+	end
 
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runBoneWalls(ctx, data)
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then cleanup() ctx:FinishMove(0) return end
+	if not targetCharacter then
+		cleanup()
+		ctx:FinishMove(0)
+		return
+	end
 
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
-	runBlasterRing(ctx, victimSpotCFrame, data)
+	runGiantBlasters(ctx, data)
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then cleanup() ctx:FinishMove(0) return end
+	if not targetCharacter then
+		cleanup()
+		ctx:FinishMove(0)
+		return
+	end
 
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
-	runGiantBlasters(ctx, victimSpotCFrame, data)
+	runBlasterRing(ctx, data)
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
+
 	if targetCharacter then
 		teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 		runBlueGravityFinale(ctx, data)

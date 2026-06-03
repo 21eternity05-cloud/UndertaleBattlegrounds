@@ -287,6 +287,10 @@ local function applyBeamHit(ctx, targetCharacter, targetHumanoid, targetRoot, hi
 		if isFinalTick and data.Guardbreak then
 			ctx.StateService:GuardbreakCharacter(targetCharacter, data.GuardbreakStun or 1.35)
 
+			if ctx.UltService then
+				ctx.UltService:AwardGuardbreak(ctx.Character, targetCharacter)
+			end
+
 			if ctx.BlockService.PlayBlockBreakVFX then
 				ctx.BlockService:PlayBlockBreakVFX(targetRoot)
 			end
@@ -305,6 +309,9 @@ local function applyBeamHit(ctx, targetCharacter, targetHumanoid, targetRoot, hi
 
 	targetHumanoid:TakeDamage(damage)
 
+	if ctx.UltService then
+		ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
+	end
 	if stun and stun > 0 then
 		ctx.StateService:StunCharacter(targetCharacter, stun)
 	end

@@ -98,4 +98,41 @@ function HitboxService:PerformSphereAtCFrame(attackerCharacter, cframe, data, on
 	self:PerformSphereAtPosition(attackerCharacter, position, radius, onHit)
 end
 
+function HitboxService:PerformSphereChain(attackerCharacter, startPosition, direction, length, step, radius, onHit)
+	if typeof(startPosition) ~= "Vector3" then return end
+	if typeof(direction) ~= "Vector3" then return end
+
+	if direction.Magnitude < 0.05 then
+		return
+	end
+
+	length = length or 60
+	step = step or 6
+	radius = radius or 5
+
+	local unitDirection = direction.Unit
+	local hitThisChain = {}
+
+	for distance = 0, length, step do
+		local position = startPosition + (unitDirection * distance)
+
+		self:ShowDebugSphere(position, radius)
+
+		local targets = self:GetCharactersInSphere(attackerCharacter, position, radius)
+
+		for _, targetCharacter in ipairs(targets) do
+			if not hitThisChain[targetCharacter] then
+				hitThisChain[targetCharacter] = true
+
+				local targetHumanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+				local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+
+				if targetHumanoid and targetRoot then
+					onHit(targetCharacter, targetHumanoid, targetRoot, position)
+				end
+			end
+		end
+	end
+end
+
 return HitboxService
