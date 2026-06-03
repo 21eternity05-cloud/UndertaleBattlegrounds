@@ -178,6 +178,9 @@ local function buildMoveDisplayFromModule(characterName)
 			display[slot].Name = moveData.DisplayName or moveId
 			display[slot].Cooldown = moveData.Cooldown or 1
 			display[slot].MoveId = moveId
+
+			display[slot].RequiresTarget = moveData.RequiresTarget == true
+			display[slot].RequiresAim = moveData.RequiresAim == true
 		end
 	end
 
@@ -402,15 +405,22 @@ local function requestMove(moveSlot)
 	local moveInfo = currentMoveDisplay[moveSlot]
 	local moveId = moveInfo and moveInfo.MoveId
 
-	if moveSlot == "Ultimate" and not currentUltFull then
-		warn("[CombatClient] Ultimate is not ready")
+	local targetCharacter = getMouseTargetCharacter()
+
+	local mouse = player:GetMouse()
+	local aimPosition = nil
+
+	if mouse and mouse.Hit then
+		aimPosition = mouse.Hit.Position
+	end
+
+	if moveInfo and moveInfo.RequiresTarget and not targetCharacter then
+		warn("[CombatClient] Move needs a valid mouse target:", moveId or moveSlot)
 		return
 	end
 
-	local targetCharacter = getMouseTargetCharacter()
-
-	if moveId == "BoneShot" and not targetCharacter then
-		warn("[CombatClient] Bone Shot needs a valid mouse target")
+	if moveInfo and moveInfo.RequiresAim and typeof(aimPosition) ~= "Vector3" then
+		warn("[CombatClient] Move needs a valid aim position:", moveId or moveSlot)
 		return
 	end
 
@@ -422,11 +432,10 @@ local function requestMove(moveSlot)
 	moveRemote:FireServer({
 		MoveSlot = moveSlot,
 		TargetCharacter = targetCharacter,
+		AimPosition = aimPosition,
 	})
 
-	if moveSlot ~= "Ultimate" then
-		startLocalCooldown(moveSlot)
-	end
+	startLocalCooldown(moveSlot)
 
 	task.delay(cooldown, function()
 		localMoveCooldowns[moveSlot] = false

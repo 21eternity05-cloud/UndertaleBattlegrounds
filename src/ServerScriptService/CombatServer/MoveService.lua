@@ -349,6 +349,8 @@ function MoveService:BuildContext(player, character, humanoid, root, characterNa
 		MoveId = moveId,
 		MoveData = moveData,
 		MoveToken = moveToken,
+
+		Payload = payload,
 	}
 
 	function context:IsActive()
@@ -478,6 +480,15 @@ function MoveService:PerformMove(player, moveRequest)
 
 		if not validTarget then
 			warn("[MoveService] Move requires valid target:", moveId)
+			return
+		end
+	end
+
+	if moveData.RequiresAim then
+		local aimPosition = payload and payload.AimPosition
+
+		if typeof(aimPosition) ~= "Vector3" then
+			warn("[MoveService] Move requires valid aim position:", moveId)
 			return
 		end
 	end
