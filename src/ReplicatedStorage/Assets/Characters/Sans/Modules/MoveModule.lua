@@ -11,7 +11,7 @@ function SansMoves.new(config)
 	self.Slots = {
 		Move1 = "BoneShot",
 		Move2 = "BoneZone",
-		Move3 = "Shortcut",
+		Move3 = "BlueSnare",
 		Move4 = "GasterBlaster",
 		Ultimate = "BadTime",
 	}
@@ -19,7 +19,7 @@ function SansMoves.new(config)
 	self.Moves = {
 		BoneShot = require(MovesFolder:WaitForChild("BoneShot")),
 		BoneZone = require(MovesFolder:WaitForChild("BoneZone")),
-		Shortcut = require(MovesFolder:WaitForChild("Shortcut")),
+		BlueSnare = require(MovesFolder:WaitForChild("BlueSnare")),
 		GasterBlaster = require(MovesFolder:WaitForChild("GasterBlaster")),
 		BadTime = require(MovesFolder:WaitForChild("BadTime")),
 	}

@@ -153,13 +153,7 @@ function M1Service:CheckStandardHitStart(attackerCharacter, attackerRoot, target
 		return "IFrame"
 	end
 
-	if self:TryTriggerCounter(
-		targetCharacter,
-		attackerCharacter,
-		attackName,
-		attackData,
-		options.OnCountered
-		) then
+	if self:TryTriggerCounter(targetCharacter, attackerCharacter, attackName, attackData, options.OnCountered) then
 		return "Countered"
 	end
 
@@ -261,6 +255,12 @@ function M1Service:PlayM1Visual(character, combo, targetCharacter, targetRoot, d
 	end
 end
 
+function M1Service:PlayM1ActionVisual(character, actionName, targetCharacter, targetRoot)
+	if self.VFXService and self.VFXService.PlayCharacterMoveVFX then
+		self.VFXService:PlayCharacterMoveVFX(character, actionName, targetCharacter, targetRoot)
+	end
+end
+
 function M1Service:CreateGroundSplatPart(position, data)
 	local part = Instance.new("Part")
 	part.Name = "GroundSlamSplatPlaceholder"
@@ -320,6 +320,7 @@ function M1Service:MonitorDownslamGroundSplat(targetCharacter, targetRoot, data,
 	end
 
 	local connection
+
 	connection = RunService.Heartbeat:Connect(function()
 		if splatDone then
 			connection:Disconnect()
@@ -490,6 +491,8 @@ function M1Service:DoUptilt(player)
 				rawData.Stun
 			)
 
+			self:PlayM1ActionVisual(character, "UptiltHit", targetCharacter, targetRoot)
+
 			if not armorInfo.Active or not armorInfo.PreventsKnockback then
 				self.MovementService:StartUptiltCarry(root, targetRoot, rawData)
 			else
@@ -589,6 +592,8 @@ function M1Service:DoDownslam(player)
 				rawData.AirStunMax or 1.5,
 				"DownslamAir"
 			)
+
+			self:PlayM1ActionVisual(character, "DownslamHit", targetCharacter, targetRoot)
 
 			self.VFXService:PlaySFXAtPart("DownslamHit", targetRoot, 3)
 
@@ -719,6 +724,7 @@ function M1Service:DoNormalM1(player)
 				end
 
 				self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
+
 				print("M5 GUARDBREAK")
 				return
 			end
@@ -727,14 +733,13 @@ function M1Service:DoNormalM1(player)
 
 			self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
 
-			local stunDuration = isFinal and rawData.Stun or rawData.Stun
 			local armorInfo = self:ApplyDamageAndStun(
 				character,
 				targetCharacter,
 				targetHumanoid,
 				targetRoot,
 				attackData,
-				stunDuration
+				rawData.Stun
 			)
 
 			if combo < self.FinalM1 then
@@ -769,8 +774,6 @@ function M1Service:DoNormalM1(player)
 				if self.UltService then
 					self.UltService:AwardComboEnder(character, targetCharacter)
 				end
-
-				print("GROUND M5 KNOCKBACK HIT")
 
 				print("GROUND M5 KNOCKBACK HIT")
 			end
