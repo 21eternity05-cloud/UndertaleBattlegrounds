@@ -270,6 +270,10 @@ function Erase.Execute(ctx)
 			victimLockState = nil
 		end
 
+		if victimHumanoid and victimHumanoid.Parent and victimHumanoid.Health > 0 then
+			victimHumanoid:TakeDamage(moveData.Damage or 100)
+		end
+
 		cinematicService:EraseCharacter(victimCharacter, 2)
 	end
 
