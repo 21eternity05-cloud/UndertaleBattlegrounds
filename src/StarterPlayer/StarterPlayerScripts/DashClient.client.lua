@@ -57,6 +57,34 @@ local function isDashLocked(character)
 	return false
 end
 
+local function canDashNow(character, humanoid, root)
+	if not character or not character.Parent then
+		return false
+	end
+
+	if not humanoid or humanoid.Health <= 0 then
+		return false
+	end
+
+	if not root or not root.Parent then
+		return false
+	end
+
+	if character:GetAttribute("Stunned") then
+		return false
+	end
+
+	if character:GetAttribute("Guardbroken") then
+		return false
+	end
+
+	if isDashLocked(character) then
+		return false
+	end
+
+	return true
+end
+
 local function getFlatCameraCFrame()
 	local camera = workspace.CurrentCamera
 	local look = camera.CFrame.LookVector
@@ -142,10 +170,9 @@ local function dash()
 	local character, humanoid, root = getCharacter()
 	if not character then return end
 
-	if character:GetAttribute("Stunned") then return end
-	if character:GetAttribute("Blocking") then return end
-	if character:GetAttribute("Guardbroken") then return end
-	if isDashLocked(character) then return end
+	if not canDashNow(character, humanoid, root) then
+		return
+	end
 
 	canDash = false
 	isDashing = true
@@ -215,9 +242,9 @@ local function dash()
 			return
 		end
 
-		-- Dash gets canceled immediately if a move locks movement mid-dash.
+		-- Dash gets canceled immediately if hard movement lock/status starts mid-dash.
+		-- Blocking does NOT cancel dash anymore.
 		if character:GetAttribute("Stunned")
-			or character:GetAttribute("Blocking")
 			or character:GetAttribute("Guardbroken")
 			or isDashLocked(character)
 		then

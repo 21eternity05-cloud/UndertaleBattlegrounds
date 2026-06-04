@@ -14,10 +14,15 @@ function CombatStatusService:GetNow()
 end
 
 function CombatStatusService:IsAliveCharacter(character)
-	if not character or not character.Parent then return false end
+	if not character or not character.Parent then
+		return false
+	end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then return false end
+
+	if not humanoid or humanoid.Health <= 0 then
+		return false
+	end
 
 	return true
 end
@@ -38,11 +43,78 @@ function CombatStatusService:GetNumber(data, key, defaultValue)
 	return defaultValue
 end
 
+function CombatStatusService:NormalizeAttackData(attackData)
+	local normalized = {}
+
+	for key, value in pairs(attackData or {}) do
+		normalized[key] = value
+	end
+
+	-- Default rule:
+	-- Almost every attack is blockable unless it explicitly says otherwise.
+	if normalized.Blockable == nil then
+		normalized.Blockable = true
+	end
+
+	if normalized.CanBeBlocked == nil then
+		normalized.CanBeBlocked = normalized.Blockable ~= false
+	end
+
+	if normalized.Unblockable == nil then
+		normalized.Unblockable = false
+	end
+
+	-- Default rule:
+	-- Almost every attack can be countered unless it explicitly says otherwise.
+	if normalized.CanBeCountered == nil then
+		normalized.CanBeCountered = true
+	end
+
+	-- Default rule:
+	-- A successful attack cancels the target's current move unless disabled.
+	if normalized.HitCancelsTarget == nil then
+		normalized.HitCancelsTarget = true
+	end
+
+	-- Default rule:
+	-- The attacker's move can be hit-canceled unless disabled.
+	if normalized.CancelableByHit == nil then
+		normalized.CancelableByHit = true
+	end
+
+	if normalized.IgnoresIFrames == nil then
+		normalized.IgnoresIFrames = false
+	end
+
+	if normalized.IgnoresArmor == nil then
+		normalized.IgnoresArmor = false
+	end
+
+	if normalized.PlayMoveHitVFX == nil then
+		normalized.PlayMoveHitVFX = true
+	end
+
+	return normalized
+end
+
+function CombatStatusService:NormalizeMoveData(moveData)
+	return self:NormalizeAttackData(moveData)
+end
+
 function CombatStatusService:IsAttackUnblockable(attackData)
-	if not attackData then return false end
-	if attackData.Unblockable == true then return true end
-	if attackData.CanBeBlocked == false then return true end
-	if attackData.Blockable == false then return true end
+	local data = self:NormalizeAttackData(attackData)
+
+	if data.Unblockable == true then
+		return true
+	end
+
+	if data.CanBeBlocked == false then
+		return true
+	end
+
+	if data.Blockable == false then
+		return true
+	end
 
 	return false
 end
@@ -52,19 +124,15 @@ function CombatStatusService:CanAttackBeBlocked(attackData)
 end
 
 function CombatStatusService:CanAttackBeCountered(attackData)
-	if attackData and attackData.CanBeCountered == false then
-		return false
-	end
+	local data = self:NormalizeAttackData(attackData)
 
-	return true
+	return data.CanBeCountered ~= false
 end
 
 function CombatStatusService:CanAttackHitCancel(attackData)
-	if attackData and attackData.HitCancelsTarget == false then
-		return false
-	end
+	local data = self:NormalizeAttackData(attackData)
 
-	return true
+	return data.HitCancelsTarget ~= false
 end
 
 function CombatStatusService:ClearCombatWindows(character)
@@ -72,7 +140,6 @@ function CombatStatusService:ClearCombatWindows(character)
 
 	character:SetAttribute("IFrameActive", false)
 	character:SetAttribute("ArmorActive", false)
-
 	character:SetAttribute("ArmorDamageReduction", 0)
 	character:SetAttribute("ArmorPreventsStun", false)
 	character:SetAttribute("ArmorPreventsKnockback", false)
@@ -96,9 +163,7 @@ function CombatStatusService:StartTimedBoolWindow(character, moveToken, attribut
 	startTime = startTime or 0
 	endTime = endTime or 0
 
-	if endTime <= startTime then
-		return
-	end
+	if endTime <= startTime then return end
 
 	task.delay(startTime, function()
 		if not character or not character.Parent then return end
@@ -127,22 +192,32 @@ end
 function CombatStatusService:BeginMove(character, moveData, moveToken, moveId)
 	if not character or not character.Parent then return end
 
+	local normalized = self:NormalizeMoveData(moveData)
+
 	character:SetAttribute("CurrentMoveId", moveId)
-	character:SetAttribute("MoveCancelableByHit", moveData.CancelableByHit ~= false)
-	character:SetAttribute("MoveHitCancelsTarget", moveData.HitCancelsTarget ~= false)
+	character:SetAttribute("MoveCancelableByHit", normalized.CancelableByHit ~= false)
+	character:SetAttribute("MoveHitCancelsTarget", normalized.HitCancelsTarget ~= false)
 
 	self:ClearCombatWindows(character)
 
-	if moveData.HasIFrames == true then
-		local startTime = moveData.IFrameStart or 0
-		local endTime = moveData.IFrameEnd or moveData.MaxLockTime or moveData.LockTime or moveData.Duration or 0
+	if normalized.HasIFrames == true then
+		local startTime = normalized.IFrameStart or 0
+		local endTime = normalized.IFrameEnd
+			or normalized.MaxLockTime
+			or normalized.LockTime
+			or normalized.Duration
+			or 0
 
 		self:StartTimedBoolWindow(character, moveToken, "IFrameActive", startTime, endTime)
 	end
 
-	if moveData.HasArmor == true then
-		local startTime = moveData.ArmorStart or 0
-		local endTime = moveData.ArmorEnd or moveData.MaxLockTime or moveData.LockTime or moveData.Duration or 0
+	if normalized.HasArmor == true then
+		local startTime = normalized.ArmorStart or 0
+		local endTime = normalized.ArmorEnd
+			or normalized.MaxLockTime
+			or normalized.LockTime
+			or normalized.Duration
+			or 0
 
 		self:StartTimedBoolWindow(
 			character,
@@ -151,10 +226,10 @@ function CombatStatusService:BeginMove(character, moveData, moveToken, moveId)
 			startTime,
 			endTime,
 			function()
-				character:SetAttribute("ArmorDamageReduction", moveData.ArmorDamageReduction or 0)
-				character:SetAttribute("ArmorPreventsStun", moveData.ArmorPreventsStun ~= false)
-				character:SetAttribute("ArmorPreventsKnockback", moveData.ArmorPreventsKnockback ~= false)
-				character:SetAttribute("ArmorPreventsHitCancel", moveData.ArmorPreventsHitCancel ~= false)
+				character:SetAttribute("ArmorDamageReduction", normalized.ArmorDamageReduction or 0)
+				character:SetAttribute("ArmorPreventsStun", normalized.ArmorPreventsStun == true)
+				character:SetAttribute("ArmorPreventsKnockback", normalized.ArmorPreventsKnockback == true)
+				character:SetAttribute("ArmorPreventsHitCancel", normalized.ArmorPreventsHitCancel == true)
 			end,
 			function()
 				character:SetAttribute("ArmorDamageReduction", 0)
@@ -177,43 +252,42 @@ function CombatStatusService:EndMove(character, moveToken)
 end
 
 function CombatStatusService:HasIFrames(character, attackData)
-	if not character or not character.Parent then return false end
-	if attackData and attackData.IgnoresIFrames == true then return false end
+	if not character or not character.Parent then
+		return false
+	end
+
+	local data = self:NormalizeAttackData(attackData)
+
+	if data.IgnoresIFrames == true then
+		return false
+	end
 
 	return character:GetAttribute("IFrameActive") == true
 end
 
 function CombatStatusService:GetArmorInfo(character, attackData)
+	local defaultInfo = {
+		Active = false,
+		DamageReduction = 0,
+		PreventsStun = false,
+		PreventsKnockback = false,
+		PreventsHitCancel = false,
+	}
+
 	if not character or not character.Parent then
-		return {
-			Active = false,
-			DamageReduction = 0,
-			PreventsStun = false,
-			PreventsKnockback = false,
-			PreventsHitCancel = false,
-		}
+		return defaultInfo
 	end
 
-	if attackData and attackData.IgnoresArmor == true then
-		return {
-			Active = false,
-			DamageReduction = 0,
-			PreventsStun = false,
-			PreventsKnockback = false,
-			PreventsHitCancel = false,
-		}
+	local data = self:NormalizeAttackData(attackData)
+
+	if data.IgnoresArmor == true then
+		return defaultInfo
 	end
 
 	local active = character:GetAttribute("ArmorActive") == true
 
 	if not active then
-		return {
-			Active = false,
-			DamageReduction = 0,
-			PreventsStun = false,
-			PreventsKnockback = false,
-			PreventsHitCancel = false,
-		}
+		return defaultInfo
 	end
 
 	local damageReduction = character:GetAttribute("ArmorDamageReduction") or 0
@@ -229,9 +303,13 @@ function CombatStatusService:GetArmorInfo(character, attackData)
 end
 
 function CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
-	if not targetCharacter or not targetCharacter.Parent then return false end
+	if not targetCharacter or not targetCharacter.Parent then
+		return false
+	end
 
-	if not self:CanAttackHitCancel(attackData) then
+	local data = self:NormalizeAttackData(attackData)
+
+	if data.HitCancelsTarget == false then
 		return false
 	end
 
@@ -243,13 +321,14 @@ function CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
 		return false
 	end
 
-	local armorInfo = self:GetArmorInfo(targetCharacter, attackData)
+	local armorInfo = self:GetArmorInfo(targetCharacter, data)
 
 	if armorInfo.Active and armorInfo.PreventsHitCancel then
 		return false
 	end
 
 	local currentToken = targetCharacter:GetAttribute("MoveToken") or 0
+
 	targetCharacter:SetAttribute("MoveToken", currentToken + 1)
 	targetCharacter:SetAttribute("UsingMove", false)
 	targetCharacter:SetAttribute("Attacking", false)

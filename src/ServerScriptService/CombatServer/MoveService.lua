@@ -187,7 +187,63 @@ function MoveService:EndMove(character, moveToken)
 	self:RestoreMoveMovement(character)
 end
 
+function MoveService:BuildAttackData(baseData, extraData)
+	local data = {}
+
+	for key, value in pairs(baseData or {}) do
+		data[key] = value
+	end
+
+	for key, value in pairs(extraData or {}) do
+		data[key] = value
+	end
+
+	if self.CombatStatusService and self.CombatStatusService.NormalizeAttackData then
+		return self.CombatStatusService:NormalizeAttackData(data)
+	end
+
+	if data.Blockable == nil then
+		data.Blockable = true
+	end
+
+	if data.CanBeBlocked == nil then
+		data.CanBeBlocked = data.Blockable ~= false
+	end
+
+	if data.Unblockable == nil then
+		data.Unblockable = false
+	end
+
+	if data.CanBeCountered == nil then
+		data.CanBeCountered = true
+	end
+
+	if data.HitCancelsTarget == nil then
+		data.HitCancelsTarget = true
+	end
+
+	if data.CancelableByHit == nil then
+		data.CancelableByHit = true
+	end
+
+	if data.IgnoresIFrames == nil then
+		data.IgnoresIFrames = false
+	end
+
+	if data.IgnoresArmor == nil then
+		data.IgnoresArmor = false
+	end
+
+	if data.PlayMoveHitVFX == nil then
+		data.PlayMoveHitVFX = true
+	end
+
+	return data
+end
+
 function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCharacter, targetHumanoid, targetRoot, attackData, attackName)
+	local data = self:BuildAttackData(attackData)
+
 	if not attackerCharacter or not attackerCharacter.Parent then return "Invalid" end
 	if not attackerRoot or not attackerRoot.Parent then return "Invalid" end
 	if not targetCharacter or not targetCharacter.Parent then return "Invalid" end
@@ -196,18 +252,18 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 
 	local status = self.CombatStatusService
 
-	if status and status:HasIFrames(targetCharacter, attackData) then
+	if status and status:HasIFrames(targetCharacter, data) then
 		print("[MoveService] Hit ignored by iframe:", targetCharacter.Name, attackName or "Attack")
 		return "IFrame"
 	end
 
-	if status and status:CanAttackBeCountered(attackData) then
+	if status and status:CanAttackBeCountered(data) then
 		if self.CounterService and self.CounterService.TryCounterHit then
 			local countered = self.CounterService:TryCounterHit({
 				AttackerCharacter = attackerCharacter,
 				TargetCharacter = targetCharacter,
 				AttackName = attackName or "Move",
-				AttackData = attackData,
+				AttackData = data,
 				HitPosition = targetRoot.Position,
 			})
 
@@ -220,20 +276,22 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 	local canBlock = true
 
 	if status then
-		canBlock = status:CanAttackBeBlocked(attackData)
+		canBlock = status:CanAttackBeBlocked(data)
 	else
-		canBlock = attackData.Blockable ~= false and attackData.CanBeBlocked ~= false and attackData.Unblockable ~= true
+		canBlock = data.Blockable ~= false
+			and data.CanBeBlocked ~= false
+			and data.Unblockable ~= true
 	end
 
 	if canBlock and self.BlockService:CanBlockHit(targetCharacter, attackerRoot) then
-		if attackData.Guardbreak then
-			self.StateService:GuardbreakCharacter(targetCharacter, attackData.GuardbreakStun or 1.25)
+		if data.Guardbreak == true then
+			self.StateService:GuardbreakCharacter(targetCharacter, data.GuardbreakStun or 1.25)
 			self.BlockService:PlayBlockBreakVFX(targetRoot)
-			
+
 			if self.UltService then
 				self.UltService:AwardGuardbreak(attackerCharacter, targetCharacter)
 			end
-			
+
 			return "Guardbreak"
 		end
 
@@ -241,10 +299,10 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 		return "Blocked"
 	end
 
-	local armorInfo = nil
+	local armorInfo
 
 	if status then
-		armorInfo = status:GetArmorInfo(targetCharacter, attackData)
+		armorInfo = status:GetArmorInfo(targetCharacter, data)
 	else
 		armorInfo = {
 			Active = false,
@@ -256,10 +314,10 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 	end
 
 	if status then
-		status:TryHitCancelTarget(targetCharacter, attackData)
+		status:TryHitCancelTarget(targetCharacter, data)
 	end
 
-	local rawDamage = attackData.Damage or 5
+	local rawDamage = data.Damage or 5
 	local finalDamage = rawDamage
 
 	if armorInfo.Active then
@@ -268,15 +326,15 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
-		
-		if self.UltService then
+
+		if self.UltService and data.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end
 	end
 
-	if attackData.Stun and attackData.Stun > 0 then
+	if data.Stun and data.Stun > 0 then
 		if not armorInfo.Active or not armorInfo.PreventsStun then
-			self.StateService:StunCharacter(targetCharacter, attackData.Stun)
+			self.StateService:StunCharacter(targetCharacter, data.Stun)
 		else
 			print("[MoveService] Armor prevented stun:", targetCharacter.Name)
 		end
@@ -285,18 +343,18 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 	if self.VFXService then
 		self.VFXService:EmitHitVFXOnVictim(targetRoot, attackerCharacter)
 
-		if attackData.PlayMoveHitVFX ~= false and self.VFXService.PlayCharacterMoveVFX then
+		if data.PlayMoveHitVFX ~= false and self.VFXService.PlayCharacterMoveVFX then
 			self.VFXService:PlayCharacterMoveVFX(attackerCharacter, attackName, targetCharacter, targetRoot)
 		end
 	end
 
-	if attackData.Knockback and attackData.Knockback > 0 then
+	if data.Knockback and data.Knockback > 0 then
 		if not armorInfo.Active or not armorInfo.PreventsKnockback then
 			local direction = self.MovementService:GetDirectionBetween(attackerRoot, targetRoot)
 
 			targetRoot.AssemblyLinearVelocity =
-				(direction * attackData.Knockback)
-				+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
+				(direction * data.Knockback)
+				+ Vector3.new(0, data.UpwardKnockback or 0, 0)
 		else
 			print("[MoveService] Armor prevented knockback:", targetCharacter.Name)
 		end
@@ -422,12 +480,13 @@ function MoveService:PerformDefaultMove(context)
 	local character = context.Character
 	local root = context.Root
 	local moveData = context.MoveData
+	local attackData = self:BuildAttackData(moveData)
 
 	task.delay(moveData.HitDelay or 0.1, function()
 		if not context:IsActive() then return end
 
 		self.HitboxService:PerformSphereHitbox(character, root, moveData, function(targetCharacter, targetHumanoid, targetRoot)
-			context:DefaultApplyHit(targetCharacter, targetHumanoid, targetRoot)
+			context:ApplyStandardHit(targetCharacter, targetHumanoid, targetRoot, attackData, context.MoveId)
 		end)
 	end)
 
