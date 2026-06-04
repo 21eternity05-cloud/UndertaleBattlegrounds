@@ -199,11 +199,37 @@ function ProjectileService:BuildAttackData(data)
 		attackData[key] = value
 	end
 
-	attackData.CanBeBlocked = data.CanBeBlocked ~= false
-	attackData.Unblockable = data.Unblockable == true
-	attackData.Guardbreak = data.Guardbreak == true
-	attackData.CanBeCountered = data.CanBeCountered ~= false
-	attackData.HitCancelsTarget = data.HitCancelsTarget == true
+	if self.CombatStatusService and self.CombatStatusService.NormalizeAttackData then
+		return self.CombatStatusService:NormalizeAttackData(attackData)
+	end
+
+	if attackData.Blockable == nil then
+		attackData.Blockable = true
+	end
+
+	if attackData.CanBeBlocked == nil then
+		attackData.CanBeBlocked = attackData.Blockable ~= false
+	end
+
+	if attackData.Unblockable == nil then
+		attackData.Unblockable = false
+	end
+
+	if attackData.Guardbreak == nil then
+		attackData.Guardbreak = false
+	end
+
+	if attackData.CanBeCountered == nil then
+		attackData.CanBeCountered = true
+	end
+
+	if attackData.HitCancelsTarget == nil then
+		attackData.HitCancelsTarget = true
+	end
+
+	if attackData.CancelableByHit == nil then
+		attackData.CancelableByHit = true
+	end
 
 	return attackData
 end
@@ -295,7 +321,7 @@ function ProjectileService:ApplyProjectileHit(info)
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
 
-		if self.UltService then
+		if self.UltService and attackData.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(ownerCharacter, targetCharacter, finalDamage)
 		end
 	end
@@ -333,9 +359,20 @@ function ProjectileService:ApplyProjectileHit(info)
 				direction = direction.Unit
 			end
 
-			targetRoot.AssemblyLinearVelocity =
-				(direction * attackData.Knockback)
-				+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
+			if self.MovementService and self.MovementService.ApplyStraightKnockback then
+				self.MovementService:ApplyStraightKnockback(
+					targetRoot,
+					direction,
+					attackData.Knockback,
+					attackData.UpwardKnockback or 0,
+					attackData.KnockbackDuration,
+					attackData.KnockbackMaxForce
+				)
+			else
+				targetRoot.AssemblyLinearVelocity =
+					(direction * attackData.Knockback)
+					+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
+			end
 		end
 	end
 

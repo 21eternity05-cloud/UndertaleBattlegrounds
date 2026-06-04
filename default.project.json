@@ -5,6 +5,36 @@
 
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
+      "Remotes": {
+        "$className": "Folder",
+        "CombatRemote": {
+          "$className": "RemoteEvent"
+        },
+        "CharacterRemote": {
+          "$className": "RemoteEvent"
+        },
+        "MoveRemote": {
+          "$className": "RemoteEvent"
+        },
+        "UltRemote": {
+          "$className": "RemoteEvent"
+        },
+        "CinematicRemote": {
+          "$className": "RemoteEvent"
+        },
+        "ProgressionRemote": {
+          "$className": "RemoteEvent"
+        },
+        "LoreRemote": {
+          "$className": "RemoteEvent"
+        }
+      },
+      "Shared": {
+        "$path": "src/ReplicatedStorage/Shared"
+      },
+      "Packages": {
+        "$path": "src/ReplicatedStorage/Packages"
+      },
       "Assets": {
         "$className": "Folder",
         "Characters": {
@@ -19,6 +49,12 @@
             "$className": "Folder",
             "Modules": {
               "$path": "src/ReplicatedStorage/Assets/Characters/Sans/Modules"
+            }
+          },
+          "Toriel": {
+            "$className": "Folder",
+            "Modules": {
+              "$path": "src/ReplicatedStorage/Assets/Characters/Toriel/Modules"
             }
           }
         }

@@ -83,6 +83,7 @@ local BadTime = {
 
 	GravitySpamTotalDamage = 8,
 	FinalSlamDamage = 1,
+	AwardsUlt = false,
 }
 
 local function getSansVFXFolder(ctx)
@@ -308,6 +309,7 @@ local function makeConfirmAttackData(data)
 	attackData.CanBeCountered = true
 	attackData.HitCancelsTarget = true
 	attackData.PlayMoveHitVFX = false
+	attackData.AwardsUlt = false
 
 	return attackData
 end
@@ -1180,7 +1182,11 @@ local function finalSlam(ctx, data)
 
 	if not targetCharacter then return end
 
-	targetRoot.AssemblyLinearVelocity = Vector3.new(0, -170, 0)
+	if ctx.MovementService and ctx.MovementService.ApplyForceKnockback then
+		ctx.MovementService:ApplyForceKnockback(targetRoot, Vector3.new(0, -170, 0), 0.22, 160000)
+	else
+		targetRoot.AssemblyLinearVelocity = Vector3.new(0, -170, 0)
+	end
 
 	task.wait(0.18)
 
@@ -1188,6 +1194,11 @@ local function finalSlam(ctx, data)
 
 	if ctx.VFXService then
 		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
+	end
+
+	if ctx.CinematicService then
+		ctx.CinematicService:ShakeOnce(ctx.Character, 2, 10, 0.3)
+		ctx.CinematicService:ShakeOnce(targetCharacter, 2, 10, 0.3)
 	end
 end
 

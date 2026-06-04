@@ -64,6 +64,10 @@ function M1Service:BuildAttackData(baseData, extraData)
 		data.HitCancelsTarget = true
 	end
 
+	if data.CancelableByHit == nil then
+		data.CancelableByHit = true
+	end
+
 	if data.IgnoresIFrames == nil then
 		data.IgnoresIFrames = false
 	end
@@ -196,7 +200,7 @@ function M1Service:ApplyDamageAndStun(attackerCharacter, targetCharacter, target
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
 
-		if self.UltService then
+		if self.UltService and attackData.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end
 	end
@@ -411,7 +415,24 @@ function M1Service:DoUptilt(player)
 	if not self:CanUseUptilt(character) then return end
 
 	local rawData = self.M1Data.Uptilt
-	local attackData = self:BuildAttackData(rawData, {
+	local comboAtStart = character:GetAttribute("ComboCount") or 0
+	local hasM1Starter = comboAtStart > 0 and (os.clock() - (character:GetAttribute("LastM1Time") or 0)) <= self.Config.M1ResetTime
+	local isRawUptilt = comboAtStart == 0 or not hasM1Starter
+	local hitboxData = {}
+
+	for key, value in pairs(rawData) do
+		hitboxData[key] = value
+	end
+
+	if isRawUptilt then
+		hitboxData.Radius = rawData.RawRadius or rawData.Radius
+		hitboxData.Offset = rawData.RawOffset or rawData.Offset
+	else
+		hitboxData.Radius = rawData.ComboRadius or rawData.Radius
+		hitboxData.Offset = rawData.ComboOffset or rawData.Offset
+	end
+
+	local attackData = self:BuildAttackData(hitboxData, {
 		AttackType = "Uptilt",
 		CanBeBlocked = true,
 		CanBeCountered = true,
@@ -433,7 +454,7 @@ function M1Service:DoUptilt(player)
 
 	self.StateService:LockJump(character, self.Config.JumpLockAfterM1)
 
-	print(player.Name .. " used UPTILT")
+	print(player.Name .. " used UPTILT", isRawUptilt and "RAW" or "COMBO")
 
 	task.delay(rawData.HitDelay, function()
 		if not character.Parent then return end
@@ -442,7 +463,7 @@ function M1Service:DoUptilt(player)
 
 		local hitSomething = false
 
-		self.HitboxService:PerformSphereHitbox(character, root, rawData, function(targetCharacter, targetHumanoid, targetRoot)
+		self.HitboxService:PerformSphereHitbox(character, root, hitboxData, function(targetCharacter, targetHumanoid, targetRoot)
 			local result = self:CheckStandardHitStart(
 				character,
 				root,
@@ -759,11 +780,15 @@ function M1Service:DoNormalM1(player)
 				self.MovementService:StopYHoldController(targetRoot)
 
 				if not armorInfo.Active or not armorInfo.PreventsKnockback then
-					local direction = self.MovementService:GetDirectionBetween(root, targetRoot)
+					if self.MovementService and self.MovementService.ApplyDirectionalKnockback then
+						self.MovementService:ApplyDirectionalKnockback(root, targetRoot, rawData)
+					else
+						local direction = self.MovementService:GetDirectionBetween(root, targetRoot)
 
-					targetRoot.AssemblyLinearVelocity =
-						(direction * rawData.Knockback)
-						+ Vector3.new(0, rawData.UpwardKnockback, 0)
+						targetRoot.AssemblyLinearVelocity =
+							(direction * rawData.Knockback)
+							+ Vector3.new(0, rawData.UpwardKnockback, 0)
+					end
 				else
 					print("[M1Service] Armor prevented M5 knockback:", targetCharacter.Name)
 				end

@@ -180,9 +180,20 @@ local function applyFinalHit(ctx, targetCharacter, targetHumanoid, targetRoot)
 
 	local direction = getKnockbackDirection(ctx.Root, targetRoot)
 
-	targetRoot.AssemblyLinearVelocity =
-		(direction * (moveData.Knockback or 135))
-		+ Vector3.new(0, moveData.UpwardKnockback or 38, 0)
+	if ctx.MovementService and ctx.MovementService.ApplyStraightKnockback then
+		ctx.MovementService:ApplyStraightKnockback(
+			targetRoot,
+			direction,
+			moveData.Knockback or 135,
+			moveData.UpwardKnockback or 38,
+			moveData.KnockbackDuration or 0.28,
+			moveData.KnockbackMaxForce or 130000
+		)
+	else
+		targetRoot.AssemblyLinearVelocity =
+			(direction * (moveData.Knockback or 135))
+			+ Vector3.new(0, moveData.UpwardKnockback or 38, 0)
+	end
 end
 
 function BlueSnare.Execute(ctx)

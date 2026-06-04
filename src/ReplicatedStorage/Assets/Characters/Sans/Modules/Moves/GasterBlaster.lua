@@ -274,7 +274,26 @@ local function applyBeamHit(ctx, targetCharacter, targetHumanoid, targetRoot, hi
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
 	if not targetRoot or not targetRoot.Parent then return end
 
-	if tryCounter(ctx, targetCharacter, hitPosition, data) then
+	local attackData = {}
+
+	for key, value in pairs(data) do
+		attackData[key] = value
+	end
+
+	attackData.Damage = isFinalTick and (data.FinalDamage or data.Damage or 3) or (data.Damage or 3)
+	attackData.Stun = isFinalTick and (data.FinalStun or data.Stun or 0.25) or (data.Stun or 0.25)
+	attackData.Knockback = isFinalTick and (data.FinalKnockback or data.Knockback or 18) or (data.Knockback or 18)
+	attackData.UpwardKnockback = isFinalTick and (data.FinalUpwardKnockback or data.UpwardKnockback or 4) or (data.UpwardKnockback or 4)
+
+	if ctx.CombatStatusService and ctx.CombatStatusService.NormalizeAttackData then
+		attackData = ctx.CombatStatusService:NormalizeAttackData(attackData)
+	end
+
+	if ctx.CombatStatusService and ctx.CombatStatusService:HasIFrames(targetCharacter, attackData) then
+		return
+	end
+
+	if tryCounter(ctx, targetCharacter, hitPosition, attackData) then
 		print("[GasterBlaster] Countered by:", targetCharacter.Name)
 		return
 	end
@@ -304,16 +323,37 @@ local function applyBeamHit(ctx, targetCharacter, targetHumanoid, targetRoot, hi
 		return
 	end
 
-	local damage = isFinalTick and (data.FinalDamage or data.Damage or 3) or (data.Damage or 3)
-	local stun = isFinalTick and (data.FinalStun or data.Stun or 0.25) or (data.Stun or 0.25)
+	local armorInfo = ctx.CombatStatusService and ctx.CombatStatusService:GetArmorInfo(targetCharacter, attackData) or {
+		Active = false,
+		DamageReduction = 0,
+		PreventsStun = false,
+		PreventsKnockback = false,
+	}
 
-	targetHumanoid:TakeDamage(damage)
-
-	if ctx.UltService then
-		ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
+	if ctx.CombatStatusService then
+		ctx.CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
 	end
+
+	local damage = attackData.Damage or 0
+	local finalDamage = damage
+
+	if armorInfo.Active then
+		finalDamage = damage * (1 - (armorInfo.DamageReduction or 0))
+	end
+
+	if finalDamage > 0 then
+		targetHumanoid:TakeDamage(finalDamage)
+
+		if ctx.UltService and attackData.AwardsUlt ~= false then
+			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, finalDamage)
+		end
+	end
+
+	local stun = attackData.Stun
 	if stun and stun > 0 then
-		ctx.StateService:StunCharacter(targetCharacter, stun)
+		if not armorInfo.Active or not armorInfo.PreventsStun then
+			ctx.StateService:StunCharacter(targetCharacter, stun)
+		end
 	end
 
 	if ctx.VFXService then
@@ -334,12 +374,22 @@ local function applyBeamHit(ctx, targetCharacter, targetHumanoid, targetRoot, hi
 		direction = direction.Unit
 	end
 
-	local knockback = isFinalTick and (data.FinalKnockback or data.Knockback or 18) or (data.Knockback or 18)
-	local upwardKnockback = isFinalTick and (data.FinalUpwardKnockback or data.UpwardKnockback or 4) or (data.UpwardKnockback or 4)
-
-	targetRoot.AssemblyLinearVelocity =
-		(direction * knockback)
-		+ Vector3.new(0, upwardKnockback, 0)
+	if not armorInfo.Active or not armorInfo.PreventsKnockback then
+		if ctx.MovementService and ctx.MovementService.ApplyStraightKnockback then
+			ctx.MovementService:ApplyStraightKnockback(
+				targetRoot,
+				direction,
+				attackData.Knockback,
+				attackData.UpwardKnockback or 0,
+				isFinalTick and 0.28 or 0.12,
+				isFinalTick and 130000 or 90000
+			)
+		else
+			targetRoot.AssemblyLinearVelocity =
+				(direction * attackData.Knockback)
+				+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
+		end
+	end
 
 	print("[GasterBlaster] Hit:", targetCharacter.Name, "Final:", isFinalTick)
 end

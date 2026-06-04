@@ -9,6 +9,7 @@ function MovementService.new(config)
 	self.Config = config
 	self.ActiveCarryControllers = {}
 	self.ActiveYHoldControllers = {}
+	self.ActiveCombatKnockbacks = {}
 	return self
 end
 
@@ -34,6 +35,167 @@ function MovementService:StopYHoldController(root)
 		self.ActiveYHoldControllers[root]:Disconnect()
 		self.ActiveYHoldControllers[root] = nil
 	end
+end
+
+function MovementService:ClearCombatMovementControllers(root)
+	if not root or not root.Parent then return end
+
+	self:StopCarryController(root)
+	self:StopYHoldController(root)
+
+	local active = self.ActiveCombatKnockbacks[root]
+	if active then
+		if active.LinearVelocity then
+			active.LinearVelocity:Destroy()
+		end
+
+		if active.Attachment then
+			active.Attachment:Destroy()
+		end
+
+		self.ActiveCombatKnockbacks[root] = nil
+	end
+
+	for _, child in ipairs(root:GetChildren()) do
+		if child:IsA("LinearVelocity") and (
+			child.Name == "CombatKnockbackLinearVelocity"
+			or child.Name == "DownslamLinearVelocity"
+			or child.Name == "KnifeDashLinearVelocity"
+		) then
+			child:Destroy()
+		elseif child:IsA("Attachment") and (
+			child.Name == "CombatKnockbackAttachment"
+			or child.Name == "DownslamVelocityAttachment"
+			or child.Name == "KnifeDashVelocityAttachment"
+		) then
+			child:Destroy()
+		end
+	end
+end
+
+function MovementService:SetServerOwnershipIfNPC(root)
+	if not root or not root.Parent then return end
+
+	local character = root:FindFirstAncestorOfClass("Model")
+	local player = character and game.Players:GetPlayerFromCharacter(character)
+
+	if not player then
+		pcall(function()
+			root:SetNetworkOwner(nil)
+		end)
+	end
+end
+
+function MovementService:ApplyForceKnockback(targetRoot, velocity, duration, maxForce)
+	if not targetRoot or not targetRoot.Parent then return nil, nil end
+	if typeof(velocity) ~= "Vector3" then return nil, nil end
+
+	duration = duration or 0.22
+
+	self:ClearCombatMovementControllers(targetRoot)
+	self:SetServerOwnershipIfNPC(targetRoot)
+
+	targetRoot.AssemblyLinearVelocity = Vector3.zero
+	targetRoot.AssemblyAngularVelocity = Vector3.zero
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "CombatKnockbackAttachment"
+	attachment.Parent = targetRoot
+
+	local linearVelocity = Instance.new("LinearVelocity")
+	linearVelocity.Name = "CombatKnockbackLinearVelocity"
+	linearVelocity.Attachment0 = attachment
+	linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+	linearVelocity.MaxForce = maxForce or 120000
+	linearVelocity.VectorVelocity = velocity
+	linearVelocity.Parent = targetRoot
+
+	self.ActiveCombatKnockbacks[targetRoot] = {
+		LinearVelocity = linearVelocity,
+		Attachment = attachment,
+	}
+
+	task.delay(duration, function()
+		if self.ActiveCombatKnockbacks[targetRoot]
+			and self.ActiveCombatKnockbacks[targetRoot].LinearVelocity == linearVelocity
+		then
+			self.ActiveCombatKnockbacks[targetRoot] = nil
+		end
+
+		if linearVelocity and linearVelocity.Parent then
+			linearVelocity:Destroy()
+		end
+
+		if attachment and attachment.Parent then
+			attachment:Destroy()
+		end
+	end)
+
+	Debris:AddItem(linearVelocity, duration + 0.2)
+	Debris:AddItem(attachment, duration + 0.2)
+
+	return linearVelocity, attachment
+end
+
+function MovementService:ApplyStraightKnockback(targetRoot, direction, speed, upward, duration, maxForce)
+	if typeof(direction) ~= "Vector3" then return nil, nil end
+
+	local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+
+	if flatDirection.Magnitude < 0.05 then
+		flatDirection = Vector3.new(0, 0, -1)
+	else
+		flatDirection = flatDirection.Unit
+	end
+
+	local velocity = (flatDirection * (speed or 80)) + Vector3.new(0, upward or 0, 0)
+	return self:ApplyForceKnockback(targetRoot, velocity, duration, maxForce)
+end
+
+function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, data)
+	if not attackerRoot or not attackerRoot.Parent then return nil, nil end
+	if not targetRoot or not targetRoot.Parent then return nil, nil end
+
+	data = data or {}
+
+	local direction = self:GetDirectionBetween(attackerRoot, targetRoot)
+
+	return self:ApplyStraightKnockback(
+		targetRoot,
+		direction,
+		data.Speed or data.Knockback or 80,
+		data.Upward or data.UpwardKnockback or 0,
+		data.Duration or data.KnockbackDuration or 0.22,
+		data.MaxForce or data.KnockbackMaxForce or 120000
+	)
+end
+
+function MovementService:ApplyDownslamStyleKnockback(attackerRoot, targetRoot, data)
+	if not attackerRoot or not attackerRoot.Parent then return nil, nil end
+	if not targetRoot or not targetRoot.Parent then return nil, nil end
+
+	data = data or {}
+
+	local forward = attackerRoot.CFrame.LookVector
+	local flatForward = Vector3.new(forward.X, 0, forward.Z)
+
+	if flatForward.Magnitude < 0.05 then
+		flatForward = Vector3.new(0, 0, -1)
+	else
+		flatForward = flatForward.Unit
+	end
+
+	local velocity =
+		(flatForward * (data.ForwardSpeed or data.DownForwardSpeed or 75))
+		+ Vector3.new(0, data.DownSpeed or data.Upward or -90, 0)
+
+	return self:ApplyForceKnockback(
+		targetRoot,
+		velocity,
+		data.Duration or data.KnockbackDuration or 0.35,
+		data.MaxForce or data.DownLaunchMaxForce or data.KnockbackMaxForce or 120000
+	)
 end
 
 function MovementService:StartYHold(root, duration)
@@ -238,17 +400,8 @@ end
 function MovementService:ApplyLinearVelocityUntilStopped(root, velocity, maxForce)
 	if not root or not root.Parent then return nil, nil end
 
-	local character = root:FindFirstAncestorOfClass("Model")
-	local player = character and game.Players:GetPlayerFromCharacter(character)
-
-	-- Important:
-	-- Only force server ownership for NPCs.
-	-- Do NOT server-own real players, or their movement will feel laggy.
-	if not player then
-		pcall(function()
-			root:SetNetworkOwner(nil)
-		end)
-	end
+	self:ClearCombatMovementControllers(root)
+	self:SetServerOwnershipIfNPC(root)
 
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "DownslamVelocityAttachment"

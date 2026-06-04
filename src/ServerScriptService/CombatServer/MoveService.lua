@@ -350,11 +350,15 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 
 	if data.Knockback and data.Knockback > 0 then
 		if not armorInfo.Active or not armorInfo.PreventsKnockback then
-			local direction = self.MovementService:GetDirectionBetween(attackerRoot, targetRoot)
+			if self.MovementService and self.MovementService.ApplyDirectionalKnockback then
+				self.MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, data)
+			else
+				local direction = self.MovementService:GetDirectionBetween(attackerRoot, targetRoot)
 
-			targetRoot.AssemblyLinearVelocity =
-				(direction * data.Knockback)
-				+ Vector3.new(0, data.UpwardKnockback or 0, 0)
+				targetRoot.AssemblyLinearVelocity =
+					(direction * data.Knockback)
+					+ Vector3.new(0, data.UpwardKnockback or 0, 0)
+			end
 		else
 			print("[MoveService] Armor prevented knockback:", targetCharacter.Name)
 		end

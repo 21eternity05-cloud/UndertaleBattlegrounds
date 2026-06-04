@@ -338,6 +338,10 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
+
+		if ctx.UltService and attackData.AwardsUlt ~= false then
+			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, finalDamage)
+		end
 	end
 
 	if attackData.Stun and attackData.Stun > 0 then
@@ -364,9 +368,20 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 			direction = direction.Unit
 		end
 
-		targetRoot.AssemblyLinearVelocity =
-			(direction * (attackData.Knockback or 120))
-			+ Vector3.new(0, attackData.UpwardKnockback or 85, 0)
+		if ctx.MovementService and ctx.MovementService.ApplyStraightKnockback then
+			ctx.MovementService:ApplyStraightKnockback(
+				targetRoot,
+				direction,
+				attackData.Knockback or 120,
+				attackData.UpwardKnockback or 85,
+				attackData.KnockbackDuration or 0.28,
+				attackData.KnockbackMaxForce or 130000
+			)
+		else
+			targetRoot.AssemblyLinearVelocity =
+				(direction * (attackData.Knockback or 120))
+				+ Vector3.new(0, attackData.UpwardKnockback or 85, 0)
+		end
 	end
 
 	if armorInfo.Active then

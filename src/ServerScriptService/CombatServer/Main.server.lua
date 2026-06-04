@@ -18,12 +18,14 @@ local HitboxService = require(combatFolder:WaitForChild("HitboxService")).new(Co
 local MovementService = require(combatFolder:WaitForChild("MovementService")).new(Config)
 local BlockService = require(combatFolder:WaitForChild("BlockService")).new(Config, StateService, VFXService)
 local WeaponService = require(combatFolder:WaitForChild("WeaponService")).new(Config)
-local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(Config, WeaponService)
+local ProgressionService = require(combatFolder:WaitForChild("ProgressionService")).new(Config)
+local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(Config, WeaponService, ProgressionService)
 local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
 local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
 
 local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
 local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
+local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
 
 local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
@@ -96,12 +98,20 @@ end)
 characterRemote.OnServerEvent:Connect(function(player, action, characterName)
 	if action == "SelectCharacter" then
 		CharacterService:SetCharacter(player, characterName)
+	elseif action == "BuyCharacter" then
+		local ok = ProgressionService:PurchaseCharacter(player, characterName)
+
+		if ok then
+			CharacterService:SetCharacter(player, characterName)
+		end
 	end
 end)
 
 StateService:StartCharacterSetup()
+ProgressionService:Start()
 CharacterService:Start()
 CinematicService:Start()
+LoreCinematicService:Start()
 UltService:Start()
 DebugService:Start()
 

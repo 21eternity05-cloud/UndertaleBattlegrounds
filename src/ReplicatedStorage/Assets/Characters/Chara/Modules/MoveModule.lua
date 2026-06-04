@@ -13,7 +13,7 @@ function CharaMoves.new(config)
 		Move2 = "SlashBarrage",
 		Move3 = "RedSlash",
 		Move4 = "KillingIntent",
-		Ultimate = "Erase",
+		Ultimate = "SpecialHell",
 	}
 
 	self.Moves = {
@@ -21,6 +21,7 @@ function CharaMoves.new(config)
 		SlashBarrage = require(MovesFolder:WaitForChild("SlashBarrage")),
 		RedSlash = require(MovesFolder:WaitForChild("RedSlash")),
 		KillingIntent = require(MovesFolder:WaitForChild("KillingIntent")),
+		SpecialHell = require(MovesFolder:WaitForChild("SpecialHell")),
 		Erase = require(MovesFolder:WaitForChild("Erase")),
 	}
 

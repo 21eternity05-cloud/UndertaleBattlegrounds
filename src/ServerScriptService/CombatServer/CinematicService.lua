@@ -88,6 +88,26 @@ function CinematicService:ResetCamera(character)
 	})
 end
 
+function CinematicService:ShakeOnce(character, intensity, roughness, duration)
+	self:FireCamera(character, {
+		Action = "CameraShakeOnce",
+		Intensity = intensity or 1,
+		Roughness = roughness or 8,
+		Duration = duration or 0.25,
+	})
+end
+
+function CinematicService:ImpactFrame(character, mode, color, contrast, saturation, duration)
+	self:FireCamera(character, {
+		Action = "ImpactFrame",
+		Mode = mode,
+		Color = color,
+		Contrast = contrast,
+		Saturation = saturation,
+		Duration = duration or 0.08,
+	})
+end
+
 function CinematicService:ZeroVelocity(root)
 	if not root or not root.Parent then return end
 

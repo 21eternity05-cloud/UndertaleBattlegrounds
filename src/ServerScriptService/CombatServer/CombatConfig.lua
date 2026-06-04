@@ -32,9 +32,13 @@ CombatConfig.AllowDummyUltGain = true
 
 CombatConfig.DefaultCharacterName = "Chara"
 
+CombatConfig.StartingDust = 0
+CombatConfig.TorielDustCost = 2500
+
 CombatConfig.ValidCharacters = {
 	Chara = true,
 	Sans = true,
+	Toriel = true,
 }
 
 CombatConfig.AssetsFolderName = "Assets"
@@ -157,6 +161,10 @@ CombatConfig.M1Data = {
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 1.5, -6.4),
+		RawRadius = 5.25,
+		RawOffset = CFrame.new(0, 1, -4.8),
+		ComboRadius = 7.5,
+		ComboOffset = CFrame.new(0, 1.5, -6.4),
 
 		LiftHeight = 20,
 		LiftDuration = 0.8,

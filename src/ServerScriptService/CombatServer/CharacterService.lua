@@ -1,19 +1,40 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local CharacterData = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("CharacterData"))
 
 local CharacterService = {}
 CharacterService.__index = CharacterService
 
-function CharacterService.new(config, weaponService)
+function CharacterService.new(config, weaponService, progressionService)
 	local self = setmetatable({}, CharacterService)
 
 	self.Config = config
 	self.WeaponService = weaponService
+	self.ProgressionService = progressionService
 
 	return self
 end
 
 function CharacterService:IsValidCharacter(characterName)
+	if CharacterData[characterName] then
+		return true
+	end
+
 	return self.Config.ValidCharacters and self.Config.ValidCharacters[characterName] == true
+end
+
+function CharacterService:IsCharacterUnlocked(player, characterName)
+	if not self:IsValidCharacter(characterName) then
+		return false
+	end
+
+	if self.ProgressionService and self.ProgressionService.IsCharacterUnlocked then
+		return self.ProgressionService:IsCharacterUnlocked(player, characterName)
+	end
+
+	local data = CharacterData[characterName]
+	return not data or data.Free == true or (data.Cost or 0) <= 0
 end
 
 function CharacterService:GetCharacterName(player)
@@ -30,6 +51,16 @@ function CharacterService:SetCharacter(player, characterName)
 	if typeof(characterName) ~= "string" then return end
 	if not self:IsValidCharacter(characterName) then
 		warn("Invalid character:", characterName)
+		return
+	end
+
+	if not self:IsCharacterUnlocked(player, characterName) then
+		warn("[CharacterService] Locked character select rejected:", player.Name, characterName)
+
+		if self.ProgressionService and self.ProgressionService.SendSnapshot then
+			self.ProgressionService:SendSnapshot(player)
+		end
+
 		return
 	end
 
