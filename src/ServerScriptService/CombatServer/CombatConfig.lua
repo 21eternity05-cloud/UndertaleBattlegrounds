@@ -1,5 +1,22 @@
 local CombatConfig = {}
 
+CombatConfig.DataStoreName = "UTBG_PlayerData_v1"
+
+-- PvP kill reward later. Keep 0 for now while testing.
+CombatConfig.KillDustReward = 0
+
+-- Test dummy reward.
+CombatConfig.RespawnDummyKillDustReward = 1
+
+CombatConfig.KillBannerVerbs = {
+	"erased",
+	"sent to the Hollow Route",
+	"judged",
+	"shattered",
+	"overwrote",
+	"combo ended",
+}
+
 CombatConfig.FinalM1 = 5
 
 CombatConfig.M1ResetTime = 1.25

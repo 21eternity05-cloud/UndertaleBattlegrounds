@@ -54,7 +54,6 @@ local SpecialHell = {
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
 
-	-- +5 studs bigger than the older prototype.
 	HellWarningSize = Vector3.new(23, 0.18, 23),
 	HellBeamStartSize = Vector3.new(9, 1, 9),
 	HellBeamFinalSize = Vector3.new(18, 95, 18),
@@ -67,6 +66,44 @@ local VICTIM_ANIMATIONS = { "SpecialHellVictim", "UltGrabVictim" }
 
 local GRAB_MARKER = "Grab"
 local HELL_MARKER = "Hell"
+
+local function reportDamage(ctx, targetCharacter, damage)
+	if not ctx or not targetCharacter then return end
+	if typeof(damage) ~= "number" or damage <= 0 then return end
+
+	local moveData = ctx.MoveData
+	local awardsUlt = true
+
+	if moveData and moveData.AwardsUlt == false then
+		awardsUlt = false
+	end
+
+	if awardsUlt then
+		if ctx.ReportDamageEvent then
+			ctx:ReportDamageEvent(targetCharacter, damage)
+		elseif ctx.UltService and ctx.UltService.AwardDamageEvent then
+			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
+		end
+
+		return
+	end
+
+	-- Ultimate / no-ult-gain path:
+	-- Do NOT call AwardDamageEvent, because that gives ult from damage.
+	-- Only award kill/Dust/banner if the target died.
+	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+
+	if humanoid and humanoid.Health <= 0 then
+		if ctx.ProgressionService and ctx.ProgressionService.AwardKill then
+			ctx.ProgressionService:AwardKill(ctx.Character, targetCharacter)
+		elseif ctx.UltService
+			and ctx.UltService.ProgressionService
+			and ctx.UltService.ProgressionService.AwardKill
+		then
+			ctx.UltService.ProgressionService:AwardKill(ctx.Character, targetCharacter)
+		end
+	end
+end
 
 local function getFirstUsableAnimationName(ctx, character, names)
 	if not ctx.StateService or not ctx.StateService.AnimationService then
@@ -229,6 +266,51 @@ local function getGroundPositionFromOrigin(character, victimCharacter, originCFr
 	return originPosition - Vector3.new(0, 2.7, 0)
 end
 
+local function lockGrabVictim(ctx, victimCharacter, victimHumanoid, duration)
+	if not victimCharacter or not victimCharacter.Parent then return end
+	if not victimHumanoid or not victimHumanoid.Parent then return end
+
+	victimCharacter:SetAttribute("Grabbed", true)
+	victimCharacter:SetAttribute("CinematicLocked", true)
+	victimCharacter:SetAttribute("Stunned", true)
+	victimCharacter:SetAttribute("Blocking", false)
+	victimCharacter:SetAttribute("Attacking", false)
+	victimCharacter:SetAttribute("UsingMove", true)
+	victimCharacter:SetAttribute("MovementLocked", true)
+	victimCharacter:SetAttribute("DashLocked", true)
+	victimCharacter:SetAttribute("JumpLockedUntil", os.clock() + (duration or 8.5))
+
+	victimHumanoid.WalkSpeed = 0
+	victimHumanoid.Jump = false
+	victimHumanoid.JumpPower = 0
+	victimHumanoid.JumpHeight = 0
+	victimHumanoid.AutoRotate = false
+	victimHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+
+	if ctx.StateService and ctx.StateService.StunCharacter then
+		ctx.StateService:StunCharacter(victimCharacter, duration or 8.5)
+	end
+end
+
+local function unlockGrabVictim(victimCharacter, victimHumanoid, oldVictimState)
+	if victimCharacter and victimCharacter.Parent then
+		victimCharacter:SetAttribute("Grabbed", false)
+		victimCharacter:SetAttribute("CinematicLocked", false)
+		victimCharacter:SetAttribute("Stunned", false)
+		victimCharacter:SetAttribute("UsingMove", false)
+		victimCharacter:SetAttribute("MovementLocked", false)
+		victimCharacter:SetAttribute("DashLocked", false)
+	end
+
+	if victimHumanoid and victimHumanoid.Parent and victimHumanoid.Health > 0 then
+		victimHumanoid.WalkSpeed = oldVictimState.WalkSpeed
+		victimHumanoid.JumpPower = oldVictimState.JumpPower
+		victimHumanoid.JumpHeight = oldVictimState.JumpHeight
+		victimHumanoid.AutoRotate = oldVictimState.AutoRotate
+		victimHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+	end
+end
+
 local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 	local character = ctx.Character
 	local root = ctx.Root
@@ -357,6 +439,7 @@ function SpecialHell.Execute(ctx)
 	local victimCharacter = nil
 	local victimHumanoid = nil
 	local victimRoot = nil
+	local oldVictimState = nil
 
 	local function addConnection(connection)
 		if connection then
@@ -415,6 +498,10 @@ function SpecialHell.Execute(ctx)
 			cinematicService:ClearTemporaryCombatStatus(victimCharacter)
 		end
 
+		if victimCharacter and victimHumanoid and oldVictimState then
+			unlockGrabVictim(victimCharacter, victimHumanoid, oldVictimState)
+		end
+
 		cinematicService:ResetCamera(character)
 
 		if victimCharacter then
@@ -436,8 +523,6 @@ function SpecialHell.Execute(ctx)
 
 		print("[SpecialHell] Hell marker")
 
-		-- Important:
-		-- VFX now anchors from Chara's knife position instead of Chara root/victim root.
 		playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 
 		cinematicService:ShakeOnce(character, 2.4, 10, 0.35)
@@ -445,7 +530,9 @@ function SpecialHell.Execute(ctx)
 		cinematicService:ImpactFrame(character, "RedBlack", nil, nil, nil, 0.08)
 		cinematicService:ImpactFrame(victimCharacter, "RedBlack", nil, nil, nil, 0.08)
 
-		victimHumanoid:TakeDamage(moveData.Damage or 999)
+		local damage = moveData.Damage or 999
+		victimHumanoid:TakeDamage(damage)
+		reportDamage(ctx, victimCharacter, damage)
 	end
 
 	local function playConfirmedCinematic()
@@ -457,6 +544,15 @@ function SpecialHell.Execute(ctx)
 		end
 
 		stopAnimation(ctx, character, STARTUP_ANIMATIONS, 0.04)
+
+		oldVictimState = {
+			WalkSpeed = victimHumanoid.WalkSpeed,
+			JumpPower = victimHumanoid.JumpPower,
+			JumpHeight = victimHumanoid.JumpHeight,
+			AutoRotate = victimHumanoid.AutoRotate,
+		}
+
+		lockGrabVictim(ctx, victimCharacter, victimHumanoid, moveData.Duration or 8.5)
 
 		attackerLockState = cinematicService:LockCharacter(character, {
 			AnchorRoot = true,
@@ -471,6 +567,15 @@ function SpecialHell.Execute(ctx)
 		})
 
 		cinematicService:SetTemporaryCombatStatus(character, {
+			IFrameActive = true,
+			ArmorActive = true,
+			ArmorDamageReduction = 1,
+			ArmorPreventsStun = true,
+			ArmorPreventsKnockback = true,
+			ArmorPreventsHitCancel = true,
+		})
+
+		cinematicService:SetTemporaryCombatStatus(victimCharacter, {
 			IFrameActive = true,
 			ArmorActive = true,
 			ArmorDamageReduction = 1,

@@ -623,4 +623,27 @@ function MoveService:PerformMove(player, moveRequest)
 	end
 end
 
+function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damageAmount)
+	if not attackerCharacter or not targetCharacter then
+		return
+	end
+
+	if not damageAmount or damageAmount <= 0 then
+		return
+	end
+
+	if self.UltService and self.UltService.AwardDamageEvent then
+		self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, damageAmount)
+		return
+	end
+
+	if self.ProgressionService and self.ProgressionService.AwardKill then
+		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+
+		if humanoid and humanoid.Health <= 0 then
+			self.ProgressionService:AwardKill(attackerCharacter, targetCharacter)
+		end
+	end
+end
+
 return MoveService

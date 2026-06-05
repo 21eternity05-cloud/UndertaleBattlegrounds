@@ -280,6 +280,10 @@ function UltService:AwardDamageEvent(attackerCharacter, targetCharacter, damageA
 
 	if targetHumanoid and targetHumanoid.Health <= 0 then
 		self:AwardKill(attackerCharacter, targetCharacter)
+
+		if self.ProgressionService and self.ProgressionService.AwardKill then
+			self.ProgressionService:AwardKill(attackerCharacter, targetCharacter)
+		end
 	end
 end
 

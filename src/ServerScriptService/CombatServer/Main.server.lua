@@ -79,10 +79,13 @@ MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
 MoveService.CinematicService = CinematicService
 MoveService.DamageNumberService = DamageNumberService
+
 M1Service.DamageNumberService = DamageNumberService
 M1Service.UltService = UltService
+
 ProjectileService.UltService = UltService
 CounterService.UltService = UltService
+UltService.ProgressionService = ProgressionService
 
 combatRemote.OnServerEvent:Connect(function(player, action, payload)
 	if action == "M1" then

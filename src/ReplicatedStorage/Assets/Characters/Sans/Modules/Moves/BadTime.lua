@@ -7,9 +7,9 @@ local BadTime = {
 	AnimationName = "BadTime",
 
 	Cooldown = 1, -- TESTING. Set back to 35 later.
-	Duration = 11,
-	LockTime = 11,
-	MaxLockTime = 11.5,
+	Duration = 14,
+	LockTime = 14,
+	MaxLockTime = 14.5,
 
 	RequiresTarget = true,
 	RequiresAim = false,
@@ -17,7 +17,7 @@ local BadTime = {
 	WarningTime = 1,
 	ConfirmRange = 80,
 
-	SequenceTime = 8.75,
+	SequenceTime = 11.5,
 
 	Blockable = true,
 	CanBeBlocked = true,
@@ -29,34 +29,34 @@ local BadTime = {
 
 	HasIFrames = true,
 	IFrameStart = 0,
-	IFrameEnd = 11,
+	IFrameEnd = 14,
 
 	HasArmor = true,
 	ArmorStart = 0,
-	ArmorEnd = 11,
+	ArmorEnd = 14,
 	ArmorDamageReduction = 1,
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
 
 	BoneShotCount = 18, 
-	BoneShotDamage = .2,
+	BoneShotDamage = 0.35,
 	BoneShotRadius = 7.5,
 	BoneShotSpawnMinRadius = 38,
 	BoneShotSpawnMaxRadius = 52,
 	BoneShotTravelTime = 0.34,
 
 	BoneZoneCount = 4,
-	BoneZoneDamage = 2.5,
+	BoneZoneDamage = 3,
 
 	BoneWallCount = 8,
-	BoneWallDamage = 3,
+	BoneWallDamage = 3.5,
 	BoneWallFireInterval = 0.4,
 	BoneWallTravelTime = 0.48,
 
 	BlasterCircleRounds = 6,
 	BlasterRingCount = 14,
-	BlasterDamage = .5,
+	BlasterDamage = 0.75,
 	BlasterScale = 1,
 	BlasterChargeTime = 0.52,
 	BlasterShotInterval = 0.055,
@@ -70,7 +70,7 @@ local BadTime = {
 	BlasterMoveInDistance = 6,
 	BlasterMoveOutDistance = 7,
 
-	GiantBlasterDamage = 5,
+	GiantBlasterDamage = 6,
 	GiantBlasterScale = 2.2,
 	GiantBlasterChargeTime = 0.72,
 	GiantBlasterBeamRadius = 9,
@@ -81,8 +81,8 @@ local BadTime = {
 	GiantBlasterMoveOutDistance = 10,
 	GiantBlasterSpawnRadius = 36, -- farther normal blaster ring
 
-	GravitySpamTotalDamage = 8,
-	FinalSlamDamage = 1,
+	GravitySpamTotalDamage = 10,
+	FinalSlamDamage = 35,
 	AwardsUlt = false,
 }
 
@@ -341,10 +341,51 @@ local function nonlethalDamage(targetCharacter, targetHumanoid, damage)
 	targetHumanoid.Health = math.max(1, targetHumanoid.Health - (damage or 0))
 end
 
-local function lethalDamage(targetHumanoid, damage)
+local function reportDamage(ctx, targetCharacter, damage)
+	if not ctx or not targetCharacter then return end
+	if typeof(damage) ~= "number" or damage <= 0 then return end
+
+	local moveData = ctx.MoveData
+	local awardsUlt = true
+
+	if moveData and moveData.AwardsUlt == false then
+		awardsUlt = false
+	end
+
+	if awardsUlt then
+		if ctx.ReportDamageEvent then
+			ctx:ReportDamageEvent(targetCharacter, damage)
+		elseif ctx.UltService and ctx.UltService.AwardDamageEvent then
+			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
+		end
+
+		return
+	end
+
+	-- Ultimate / no-ult-gain path:
+	-- Do NOT call AwardDamageEvent, because that gives ult from damage.
+	-- Only award kill/Dust/banner if the target died.
+	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+
+	if humanoid and humanoid.Health <= 0 then
+		if ctx.ProgressionService and ctx.ProgressionService.AwardKill then
+			ctx.ProgressionService:AwardKill(ctx.Character, targetCharacter)
+		elseif ctx.UltService
+			and ctx.UltService.ProgressionService
+			and ctx.UltService.ProgressionService.AwardKill
+		then
+			ctx.UltService.ProgressionService:AwardKill(ctx.Character, targetCharacter)
+		end
+	end
+end
+
+local function lethalDamage(ctx, targetCharacter, targetHumanoid, damage)
+	if not targetCharacter or not targetCharacter.Parent then return end
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
 
-	targetHumanoid:TakeDamage(damage or 999)
+	damage = damage or 999
+	targetHumanoid:TakeDamage(damage)
+	reportDamage(ctx, targetCharacter, damage)
 end
 
 local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, targetRoot, sourcePosition, damage)
@@ -1182,15 +1223,31 @@ local function finalSlam(ctx, data)
 
 	if not targetCharacter then return end
 
-	if ctx.MovementService and ctx.MovementService.ApplyForceKnockback then
-		ctx.MovementService:ApplyForceKnockback(targetRoot, Vector3.new(0, -170, 0), 0.22, 160000)
-	else
-		targetRoot.AssemblyLinearVelocity = Vector3.new(0, -170, 0)
+	local slamData = {}
+	for key, value in pairs(data or {}) do
+		slamData[key] = value
 	end
 
-	task.wait(0.18)
+	slamData.DownForwardSpeed = data.FinalSlamForwardSpeed or 12
+	slamData.DownSpeed = data.FinalSlamDownSpeed or -95
+	slamData.DownLaunchMaxForce = data.FinalSlamMaxForce or 95000
+	slamData.AirStunMax = data.FinalSlamAirStunMax or 1.1
+	slamData.GroundSplatStun = data.FinalSlamGroundSplatStun or 0.45
 
-	lethalDamage(targetHumanoid, data.FinalSlamDamage or 999)
+	if ctx.MovementService and ctx.MovementService.ApplyDownslamKnockback then
+		ctx.MovementService:ApplyDownslamKnockback(
+			ctx.Root,
+			targetRoot,
+			slamData,
+			"BadTimeFinalSlam"
+		)
+	else
+		targetRoot.AssemblyLinearVelocity = Vector3.new(0, slamData.DownSpeed, 0)
+	end
+
+	task.wait(0.22)
+
+	lethalDamage(ctx, targetCharacter, targetHumanoid, data.FinalSlamDamage or 35)
 
 	if ctx.VFXService then
 		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
@@ -1199,6 +1256,49 @@ local function finalSlam(ctx, data)
 	if ctx.CinematicService then
 		ctx.CinematicService:ShakeOnce(ctx.Character, 2, 10, 0.3)
 		ctx.CinematicService:ShakeOnce(targetCharacter, 2, 10, 0.3)
+	end
+end
+
+local function applyBadTimeVictimLock(targetCharacter, targetHumanoid, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetHumanoid or not targetHumanoid.Parent then return end
+
+	targetCharacter:SetAttribute("BadTimeVictim", true)
+	targetCharacter:SetAttribute("CinematicLocked", true)
+	targetCharacter:SetAttribute("Grabbed", true)
+	targetCharacter:SetAttribute("Stunned", true)
+	targetCharacter:SetAttribute("Blocking", false)
+	targetCharacter:SetAttribute("Attacking", false)
+	targetCharacter:SetAttribute("UsingMove", true)
+	targetCharacter:SetAttribute("MovementLocked", true)
+	targetCharacter:SetAttribute("DashLocked", true)
+	targetCharacter:SetAttribute("JumpLockedUntil", os.clock() + (duration or 12))
+
+	targetHumanoid.WalkSpeed = 0
+	targetHumanoid.Jump = false
+	targetHumanoid.JumpPower = 0
+	targetHumanoid.JumpHeight = 0
+	targetHumanoid.AutoRotate = true
+	targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+end
+
+local function clearBadTimeVictimLock(targetCharacter, targetHumanoid, oldWalkSpeed, oldJumpPower, oldJumpHeight, oldAutoRotate)
+	if targetCharacter and targetCharacter.Parent then
+		targetCharacter:SetAttribute("BadTimeVictim", false)
+		targetCharacter:SetAttribute("CinematicLocked", false)
+		targetCharacter:SetAttribute("Grabbed", false)
+		targetCharacter:SetAttribute("Stunned", false)
+		targetCharacter:SetAttribute("UsingMove", false)
+		targetCharacter:SetAttribute("MovementLocked", false)
+		targetCharacter:SetAttribute("DashLocked", false)
+	end
+
+	if targetHumanoid and targetHumanoid.Parent and targetHumanoid.Health > 0 then
+		targetHumanoid.WalkSpeed = oldWalkSpeed
+		targetHumanoid.JumpPower = oldJumpPower
+		targetHumanoid.JumpHeight = oldJumpHeight
+		targetHumanoid.AutoRotate = oldAutoRotate
+		targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 	end
 end
 
@@ -1260,18 +1360,14 @@ function BadTime.Execute(ctx)
 			cinematicService:ClearTemporaryCombatStatus(character)
 		end
 
-		if targetCharacter and targetCharacter.Parent then
-			targetCharacter:SetAttribute("BadTimeVictim", false)
-			targetCharacter:SetAttribute("CinematicLocked", false)
-		end
-
-		if targetHumanoid and targetHumanoid.Parent and targetHumanoid.Health > 0 then
-			targetHumanoid.WalkSpeed = oldTargetWalkSpeed
-			targetHumanoid.JumpPower = oldTargetJumpPower
-			targetHumanoid.JumpHeight = oldTargetJumpHeight
-			targetHumanoid.AutoRotate = oldTargetAutoRotate
-			targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-		end
+		clearBadTimeVictimLock(
+			targetCharacter,
+			targetHumanoid,
+			oldTargetWalkSpeed,
+			oldTargetJumpPower,
+			oldTargetJumpHeight,
+			oldTargetAutoRotate
+		)
 
 		if targetRoot and targetRoot.Parent then
 			targetRoot.AssemblyLinearVelocity = Vector3.zero
@@ -1365,14 +1461,7 @@ function BadTime.Execute(ctx)
 		})
 	end
 
-	targetCharacter:SetAttribute("BadTimeVictim", true)
-
-	targetHumanoid.WalkSpeed = math.max(oldTargetWalkSpeed, 20)
-	targetHumanoid.Jump = false
-	targetHumanoid.JumpPower = 0
-	targetHumanoid.JumpHeight = 0
-	targetHumanoid.AutoRotate = true
-	targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+	applyBadTimeVictimLock(targetCharacter, targetHumanoid, data.SequenceTime or 11.5)
 
 	if ctx.StateService and ctx.StateService.LockJump then
 		ctx.StateService:LockJump(targetCharacter, data.SequenceTime or 8.75)
