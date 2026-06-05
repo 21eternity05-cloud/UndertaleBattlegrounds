@@ -2,7 +2,6 @@
   "name": "UndertaleBattlegrounds",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Remotes": {
@@ -63,19 +62,20 @@
         }
       }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "CombatServer": {
         "$path": "src/ServerScriptService/CombatServer"
+      },
+      "TestTools": {
+        "$path": "src/ServerScriptService/TestTools"
       }
-    },
-
-    "StarterPlayer": {
-      "$className": "StarterPlayer",
-      "StarterPlayerScripts": {
-        "$path": "src/StarterPlayer/StarterPlayerScripts"
-      }
+    }
+  },
+  "StarterPlayer": {
+    "$className": "StarterPlayer",
+    "StarterPlayerScripts": {
+      "$path": "src/StarterPlayer/StarterPlayerScripts"
     }
   }
 }
