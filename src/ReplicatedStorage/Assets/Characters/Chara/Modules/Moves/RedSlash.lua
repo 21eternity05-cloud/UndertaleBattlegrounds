@@ -47,7 +47,7 @@ local RedSlash = {
 
 	HasArmor = true,
 	ArmorStart = 0.15,
-	ArmorEnd = 1.18,
+	ArmorEnd = 2,
 	ArmorDamageReduction = 0.5,
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,

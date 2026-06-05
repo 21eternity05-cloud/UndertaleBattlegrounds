@@ -39,7 +39,7 @@ local BadTime = {
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
 
-	BoneShotCount = 18, 
+	BoneShotCount = 18,
 	BoneShotDamage = 1,
 	BoneShotRadius = 7.5,
 	BoneShotSpawnMinRadius = 38,
@@ -63,7 +63,7 @@ local BadTime = {
 	BlasterBeamRadius = 5.2,
 	BlasterBeamStep = 6,
 	BlasterBeamLength = 78,
-	BlasterSpawnRadius = 36, -- farther normal blaster ring
+	BlasterSpawnRadius = 36,
 
 	BlasterSpawnTweenTime = 0.12,
 	BlasterFadeOutTime = 0.16,
@@ -79,10 +79,11 @@ local BadTime = {
 	GiantBlasterSpawnTweenTime = 0.18,
 	GiantBlasterMoveInDistance = 8,
 	GiantBlasterMoveOutDistance = 10,
-	GiantBlasterSpawnRadius = 36, -- farther normal blaster ring
+	GiantBlasterSpawnRadius = 36,
 
 	GravitySpamTotalDamage = 10,
 	FinalSlamDamage = 35,
+
 	AwardsUlt = false,
 }
 
@@ -334,14 +335,22 @@ local function wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePo
 	return false
 end
 
-local function nonlethalDamage(targetCharacter, targetHumanoid, damage)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+local function canDamageTarget(ctx, targetCharacter)
+	if not ctx or not targetCharacter then
+		return false
+	end
 
-	targetHumanoid.Health = math.max(1, targetHumanoid.Health - (damage or 0))
+	if ctx.CombatStatusService
+		and ctx.CombatStatusService.IsDamageLockedFromAttacker
+		and ctx.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, ctx.Character)
+	then
+		return false
+	end
+
+	return true
 end
 
-local function reportDamage(ctx, targetCharacter, damage)
+local function reportDamage(ctx, targetCharacter, targetRoot, damage)
 	if not ctx or not targetCharacter then return end
 	if typeof(damage) ~= "number" or damage <= 0 then return end
 
@@ -352,9 +361,25 @@ local function reportDamage(ctx, targetCharacter, damage)
 		awardsUlt = false
 	end
 
+	if ctx.ReportNoUltDamage and awardsUlt == false then
+		ctx:ReportNoUltDamage(targetCharacter, targetRoot, damage)
+		return
+	end
+
+	if ctx.GrabService and ctx.GrabService.ReportNoUltDamage and awardsUlt == false then
+		ctx.GrabService:ReportNoUltDamage(ctx.Character, targetCharacter, targetRoot, damage)
+		return
+	end
+
+	if ctx.DamageNumberService and targetRoot then
+		ctx.DamageNumberService:ShowDamage(targetRoot, damage, {
+			TextSize = 46,
+		})
+	end
+
 	if awardsUlt then
 		if ctx.ReportDamageEvent then
-			ctx:ReportDamageEvent(targetCharacter, damage)
+			ctx:ReportDamageEvent(targetCharacter, damage, targetRoot)
 		elseif ctx.UltService and ctx.UltService.AwardDamageEvent then
 			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
 		end
@@ -362,9 +387,6 @@ local function reportDamage(ctx, targetCharacter, damage)
 		return
 	end
 
-	-- Ultimate / no-ult-gain path:
-	-- Do NOT call AwardDamageEvent, because that gives ult from damage.
-	-- Only award kill/Dust/banner if the target died.
 	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 
 	if humanoid and humanoid.Health <= 0 then
@@ -379,28 +401,31 @@ local function reportDamage(ctx, targetCharacter, damage)
 	end
 end
 
-local function canDamageTarget(ctx, targetCharacter)
-	if not ctx or not targetCharacter then
-		return false
+local function nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, damage)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+	if not canDamageTarget(ctx, targetCharacter) then return end
+
+	damage = damage or 0
+
+	if damage <= 0 then
+		return
 	end
 
-	if ctx.CombatStatusService
-		and ctx.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, ctx.Character)
-	then
-		return false
-	end
+	targetHumanoid.Health = math.max(1, targetHumanoid.Health - damage)
 
-	return true
+	reportDamage(ctx, targetCharacter, targetRoot, damage)
 end
 
-local function lethalDamage(ctx, targetCharacter, targetHumanoid, damage)
+local function lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, damage)
 	if not targetCharacter or not targetCharacter.Parent then return end
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
 	if not canDamageTarget(ctx, targetCharacter) then return end
 
 	damage = damage or 999
+
 	targetHumanoid:TakeDamage(damage)
-	reportDamage(ctx, targetCharacter, damage)
+	reportDamage(ctx, targetCharacter, targetRoot, damage)
 end
 
 local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, targetRoot, sourcePosition, damage)
@@ -412,7 +437,7 @@ local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, tar
 		return false
 	end
 
-	nonlethalDamage(targetCharacter, targetHumanoid, damage)
+	nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, damage)
 
 	if ctx.VFXService then
 		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
@@ -523,7 +548,7 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 					hitHumanoid,
 					hitRoot,
 					startPosition,
-					data.BoneShotDamage or 3
+					data.BoneShotDamage or 1
 				)
 			end
 		)
@@ -614,7 +639,7 @@ local function spawnBoneZoneAtVictim(ctx, data)
 				hitHumanoid,
 				hitRoot,
 				position,
-				data.BoneZoneDamage or 6
+				data.BoneZoneDamage or 4
 			)
 		end
 	)
@@ -701,7 +726,7 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 						hitHumanoid,
 						hitRoot,
 						wallCFrame.Position,
-						data.BoneWallDamage or 6
+						data.BoneWallDamage or 4
 					)
 				end
 			)
@@ -853,11 +878,7 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 					damage
 				)
 			else
-				if not canDamageTarget(ctx, hitCharacter) then
-					return
-				end
-
-				nonlethalDamage(hitCharacter, hitHumanoid, damage)
+				nonlethalDamage(ctx, hitCharacter, hitHumanoid, hitRoot, damage)
 
 				if ctx.VFXService then
 					ctx.VFXService:EmitHitVFXOnVictim(hitRoot, ctx.Character)
@@ -1160,7 +1181,7 @@ local function runBlasterRing(ctx, data)
 					data,
 					angle,
 					data.BlasterScale or 1,
-					data.BlasterDamage or 7,
+					data.BlasterDamage or 2,
 					data.BlasterChargeTime or 0.52,
 					data.BlasterBeamLength or 78,
 					data.BlasterBeamRadius or 5.2,
@@ -1195,7 +1216,7 @@ local function runGiantBlasters(ctx, data)
 				data,
 				angle,
 				data.GiantBlasterScale or 2.2,
-				data.GiantBlasterDamage or 12,
+				data.GiantBlasterDamage or 6,
 				data.GiantBlasterChargeTime or 0.72,
 				data.GiantBlasterBeamLength or 120,
 				data.GiantBlasterBeamRadius or 9,
@@ -1215,7 +1236,7 @@ local function runBlueGravityFinale(ctx, data)
 
 	if not targetCharacter then return end
 
-	local totalDamage = data.GravitySpamTotalDamage or 20
+	local totalDamage = data.GravitySpamTotalDamage or 10
 	local perHit = totalDamage / 4
 
 	local velocities = {
@@ -1234,9 +1255,7 @@ local function runBlueGravityFinale(ctx, data)
 
 		targetRoot.AssemblyLinearVelocity = velocity
 
-		if canDamageTarget(ctx, targetCharacter) then
-			nonlethalDamage(targetCharacter, targetHumanoid, perHit)
-		end
+		nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, perHit)
 
 		playSansMoveVFX(ctx, "BlueHeart", targetCharacter, targetRoot)
 		playSansSFX(ctx, "Teleport", targetRoot, 2)
@@ -1251,6 +1270,7 @@ local function finalSlam(ctx, data)
 	if not targetCharacter then return end
 
 	local slamData = {}
+
 	for key, value in pairs(data or {}) do
 		slamData[key] = value
 	end
@@ -1274,7 +1294,7 @@ local function finalSlam(ctx, data)
 
 	task.wait(0.22)
 
-	lethalDamage(ctx, targetCharacter, targetHumanoid, data.FinalSlamDamage or 35)
+	lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 35)
 
 	if ctx.VFXService then
 		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
@@ -1283,49 +1303,6 @@ local function finalSlam(ctx, data)
 	if ctx.CinematicService then
 		ctx.CinematicService:ShakeOnce(ctx.Character, 2, 10, 0.3)
 		ctx.CinematicService:ShakeOnce(targetCharacter, 2, 10, 0.3)
-	end
-end
-
-local function applyBadTimeVictimLock(targetCharacter, targetHumanoid, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetHumanoid or not targetHumanoid.Parent then return end
-
-	targetCharacter:SetAttribute("BadTimeVictim", true)
-	targetCharacter:SetAttribute("CinematicLocked", true)
-	targetCharacter:SetAttribute("Grabbed", true)
-	targetCharacter:SetAttribute("Stunned", true)
-	targetCharacter:SetAttribute("Blocking", false)
-	targetCharacter:SetAttribute("Attacking", false)
-	targetCharacter:SetAttribute("UsingMove", true)
-	targetCharacter:SetAttribute("MovementLocked", true)
-	targetCharacter:SetAttribute("DashLocked", true)
-	targetCharacter:SetAttribute("JumpLockedUntil", os.clock() + (duration or 12))
-
-	targetHumanoid.WalkSpeed = 0
-	targetHumanoid.Jump = false
-	targetHumanoid.JumpPower = 0
-	targetHumanoid.JumpHeight = 0
-	targetHumanoid.AutoRotate = true
-	targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-end
-
-local function clearBadTimeVictimLock(targetCharacter, targetHumanoid, oldWalkSpeed, oldJumpPower, oldJumpHeight, oldAutoRotate)
-	if targetCharacter and targetCharacter.Parent then
-		targetCharacter:SetAttribute("BadTimeVictim", false)
-		targetCharacter:SetAttribute("CinematicLocked", false)
-		targetCharacter:SetAttribute("Grabbed", false)
-		targetCharacter:SetAttribute("Stunned", false)
-		targetCharacter:SetAttribute("UsingMove", false)
-		targetCharacter:SetAttribute("MovementLocked", false)
-		targetCharacter:SetAttribute("DashLocked", false)
-	end
-
-	if targetHumanoid and targetHumanoid.Parent and targetHumanoid.Health > 0 then
-		targetHumanoid.WalkSpeed = oldWalkSpeed
-		targetHumanoid.JumpPower = oldJumpPower
-		targetHumanoid.JumpHeight = oldJumpHeight
-		targetHumanoid.AutoRotate = oldAutoRotate
-		targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 	end
 end
 
@@ -1364,11 +1341,6 @@ function BadTime.Execute(ctx)
 	local sansLockState = nil
 	local cinematicService = ctx.CinematicService
 
-	local oldTargetWalkSpeed = targetHumanoid.WalkSpeed
-	local oldTargetJumpPower = targetHumanoid.JumpPower
-	local oldTargetJumpHeight = targetHumanoid.JumpHeight
-	local oldTargetAutoRotate = targetHumanoid.AutoRotate
-
 	local function cleanup()
 		if finished then return end
 		finished = true
@@ -1387,22 +1359,8 @@ function BadTime.Execute(ctx)
 			cinematicService:ClearTemporaryCombatStatus(character)
 		end
 
-		if ctx.CombatStatusService then
+		if ctx.CombatStatusService and ctx.CombatStatusService.ClearDamageLock then
 			ctx.CombatStatusService:ClearDamageLock(targetCharacter, character)
-		end
-
-		clearBadTimeVictimLock(
-			targetCharacter,
-			targetHumanoid,
-			oldTargetWalkSpeed,
-			oldTargetJumpPower,
-			oldTargetJumpHeight,
-			oldTargetAutoRotate
-		)
-
-		if targetRoot and targetRoot.Parent then
-			targetRoot.AssemblyLinearVelocity = Vector3.zero
-			targetRoot.AssemblyAngularVelocity = Vector3.zero
 		end
 
 		if cinematicService then
@@ -1475,6 +1433,13 @@ function BadTime.Execute(ctx)
 		return
 	end
 
+	if confirmResult == "DamageLocked" then
+		print("[BadTime] Target damage locked")
+		cleanup()
+		ctx:FinishMove(0.3)
+		return
+	end
+
 	if confirmResult ~= "Hit" and confirmResult ~= "ArmoredHit" then
 		print("[BadTime] Failed confirm:", confirmResult)
 		cleanup()
@@ -1484,8 +1449,14 @@ function BadTime.Execute(ctx)
 
 	print("[BadTime] Confirmed:", targetCharacter.Name)
 
-	if ctx.CombatStatusService then
-		ctx.CombatStatusService:SetDamageLock(targetCharacter, character, data.SequenceTime or 11.5)
+	-- DamageLock only prevents other players from damaging/stealing this victim.
+	-- It does NOT stun, grab, movement-lock, dash-lock, or block-lock the victim.
+	if ctx.CombatStatusService and ctx.CombatStatusService.SetDamageLock then
+		ctx.CombatStatusService:SetDamageLock(
+			targetCharacter,
+			character,
+			data.SequenceTime or 11.5
+		)
 	end
 
 	if cinematicService then
@@ -1494,12 +1465,6 @@ function BadTime.Execute(ctx)
 			DisableCollision = true,
 			IsGrabber = false,
 		})
-	end
-
-	applyBadTimeVictimLock(targetCharacter, targetHumanoid, data.SequenceTime or 11.5)
-
-	if ctx.StateService and ctx.StateService.LockJump then
-		ctx.StateService:LockJump(targetCharacter, data.SequenceTime or 8.75)
 	end
 
 	playSansMoveVFX(ctx, "BlueHeart", targetCharacter, targetRoot)
