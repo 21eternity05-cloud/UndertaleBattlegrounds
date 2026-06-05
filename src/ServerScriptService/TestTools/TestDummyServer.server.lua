@@ -5,10 +5,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local CombatServer = ServerScriptService:WaitForChild("CombatServer")
 local Config = require(CombatServer:WaitForChild("CombatConfig"))
 
-local NPCM1Module = require(script:WaitForChild("NPCM1"))
-
--- NPCM1 can still work even if its .new() ignores Config for now.
--- Later, we can patch NPCM1.lua to actually use Config.M1Data directly.
+local NPCM1Module = require(script.Parent:WaitForChild("NPCM1"))
 local NPCM1 = NPCM1Module.new(Config)
 
 local dummyFolder = workspace:WaitForChild("TestDummies")
@@ -19,6 +16,7 @@ local COMBO_PAUSE = Config.TestDummyComboPause or 1.5
 
 local RESPAWN_TIME = Config.TestDummyRespawnTime or 1.5
 local IMMORTAL_DUMMY_HEALTH = Config.TestDummyHealth or 100000
+local RESPAWN_DUMMY_HEALTH = Config.RespawnDummyHealth or 100
 
 local activeLoops = {}
 local respawnTemplates = {}
@@ -105,11 +103,13 @@ local function isRespawnDummy(dummy)
 		return false
 	end
 
-	if dummy.Name == "RespawnDummy" then
+	if dummy:GetAttribute("RespawnDummy") == true then
 		return true
 	end
 
-	if dummy:GetAttribute("RespawnDummy") == true then
+	local loweredName = string.lower(dummy.Name)
+
+	if string.find(loweredName, "respawn") then
 		return true
 	end
 
@@ -146,6 +146,20 @@ local function cacheRespawnTemplate(dummy)
 	local template = dummy:Clone()
 	template.Name = dummy.Name .. "_Template"
 	template.Parent = nil
+
+	-- Important:
+	-- Do not let the respawn clone skip setupDummy().
+	template:SetAttribute("TestDummySetup", nil)
+	template:SetAttribute("RespawnDummy", true)
+	template:SetAttribute("Immortal", false)
+
+	local templateHumanoid = template:FindFirstChildOfClass("Humanoid")
+	if templateHumanoid then
+		templateHumanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
+		templateHumanoid.Health = RESPAWN_DUMMY_HEALTH
+		templateHumanoid.BreakJointsOnDeath = false
+		templateHumanoid.RequiresNeck = false
+	end
 
 	respawnTemplates[dummy.Name] = template
 
@@ -346,6 +360,21 @@ local function respawnDummy(dummyName)
 
 	local clone = template:Clone()
 	clone.Name = dummyName
+
+	-- Important:
+	-- Force setupDummy() to run again on the fresh clone.
+	clone:SetAttribute("TestDummySetup", nil)
+	clone:SetAttribute("RespawnDummy", true)
+	clone:SetAttribute("Immortal", false)
+
+	local humanoid = clone:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
+		humanoid.Health = RESPAWN_DUMMY_HEALTH
+		humanoid.BreakJointsOnDeath = false
+		humanoid.RequiresNeck = false
+	end
+
 	clone.Parent = dummyFolder
 	clone:PivotTo(spawnCFrame)
 
@@ -366,17 +395,30 @@ local function setupDummy(dummy)
 		return
 	end
 
+	local respawns = isRespawnDummy(dummy)
+
+	if respawns then
+	dummy:SetAttribute("RespawnDummy", true)
+	dummy:SetAttribute("Immortal", false)
+
+	humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
+	humanoid.Health = RESPAWN_DUMMY_HEALTH
+else
+	humanoid.MaxHealth = IMMORTAL_DUMMY_HEALTH
+	humanoid.Health = IMMORTAL_DUMMY_HEALTH
+end
+
 	cacheRespawnTemplate(dummy)
 
 	humanoid.BreakJointsOnDeath = false
 	humanoid.RequiresNeck = false
 
-	if isRespawnDummy(dummy) then
-		humanoid.MaxHealth = Config.RespawnDummyHealth or 100
-		humanoid.Health = humanoid.MaxHealth
+	if respawns then
+		humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
+		humanoid.Health = RESPAWN_DUMMY_HEALTH
 	else
 		humanoid.MaxHealth = IMMORTAL_DUMMY_HEALTH
-		humanoid.Health = humanoid.MaxHealth
+		humanoid.Health = IMMORTAL_DUMMY_HEALTH
 	end
 
 	root.Anchored = false
@@ -407,8 +449,9 @@ local function setupDummy(dummy)
 		end)
 	end
 
-	if isRespawnDummy(dummy) then
+	if respawns then
 		humanoid.Died:Connect(function()
+			local dummyName = dummy.Name
 			activeLoops[dummy] = nil
 
 			task.delay(RESPAWN_TIME, function()
@@ -416,7 +459,7 @@ local function setupDummy(dummy)
 					dummy:Destroy()
 				end
 
-				respawnDummy(dummy.Name)
+				respawnDummy(dummyName)
 			end)
 		end)
 	end
@@ -427,7 +470,7 @@ local function setupDummy(dummy)
 		end
 	end)
 
-	print("[TestDummyServer] Set up:", dummy.Name)
+	print("[TestDummyServer] Set up:", dummy.Name, "Respawn:", respawns, "Immortal:", isImmortalDummy(dummy))
 end
 
 for _, dummy in ipairs(dummyFolder:GetChildren()) do
