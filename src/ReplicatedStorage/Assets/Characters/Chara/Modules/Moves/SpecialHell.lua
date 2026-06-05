@@ -53,6 +53,12 @@ local SpecialHell = {
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
+
+	-- +5 studs bigger than the older prototype.
+	HellWarningSize = Vector3.new(23, 0.18, 23),
+	HellBeamStartSize = Vector3.new(9, 1, 9),
+	HellBeamFinalSize = Vector3.new(18, 95, 18),
+	HellBeamHeight = 47.5,
 }
 
 local STARTUP_ANIMATIONS = { "SpecialHellGrab", "UltGrab" }
@@ -62,23 +68,57 @@ local VICTIM_ANIMATIONS = { "SpecialHellVictim", "UltGrabVictim" }
 local GRAB_MARKER = "Grab"
 local HELL_MARKER = "Hell"
 
-local function playFirstAnimation(ctx, character, names, fadeTime, speed, looped)
-	if not ctx.StateService or not ctx.StateService.AnimationService then return nil, nil end
+local function getFirstUsableAnimationName(ctx, character, names)
+	if not ctx.StateService or not ctx.StateService.AnimationService then
+		return nil
+	end
+
+	local animationService = ctx.StateService.AnimationService
+	local characterName = animationService:GetCharacterNameFromCharacter(character)
+	local defaultCharacterName = animationService.Config.DefaultCharacterName or "Chara"
 
 	for _, animationName in ipairs(names) do
-		local track = ctx.StateService.AnimationService:PlayCharacterAnimation(
-			character,
-			animationName,
-			fadeTime or 0.05,
-			1,
-			speed or 1,
-			true
-		)
+		local animation = animationService:GetCharacterAnimation(characterName, animationName)
 
-		if track then
-			track.Looped = looped == true
-			return track, animationName
+		if animation and animationService:IsAnimationUsable(animation) then
+			return animationName
 		end
+
+		if not animation and characterName ~= defaultCharacterName then
+			local fallbackAnimation = animationService:GetCharacterAnimation(defaultCharacterName, animationName)
+
+			if fallbackAnimation and animationService:IsAnimationUsable(fallbackAnimation) then
+				return animationName
+			end
+		end
+	end
+
+	return nil
+end
+
+local function playFirstAnimation(ctx, character, names, fadeTime, speed, looped)
+	if not ctx.StateService or not ctx.StateService.AnimationService then
+		return nil, nil
+	end
+
+	local animationName = getFirstUsableAnimationName(ctx, character, names)
+
+	if not animationName then
+		return nil, nil
+	end
+
+	local track = ctx.StateService.AnimationService:PlayCharacterAnimation(
+		character,
+		animationName,
+		fadeTime or 0.05,
+		1,
+		speed or 1,
+		true
+	)
+
+	if track then
+		track.Looped = looped == true
+		return track, animationName
 	end
 
 	return nil, nil
@@ -93,24 +133,109 @@ local function stopAnimation(ctx, character, animationNames, fadeTime)
 	end
 end
 
-local function getGroundPosition(character, targetRoot)
-	local rayOrigin = targetRoot.Position + Vector3.new(0, 5, 0)
+local function getKnifePart(character)
+	if not character then
+		return nil
+	end
+
+	local realKnife = character:FindFirstChild("RealKnife", true)
+
+	if realKnife then
+		if realKnife:IsA("BasePart") then
+			return realKnife
+		end
+
+		if realKnife:IsA("Model") then
+			if realKnife.PrimaryPart then
+				return realKnife.PrimaryPart
+			end
+
+			local primary = realKnife:FindFirstChild("PrimaryPart", true)
+			if primary and primary:IsA("BasePart") then
+				return primary
+			end
+
+			local handle = realKnife:FindFirstChild("Handle", true)
+			if handle and handle:IsA("BasePart") then
+				return handle
+			end
+
+			return realKnife:FindFirstChildWhichIsA("BasePart", true)
+		end
+	end
+
+	local handle = character:FindFirstChild("Handle", true)
+	if handle and handle:IsA("BasePart") then
+		return handle
+	end
+
+	local knife = character:FindFirstChild("Knife", true)
+	if knife then
+		if knife:IsA("BasePart") then
+			return knife
+		end
+
+		if knife:IsA("Model") then
+			if knife.PrimaryPart then
+				return knife.PrimaryPart
+			end
+
+			return knife:FindFirstChildWhichIsA("BasePart", true)
+		end
+	end
+
+	return nil
+end
+
+local function getSpecialHellOriginCFrame(character, fallbackRoot)
+	local knifePart = getKnifePart(character)
+
+	if knifePart then
+		return knifePart.CFrame
+	end
+
+	if fallbackRoot then
+		return fallbackRoot.CFrame
+	end
+
+	return CFrame.new()
+end
+
+local function getGroundPositionFromOrigin(character, victimCharacter, originCFrame)
+	local originPosition = originCFrame.Position
+	local rayOrigin = originPosition + Vector3.new(0, 6, 0)
+
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character, targetRoot.Parent }
 
-	local result = workspace:Raycast(rayOrigin, Vector3.new(0, -40, 0), params)
+	local excludeList = {}
+
+	if character then
+		table.insert(excludeList, character)
+	end
+
+	if victimCharacter then
+		table.insert(excludeList, victimCharacter)
+	end
+
+	params.FilterDescendantsInstances = excludeList
+
+	local result = workspace:Raycast(rayOrigin, Vector3.new(0, -70, 0), params)
+
 	if result then
 		return result.Position + Vector3.new(0, 0.08, 0)
 	end
 
-	return targetRoot.Position - Vector3.new(0, 2.7, 0)
+	return originPosition - Vector3.new(0, 2.7, 0)
 end
 
-local function playSpecialHellVFX(ctx, victimRoot)
-	if not victimRoot or not victimRoot.Parent then return end
+local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
+	local character = ctx.Character
+	local root = ctx.Root
+	local moveData = ctx.MoveData
 
-	local groundPosition = getGroundPosition(ctx.Character, victimRoot)
+	local originCFrame = getSpecialHellOriginCFrame(character, root)
+	local groundPosition = getGroundPositionFromOrigin(character, victimCharacter, originCFrame)
 
 	local warning = Instance.new("Part")
 	warning.Name = "SpecialHellWarning"
@@ -129,13 +254,16 @@ local function playSpecialHellVFX(ctx, victimRoot)
 		warning,
 		TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 		{
-			Size = Vector3.new(18, 0.18, 18),
+			Size = moveData.HellWarningSize or Vector3.new(23, 0.18, 23),
 			Transparency = 0.18,
 		}
 	):Play()
 
 	task.delay(0.3, function()
 		if not warning or not warning.Parent then return end
+
+		local beamFinalSize = moveData.HellBeamFinalSize or Vector3.new(18, 95, 18)
+		local beamHeight = moveData.HellBeamHeight or (beamFinalSize.Y / 2)
 
 		local beam = Instance.new("Part")
 		beam.Name = "SpecialHellBeam"
@@ -146,7 +274,7 @@ local function playSpecialHellVFX(ctx, victimRoot)
 		beam.Material = Enum.Material.Neon
 		beam.Color = Color3.fromRGB(255, 0, 0)
 		beam.Transparency = 0.08
-		beam.Size = Vector3.new(4, 1, 4)
+		beam.Size = moveData.HellBeamStartSize or Vector3.new(9, 1, 9)
 		beam.CFrame = CFrame.new(groundPosition + Vector3.new(0, 0.5, 0))
 		beam.Parent = workspace
 
@@ -154,8 +282,8 @@ local function playSpecialHellVFX(ctx, victimRoot)
 			beam,
 			TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
 			{
-				Size = Vector3.new(13, 90, 13),
-				CFrame = CFrame.new(groundPosition + Vector3.new(0, 45, 0)),
+				Size = beamFinalSize,
+				CFrame = CFrame.new(groundPosition + Vector3.new(0, beamHeight, 0)),
 			}
 		)
 
@@ -163,6 +291,7 @@ local function playSpecialHellVFX(ctx, victimRoot)
 
 		task.spawn(function()
 			local startTime = os.clock()
+
 			while beam and beam.Parent and os.clock() - startTime < 0.55 do
 				beam.CFrame *= CFrame.Angles(0, math.rad(18), 0)
 				task.wait()
@@ -174,7 +303,10 @@ local function playSpecialHellVFX(ctx, victimRoot)
 				TweenService:Create(
 					beam,
 					TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{ Transparency = 1, Size = Vector3.new(3, 90, 3) }
+					{
+						Transparency = 1,
+						Size = Vector3.new(4, beamFinalSize.Y, 4),
+					}
 				):Play()
 			end
 		end)
@@ -236,6 +368,7 @@ function SpecialHell.Execute(ctx)
 		for _, connection in ipairs(markerConnections) do
 			connection:Disconnect()
 		end
+
 		markerConnections = {}
 	end
 
@@ -283,6 +416,7 @@ function SpecialHell.Execute(ctx)
 		end
 
 		cinematicService:ResetCamera(character)
+
 		if victimCharacter then
 			cinematicService:ResetCamera(victimCharacter)
 		end
@@ -302,7 +436,9 @@ function SpecialHell.Execute(ctx)
 
 		print("[SpecialHell] Hell marker")
 
-		playSpecialHellVFX(ctx, victimRoot)
+		-- Important:
+		-- VFX now anchors from Chara's knife position instead of Chara root/victim root.
+		playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 
 		cinematicService:ShakeOnce(character, 2.4, 10, 0.35)
 		cinematicService:ShakeOnce(victimCharacter, 2.4, 10, 0.35)
@@ -350,22 +486,27 @@ function SpecialHell.Execute(ctx)
 
 		if attackerTrack then
 			addConnection(attackerTrack:GetMarkerReachedSignal(HELL_MARKER):Connect(doHell))
+
 			addConnection(attackerTrack.Ended:Connect(function()
 				if not hellResolved then
 					doHell()
 				end
+
 				finish(0)
 			end))
+
 			addConnection(attackerTrack.Stopped:Connect(function()
 				if not finished then
 					if not hellResolved then
 						doHell()
 					end
+
 					finish(0)
 				end
 			end))
 		else
 			warn("[SpecialHell] Missing attacker animation")
+
 			task.delay(1.2, function()
 				if not finished then
 					doHell()
@@ -424,6 +565,7 @@ function SpecialHell.Execute(ctx)
 
 	addConnection(startupTrack:GetMarkerReachedSignal(GRAB_MARKER):Connect(function()
 		if finished or confirmed then return end
+
 		if not ctx:IsActive() then
 			finish(0)
 			return
@@ -463,9 +605,11 @@ function SpecialHell.Execute(ctx)
 
 	addConnection(startupTrack.Ended:Connect(function()
 		if finished or confirmed then return end
+
 		if not grabMarkerReached then
 			warn("[SpecialHell] Startup ended before Grab marker")
 		end
+
 		finish(moveData.WhiffEndlag or 0.22)
 	end))
 

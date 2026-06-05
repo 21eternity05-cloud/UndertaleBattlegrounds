@@ -45,6 +45,22 @@ function AnimationService:GetCharacterNameFromCharacter(character)
 	return self.Config.DefaultCharacterName or "Chara"
 end
 
+function AnimationService:IsAnimationUsable(animation)
+	if not animation or not animation:IsA("Animation") then
+		return false
+	end
+
+	if typeof(animation.AnimationId) ~= "string" then
+		return false
+	end
+
+	if animation.AnimationId == "" then
+		return false
+	end
+
+	return true
+end
+
 function AnimationService:GetUniversalAnimation(animationKey)
 	if not self.UniversalFolder then return nil end
 
@@ -60,7 +76,7 @@ function AnimationService:GetUniversalAnimation(animationKey)
 		for _, name in ipairs(animationName) do
 			local animation = animationsFolder:FindFirstChild(name)
 
-			if animation and animation:IsA("Animation") then
+			if self:IsAnimationUsable(animation) then
 				table.insert(validAnimations, animation)
 			end
 		end
@@ -74,7 +90,7 @@ function AnimationService:GetUniversalAnimation(animationKey)
 
 	local animation = animationsFolder:FindFirstChild(animationName)
 
-	if animation and animation:IsA("Animation") then
+	if self:IsAnimationUsable(animation) then
 		return animation
 	end
 
@@ -83,6 +99,8 @@ end
 
 function AnimationService:GetCharacterAnimation(characterName, animationName)
 	if not self.CharactersFolder then return nil end
+	if not characterName or characterName == "" then return nil end
+	if not animationName or animationName == "" then return nil end
 
 	local characterFolder = self.CharactersFolder:FindFirstChild(characterName)
 	if not characterFolder then return nil end
@@ -99,9 +117,28 @@ function AnimationService:GetCharacterAnimation(characterName, animationName)
 	return nil
 end
 
+function AnimationService:StopM1LikeTracks(animator, fadeTime)
+	if not animator then return end
+
+	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+		local trackName = track.Name
+
+		if trackName == "M1"
+			or trackName == "M2"
+			or trackName == "M3"
+			or trackName == "M4"
+			or trackName == "M5"
+			or trackName == "Uptilt"
+			or trackName == "Downslam"
+		then
+			track:Stop(fadeTime or 0.03)
+		end
+	end
+end
+
 function AnimationService:PlayAnimationObject(character, animation, fadeTime, weight, speed, stopM1Tracks)
 	if not character or not character.Parent then return nil end
-	if not animation then return nil end
+	if not self:IsAnimationUsable(animation) then return nil end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return nil end
@@ -114,20 +151,7 @@ function AnimationService:PlayAnimationObject(character, animation, fadeTime, we
 	end
 
 	if stopM1Tracks then
-		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-			local trackName = track.Name
-
-			if trackName == "M1"
-				or trackName == "M2"
-				or trackName == "M3"
-				or trackName == "M4"
-				or trackName == "M5"
-				or trackName == "Uptilt"
-				or trackName == "Downslam"
-			then
-				track:Stop(0.03)
-			end
-		end
+		self:StopM1LikeTracks(animator, 0.03)
 	end
 
 	local success, track = pcall(function()
@@ -148,7 +172,10 @@ end
 
 function AnimationService:PlayUniversalAnimation(character, animationKey, fadeTime, weight, speed, looped)
 	local animation = self:GetUniversalAnimation(animationKey)
-	if not animation then return nil end
+
+	if not animation then
+		return nil
+	end
 
 	local track = self:PlayAnimationObject(character, animation, fadeTime, weight, speed)
 
@@ -160,47 +187,74 @@ function AnimationService:PlayUniversalAnimation(character, animationKey, fadeTi
 end
 
 function AnimationService:PlayCharacterAnimation(character, animationName, fadeTime, weight, speed, stopM1Tracks)
-	if not animationName then return nil end
-
-	local characterName = self:GetCharacterNameFromCharacter(character)
-	local animation = self:GetCharacterAnimation(characterName, animationName)
-
-	if not animation then
-		animation = self:GetCharacterAnimation(self.Config.DefaultCharacterName or "Chara", animationName)
-	end
-
-	if not animation then
-		warn("[AnimationService] Missing character animation:", characterName, animationName)
+	if not animationName or animationName == "" then
 		return nil
 	end
 
-	return self:PlayAnimationObject(character, animation, fadeTime, weight, speed, stopM1Tracks)
+	local characterName = self:GetCharacterNameFromCharacter(character)
+	local defaultCharacterName = self.Config.DefaultCharacterName or "Chara"
+
+	local animation = self:GetCharacterAnimation(characterName, animationName)
+
+	-- Important:
+	-- If the selected character owns this animation object but its AnimationId is empty,
+	-- intentionally play nothing. Do NOT fallback to Chara.
+	-- This lets Sans have blank M1 animations without using Chara's M1s.
+	if animation then
+		if not self:IsAnimationUsable(animation) then
+			return nil
+		end
+
+		return self:PlayAnimationObject(character, animation, fadeTime, weight, speed, stopM1Tracks)
+	end
+
+	-- If the selected character does not have the animation object at all,
+	-- fallback to default/Chara.
+	if characterName ~= defaultCharacterName then
+		animation = self:GetCharacterAnimation(defaultCharacterName, animationName)
+
+		if self:IsAnimationUsable(animation) then
+			return self:PlayAnimationObject(character, animation, fadeTime, weight, speed, stopM1Tracks)
+		end
+	end
+
+	warn("[AnimationService] Missing character animation:", characterName, animationName)
+	return nil
 end
 
 function AnimationService:PlayM1Animation(character, combo)
 	local animationName = self.Config.M1Animations and self.Config.M1Animations[combo]
-	if not animationName then return nil end
+
+	if not animationName then
+		return nil
+	end
 
 	return self:PlayCharacterAnimation(character, animationName, 0.04, 1, 1, true)
 end
 
 function AnimationService:PlayUptiltAnimation(character)
 	local animationName = self.Config.M1Animations and self.Config.M1Animations.Uptilt
-	if not animationName then return nil end
+
+	if not animationName then
+		return nil
+	end
 
 	return self:PlayCharacterAnimation(character, animationName, 0.04, 1, 1, true)
 end
 
 function AnimationService:PlayDownslamAnimation(character)
 	local animationName = self.Config.M1Animations and self.Config.M1Animations.Downslam
-	if not animationName then return nil end
+
+	if not animationName then
+		return nil
+	end
 
 	return self:PlayCharacterAnimation(character, animationName, 0.03, 1, 1, true)
 end
 
 function AnimationService:StopCharacterAnimationByName(character, animationName, fadeTime)
 	if not character or not character.Parent then return end
-	if not animationName then return end
+	if not animationName or animationName == "" then return end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
@@ -238,7 +292,10 @@ function AnimationService:StopUniversalAnimation(character, animationKey, fadeTi
 	if not animationKey then return end
 
 	local animationName = self.Config.UniversalAnimations and self.Config.UniversalAnimations[animationKey]
-	if not animationName then return end
+
+	if not animationName then
+		return
+	end
 
 	local namesToStop = {}
 

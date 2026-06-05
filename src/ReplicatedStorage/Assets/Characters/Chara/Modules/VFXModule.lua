@@ -27,6 +27,14 @@ end
 
 function CharaVFX:GetKnifePrimaryPart(character)
 	local knife = self:GetEquippedKnife(character)
+
+	if not knife then
+		local realKnife = character and character:FindFirstChild("RealKnife", true)
+		if realKnife then
+			knife = realKnife
+		end
+	end
+
 	if not knife then return nil end
 
 	if knife:IsA("Model") then
@@ -38,6 +46,12 @@ function CharaVFX:GetKnifePrimaryPart(character)
 		if handle and handle:IsA("BasePart") then
 			knife.PrimaryPart = handle
 			return handle
+		end
+
+		local handlePart = knife:FindFirstChild("Handle", true)
+		if handlePart and handlePart:IsA("BasePart") then
+			knife.PrimaryPart = handlePart
+			return handlePart
 		end
 
 		return knife:FindFirstChildWhichIsA("BasePart", true)
@@ -139,7 +153,7 @@ function CharaVFX:PivotVFX(instance, cframe)
 	elseif instance:IsA("BasePart") then
 		instance.CFrame = cframe
 	elseif instance:IsA("Attachment") then
-		-- Attachments are positioned by parent, not PivotTo.
+		-- Attachments are positioned by parent.
 	end
 end
 
@@ -283,9 +297,6 @@ function CharaVFX:PlayKnifeDashTrailStop(character)
 end
 
 function CharaVFX:PlayRedSlash(character, targetCharacter, targetRoot)
-	--YO Charlie this is where you would add the VFX for the red slash
-	local cframe
-
 	local cframe = self:GetForwardVFXCFrame(character, 5, 0)
 	self:CloneWorldVFX("RedSlash", cframe, 2)
 end
@@ -499,42 +510,26 @@ function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 	end)
 end
 
-function CharaVFX:PlayEraseStart(character)
+function CharaVFX:PlaySpecialHellStart(character)
+	-- Placeholder startup VFX.
+	-- Special Hell's main red warning/beam VFX is created inside SpecialHell.lua.
+	-- Add knife glitch, red aura, or floor crack particles here later.
+	local knifePart = self:GetKnifePrimaryPart(character)
+	if not knifePart then return end
+
 	local vfxFolder = self:GetCharaVFXFolder()
 	if not vfxFolder then return end
 
-	local root = self:GetRoot(character)
-	if not root then return end
+	local template = vfxFolder:FindFirstChild("KnifeShine")
+	if template and template:IsA("Attachment") then
+		local attachment = template:Clone()
+		attachment.Name = "ActiveSpecialHellKnifeShine"
+		attachment.Parent = knifePart
 
-	local template = vfxFolder:FindFirstChild("DarkAura")
-	if not template or not template:IsA("Attachment") then
-		warn("[CharaVFX] Missing DarkAura attachment")
-		return
+		self:EmitAttachment(attachment)
+
+		Debris:AddItem(attachment, 2)
 	end
-
-	local attachment = template:Clone()
-	attachment.Name = "ActiveDarkAura"
-	attachment.Parent = root
-
-	for _, descendant in ipairs(attachment:GetDescendants()) do
-		if descendant:IsA("ParticleEmitter") then
-			descendant.Enabled = false
-
-			local delayTime = descendant:GetAttribute("EmitDelay")
-
-			if typeof(delayTime) == "number" and delayTime > 0 then
-				task.delay(delayTime, function()
-					if descendant and descendant.Parent then
-						descendant:Emit(1)
-					end
-				end)
-			else
-				descendant:Emit(1)
-			end
-		end
-	end
-
-	Debris:AddItem(attachment, 2)
 end
 
 function CharaVFX:PlayMove(character, moveName, targetCharacter, targetRoot)
@@ -567,14 +562,15 @@ function CharaVFX:PlayMove(character, moveName, targetCharacter, targetRoot)
 		self:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 		return
 	end
-	
-	if moveName == "Erase" then
-		-- Erase has no automatic move-hit VFX right now.
+
+	if moveName == "SpecialHell" then
+		-- Special Hell's main VFX is handled inside SpecialHell.lua.
+		-- This prevents harmless unknown-VFX warnings from MoveService.
 		return
 	end
-	
-	if moveName == "EraseStart" then
-		self:PlayEraseStart(character)
+
+	if moveName == "SpecialHellStart" then
+		self:PlaySpecialHellStart(character)
 		return
 	end
 

@@ -3,7 +3,12 @@ local RunService = game:GetService("RunService")
 
 local BlueSnare = {
 	DisplayName = "Blue Snare",
+
+	-- Initial/miss animation.
 	AnimationName = "BlueSnare",
+
+	-- Plays only after the hitbox confirms.
+	HitAnimationName = "BlueSnareHit",
 
 	Cooldown = 1, -- testing value; later maybe 7-9
 	Duration = 1.45,
@@ -23,11 +28,12 @@ local BlueSnare = {
 
 	Damage = 5,
 	FinalDamage = 6,
-
 	Stun = 1.15,
 
 	Knockback = 135,
 	UpwardKnockback = 38,
+	KnockbackDuration = 0.28,
+	KnockbackMaxForce = 130000,
 
 	HoldHeight = 7.5,
 	HoldForwardOffset = 5.25,
@@ -39,7 +45,6 @@ local BlueSnare = {
 	CanBeBlocked = true,
 	Unblockable = false,
 	Guardbreak = false,
-
 	CanBeCountered = true,
 	HitCancelsTarget = true,
 	CancelableByHit = true,
@@ -70,6 +75,30 @@ local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
 	)
 end
 
+local function playHitAnimation(ctx)
+	local character = ctx.Character
+	local moveData = ctx.MoveData
+
+	if not ctx.StateService then return end
+	if not ctx.StateService.AnimationService then return end
+	if not moveData.HitAnimationName then return end
+
+	local animationService = ctx.StateService.AnimationService
+
+	if moveData.AnimationName then
+		animationService:StopCharacterAnimationByName(character, moveData.AnimationName, 0.05)
+	end
+
+	animationService:PlayCharacterAnimation(
+		character,
+		moveData.HitAnimationName,
+		0.05,
+		1,
+		1,
+		true
+	)
+end
+
 local function makeAttackData(moveData)
 	local attackData = {}
 
@@ -82,6 +111,7 @@ local function makeAttackData(moveData)
 	attackData.Stun = moveData.Stun or 1.15
 	attackData.Knockback = 0
 	attackData.UpwardKnockback = 0
+
 	attackData.Guardbreak = false
 	attackData.PlayMoveHitVFX = false
 
@@ -90,6 +120,7 @@ local function makeAttackData(moveData)
 	attackData.Unblockable = false
 	attackData.CanBeCountered = true
 	attackData.HitCancelsTarget = true
+	attackData.CancelableByHit = true
 
 	return attackData
 end
@@ -159,6 +190,28 @@ local function getKnockbackDirection(root, targetRoot)
 	return direction.Unit
 end
 
+local function stopCombatMovement(ctx, root, victimRoot)
+	if not ctx.MovementService then
+		return
+	end
+
+	if ctx.MovementService.ClearCombatMovementControllers then
+		ctx.MovementService:ClearCombatMovementControllers(root)
+		ctx.MovementService:ClearCombatMovementControllers(victimRoot)
+		return
+	end
+
+	if ctx.MovementService.StopCarryController then
+		ctx.MovementService:StopCarryController(root)
+		ctx.MovementService:StopCarryController(victimRoot)
+	end
+
+	if ctx.MovementService.StopYHoldController then
+		ctx.MovementService:StopYHoldController(root)
+		ctx.MovementService:StopYHoldController(victimRoot)
+	end
+end
+
 local function applyFinalHit(ctx, targetCharacter, targetHumanoid, targetRoot)
 	local moveData = ctx.MoveData
 
@@ -167,7 +220,6 @@ local function applyFinalHit(ctx, targetCharacter, targetHumanoid, targetRoot)
 	if not targetRoot or not targetRoot.Parent then return end
 
 	local damage = moveData.FinalDamage or 6
-
 	targetHumanoid:TakeDamage(damage)
 
 	if ctx.UltService then
@@ -247,7 +299,6 @@ function BlueSnare.Execute(ctx)
 	local victimCharacter = nil
 	local victimHumanoid = nil
 	local victimRoot = nil
-
 	local attackData = makeAttackData(moveData)
 
 	ctx.HitboxService:PerformSphereHitbox(
@@ -286,15 +337,12 @@ function BlueSnare.Execute(ctx)
 
 	print("[BlueSnare] Hit:", victimCharacter.Name)
 
+	playHitAnimation(ctx)
+
 	playSansSFX(ctx, "Ding", victimRoot, 2)
 	playSansMoveVFX(ctx, "BlueHeart", victimCharacter, victimRoot)
 
-	if ctx.MovementService then
-		ctx.MovementService:StopCarryController(root)
-		ctx.MovementService:StopCarryController(victimRoot)
-		ctx.MovementService:StopYHoldController(root)
-		ctx.MovementService:StopYHoldController(victimRoot)
-	end
+	stopCombatMovement(ctx, root, victimRoot)
 
 	victimRoot.AssemblyLinearVelocity = Vector3.zero
 
@@ -382,7 +430,13 @@ function BlueSnare.Execute(ctx)
 		return
 	end
 
-	if victimCharacter and victimCharacter.Parent and victimHumanoid and victimHumanoid.Health > 0 and victimRoot and victimRoot.Parent then
+	if victimCharacter
+		and victimCharacter.Parent
+		and victimHumanoid
+		and victimHumanoid.Health > 0
+		and victimRoot
+		and victimRoot.Parent
+	then
 		applyFinalHit(ctx, victimCharacter, victimHumanoid, victimRoot)
 	end
 
