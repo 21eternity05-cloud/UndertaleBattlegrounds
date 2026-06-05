@@ -26,6 +26,7 @@ local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Conf
 local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
 local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
 local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
+local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
 
 local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
@@ -112,6 +113,7 @@ ProgressionService:Start()
 CharacterService:Start()
 CinematicService:Start()
 LoreCinematicService:Start()
+ShopLocationService:Start()
 UltService:Start()
 DebugService:Start()
 

@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -17,6 +16,9 @@ local CharacterData = require(Shared:WaitForChild("CharacterData"))
 local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
 
+local ClientModules = script.Parent:WaitForChild("ClientModules")
+local ShopPreviewController = require(ClientModules:WaitForChild("ShopPreviewController"))
+
 local profile = nil
 local icons = {}
 local dropdownIcons = {}
@@ -28,15 +30,10 @@ local dustIcon = nil
 local selectedCharacter = "Chara"
 local selectedCustomizeCategory = "Characters"
 
-local activePreviewModel = nil
-local oldCameraType = nil
-local oldCameraSubject = nil
-local oldCameraCFrame = nil
+local shopPreviewController = ShopPreviewController.new(player, ReplicatedStorage)
+shopPreviewController:Start()
 
 local hiddenCombatGuiStates = {}
-
-local SHOP_FOLDER_NAME = "SHOP"
-local SHOP_PLACEHOLDER_NAME = "Placeholder"
 
 local HIDDEN_GUI_NAMES = {
 	MoveHUD = true,
@@ -144,164 +141,6 @@ local function restoreCombatUI()
 	table.clear(hiddenCombatGuiStates)
 end
 
-local function getShopPlaceholder()
-	local shopFolder = Workspace:FindFirstChild(SHOP_FOLDER_NAME)
-
-	if not shopFolder then
-		warn("[TopBarUI] Missing workspace SHOP folder")
-		return nil
-	end
-
-	local placeholder = shopFolder:FindFirstChild(SHOP_PLACEHOLDER_NAME)
-
-	if not placeholder or not placeholder:IsA("BasePart") then
-		warn("[TopBarUI] Missing workspace SHOP Placeholder part")
-		return nil
-	end
-
-	return placeholder
-end
-
-local function clearPreviewModel()
-	if activePreviewModel then
-		activePreviewModel:Destroy()
-		activePreviewModel = nil
-	end
-end
-
-local function getCharacterModel(characterName)
-	local assets = ReplicatedStorage:FindFirstChild("Assets")
-	local characters = assets and assets:FindFirstChild("Characters")
-	local characterFolder = characters and characters:FindFirstChild(characterName)
-
-	if not characterFolder then
-		return nil
-	end
-
-	-- Preferred structure:
-	-- Assets/Characters/[Character]/CharacterModel/[ActualRigModel]
-	local characterModelFolder = characterFolder:FindFirstChild("CharacterModel")
-
-	if characterModelFolder then
-		if characterModelFolder:IsA("Model") then
-			return characterModelFolder
-		end
-
-		if characterModelFolder:IsA("Folder") then
-			local namedModel = characterModelFolder:FindFirstChild(characterName)
-
-			if namedModel and namedModel:IsA("Model") then
-				return namedModel
-			end
-
-			local firstModel = characterModelFolder:FindFirstChildWhichIsA("Model")
-
-			if firstModel then
-				return firstModel
-			end
-		end
-	end
-
-	local possibleNames = {
-		"Model",
-		"Rig",
-		"ViewportModel",
-	}
-
-	for _, modelName in ipairs(possibleNames) do
-		local model = characterFolder:FindFirstChild(modelName)
-
-		if model and model:IsA("Model") then
-			return model
-		end
-	end
-
-	return nil
-end
-
-local function setupPreviewModel(characterName)
-	clearPreviewModel()
-
-	local placeholder = getShopPlaceholder()
-
-	if not placeholder then
-		return
-	end
-
-	local sourceModel = getCharacterModel(characterName)
-	local previewCFrame = placeholder.CFrame * CFrame.Angles(0, math.rad(180), 0)
-
-	if sourceModel then
-		activePreviewModel = sourceModel:Clone()
-		activePreviewModel.Name = "ClientShopPreview_" .. characterName
-		activePreviewModel.Parent = Workspace
-		activePreviewModel:PivotTo(previewCFrame)
-	else
-		local fallback = Instance.new("Model")
-		fallback.Name = "ClientShopPreview_" .. characterName
-
-		local body = Instance.new("Part")
-		body.Name = "PlaceholderBody"
-		body.Anchored = true
-		body.CanCollide = false
-		body.Size = Vector3.new(3, 5, 1)
-		body.Color = Color3.fromRGB(120, 120, 140)
-		body.CFrame = previewCFrame + Vector3.new(0, 2.5, 0)
-		body.Parent = fallback
-
-		fallback.PrimaryPart = body
-		fallback.Parent = Workspace
-
-		activePreviewModel = fallback
-	end
-end
-
-local function enterShopCamera(characterName)
-	local camera = Workspace.CurrentCamera
-	local placeholder = getShopPlaceholder()
-
-	if not camera or not placeholder then
-		return
-	end
-
-	if oldCameraType == nil then
-		oldCameraType = camera.CameraType
-		oldCameraSubject = camera.CameraSubject
-		oldCameraCFrame = camera.CFrame
-	end
-
-	setupPreviewModel(characterName)
-
-	local focusPosition = placeholder.Position + Vector3.new(0, 2.8, 0)
-	local cameraPosition = (placeholder.CFrame * CFrame.new(0, 3.2, 11)).Position
-
-	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = CFrame.lookAt(cameraPosition, focusPosition)
-end
-
-local function exitShopCamera()
-	local camera = Workspace.CurrentCamera
-
-	clearPreviewModel()
-
-	if not camera then
-		return
-	end
-
-	if oldCameraType ~= nil then
-		camera.CameraType = oldCameraType
-		camera.CameraSubject = oldCameraSubject
-
-		if oldCameraCFrame then
-			camera.CFrame = oldCameraCFrame
-		end
-	end
-
-	oldCameraType = nil
-	oldCameraSubject = nil
-	oldCameraCFrame = nil
-end
-
 local function clearCurrentGui()
 	local wasCustomize = currentPanelName == "Customize"
 
@@ -311,7 +150,7 @@ local function clearCurrentGui()
 	end
 
 	if wasCustomize then
-		exitShopCamera()
+		shopPreviewController:Exit()
 		restoreCombatUI()
 	end
 
@@ -426,13 +265,13 @@ local function selectOrBuyCharacter(characterName)
 end
 
 local function showShop()
-	if currentPanelName == "Shop" then
+	if currentPanelName == "ShopUI" then
 		clearCurrentGui()
 		deselectAllTopIcons()
 		return
 	end
 
-	local root = makePanelRoot("Shop")
+	local root = makePanelRoot("ShopUI")
 
 	local panel = makeFloatingPanel(
 		root,
@@ -526,7 +365,7 @@ local function showCustomize()
 	end
 
 	local root = makePanelRoot("Customize")
-	enterShopCamera(selectedCharacter)
+	shopPreviewController:Enter(selectedCharacter)
 	hideCombatUI()
 
 	local leftPanel = makeFloatingPanel(
@@ -641,7 +480,7 @@ local function showCustomize()
 		roleLabel.Text = data.Role or ""
 		descriptionLabel.Text = data.Description or "No description yet."
 
-		enterShopCamera(characterName)
+		shopPreviewController:Enter(characterName)
 	end
 
 	local function addItemButton(text, callback, owned)
@@ -850,6 +689,12 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 end)
 
 player:GetAttributeChangedSignal("Dust"):Connect(refreshDust)
+
+player.CharacterAdded:Connect(function(character)
+	if currentPanelName == "Customize" then
+		shopPreviewController:HandleCharacterRespawnedDuringCustomize(character)
+	end
+end)
 
 player.ChildAdded:Connect(function(child)
 	if child.Name == "leaderstats" then
