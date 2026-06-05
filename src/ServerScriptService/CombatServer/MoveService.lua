@@ -327,6 +327,10 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
 
+		if self.DamageNumberService then
+			self.DamageNumberService:ShowDamage(targetRoot, finalDamage)
+		end
+
 		if self.UltService and data.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end

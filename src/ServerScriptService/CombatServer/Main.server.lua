@@ -22,6 +22,7 @@ local ProgressionService = require(combatFolder:WaitForChild("ProgressionService
 local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(Config, WeaponService, ProgressionService)
 local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
 local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
+local DamageNumberService = require(script:WaitForChild("DamageNumberService")).new(Config)
 
 local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
 local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
@@ -77,7 +78,8 @@ local MoveService = require(combatFolder:WaitForChild("MoveService")).new(
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
 MoveService.CinematicService = CinematicService
-
+MoveService.DamageNumberService = DamageNumberService
+M1Service.DamageNumberService = DamageNumberService
 M1Service.UltService = UltService
 ProjectileService.UltService = UltService
 CounterService.UltService = UltService

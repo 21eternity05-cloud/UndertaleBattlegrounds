@@ -13,46 +13,120 @@ function DebugService.new(config)
 	return self
 end
 
+function DebugService:SetWorkspaceAttributes(enabled)
+	workspace:SetAttribute("DebugEnabled", enabled)
+	workspace:SetAttribute("DebugHitboxes", enabled)
+	workspace:SetAttribute("DebugKnockback", enabled)
+	workspace:SetAttribute("DebugDamageNumbers", enabled)
+end
+
+function DebugService:SetConfigValues(enabled)
+	self.Config.DebugEnabled = enabled
+	self.Config.DebugHitboxes = enabled
+	self.Config.DebugKnockback = enabled
+	self.Config.DebugDamageNumbers = enabled
+end
+
 function DebugService:SetEnabled(enabled)
 	self.Enabled = enabled == true
 
-	self.Config.DebugEnabled = self.Enabled
-	self.Config.DebugHitboxes = self.Enabled
-
-	workspace:SetAttribute("DebugEnabled", self.Enabled)
+	self:SetConfigValues(self.Enabled)
+	self:SetWorkspaceAttributes(self.Enabled)
 
 	print("[DebugService] Debug enabled:", self.Enabled)
+	print("[DebugService] DebugHitboxes:", self.Config.DebugHitboxes)
+	print("[DebugService] DebugKnockback:", self.Config.DebugKnockback)
+	print("[DebugService] DebugDamageNumbers:", self.Config.DebugDamageNumbers)
 end
 
 function DebugService:Toggle()
 	self:SetEnabled(not self.Enabled)
 end
 
-function DebugService:Start()
-	local button = workspace:FindFirstChild("DEBUG_BUTTON")
+function DebugService:IsDebugButton(instance)
+	if not instance then
+		return false
+	end
 
+	if instance.Name == "DEBUG_BUTTON" then
+		return true
+	end
+
+	if instance:GetAttribute("DebugButton") == true then
+		return true
+	end
+
+	return false
+end
+
+function DebugService:GetPlayerFromHit(hit)
+	if not hit then
+		return nil
+	end
+
+	local character = hit:FindFirstAncestorOfClass("Model")
+
+	if not character then
+		return nil
+	end
+
+	return Players:GetPlayerFromCharacter(character)
+end
+
+function DebugService:CanTouch(player)
+	if not player then
+		return false
+	end
+
+	local now = os.clock()
+	local lastTouch = self.TouchDebounce[player] or 0
+
+	if now - lastTouch < 1.5 then
+		return false
+	end
+
+	self.TouchDebounce[player] = now
+
+	return true
+end
+
+function DebugService:HookDebugButton(button)
 	if not button or not button:IsA("BasePart") then
-		warn("[DebugService] Missing workspace.DEBUG_BUTTON")
 		return
 	end
 
 	button.Touched:Connect(function(hit)
-		local character = hit:FindFirstAncestorOfClass("Model")
-		if not character then return end
+		local player = self:GetPlayerFromHit(hit)
 
-		local player = Players:GetPlayerFromCharacter(character)
-		if not player then return end
-
-		local now = os.clock()
-		local lastTouch = self.TouchDebounce[player] or 0
-
-		if now - lastTouch < 1.5 then
+		if not player then
 			return
 		end
 
-		self.TouchDebounce[player] = now
+		if not self:CanTouch(player) then
+			return
+		end
 
 		self:Toggle()
+	end)
+
+	print("[DebugService] Hooked debug button:", button:GetFullName())
+end
+
+function DebugService:Start()
+	self:SetEnabled(false)
+
+	local button = workspace:FindFirstChild("DEBUG_BUTTON")
+
+	if button and button:IsA("BasePart") then
+		self:HookDebugButton(button)
+	else
+		warn("[DebugService] Missing workspace.DEBUG_BUTTON")
+	end
+
+	workspace.DescendantAdded:Connect(function(descendant)
+		if self:IsDebugButton(descendant) and descendant:IsA("BasePart") then
+			self:HookDebugButton(descendant)
+		end
 	end)
 end
 

@@ -200,6 +200,10 @@ function M1Service:ApplyDamageAndStun(attackerCharacter, targetCharacter, target
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
 
+		if self.DamageNumberService then
+			self.DamageNumberService:ShowDamage(targetRoot, finalDamage)
+		end
+		
 		if self.UltService and attackData.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end

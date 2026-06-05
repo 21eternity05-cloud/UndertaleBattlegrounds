@@ -1,5 +1,6 @@
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
 
 local MovementService = {}
 MovementService.__index = MovementService
@@ -416,6 +417,322 @@ function MovementService:ApplyLinearVelocityUntilStopped(root, velocity, maxForc
 	linearVelocity.Parent = root
 
 	return linearVelocity, attachment
+end
+
+function MovementService:IsKnockbackDebugEnabled()
+	if self.Config and self.Config.DebugKnockback == true then
+		return true
+	end
+
+	if workspace:GetAttribute("DebugKnockback") == true then
+		return true
+	end
+
+	return false
+end
+
+function MovementService:GetKnockbackDebugFolder()
+	local folder = workspace:FindFirstChild("KnockbackDebug")
+
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = "KnockbackDebug"
+		folder.Parent = workspace
+	end
+
+	return folder
+end
+
+function MovementService:CreateDebugMarker(name, position)
+	local marker = Instance.new("Part")
+	marker.Name = name
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.CanTouch = false
+	marker.CanQuery = false
+	marker.Transparency = 1
+	marker.Size = Vector3.new(0.25, 0.25, 0.25)
+	marker.Position = position
+	marker.Parent = self:GetKnockbackDebugFolder()
+
+	return marker
+end
+
+function MovementService:ShowKnockbackDebug(root, velocity, duration, label)
+	if not self:IsKnockbackDebugEnabled() then
+		return
+	end
+
+	if not root or not root.Parent then
+		return
+	end
+
+	if typeof(velocity) ~= "Vector3" then
+		return
+	end
+
+	duration = duration or 0.35
+
+	local startPosition = root.Position
+	local endPosition = startPosition + velocity * duration
+
+	local startMarker = self:CreateDebugMarker("KnockbackStart", startPosition)
+	local endMarker = self:CreateDebugMarker("KnockbackEnd", endPosition)
+	local movingMarker = self:CreateDebugMarker("KnockbackTrail", startPosition)
+
+	local startAttachment = Instance.new("Attachment")
+	startAttachment.Name = "KnockbackStartAttachment"
+	startAttachment.Parent = startMarker
+
+	local endAttachment = Instance.new("Attachment")
+	endAttachment.Name = "KnockbackEndAttachment"
+	endAttachment.Parent = endMarker
+
+	local beam = Instance.new("Beam")
+	beam.Name = "KnockbackDebugBeam"
+	beam.Attachment0 = startAttachment
+	beam.Attachment1 = endAttachment
+	beam.Width0 = 0.18
+	beam.Width1 = 0.05
+	beam.FaceCamera = true
+	beam.Parent = startMarker
+
+	local trailAttachment0 = Instance.new("Attachment")
+	trailAttachment0.Name = "TrailAttachment0"
+	trailAttachment0.Position = Vector3.new(0, 0.15, 0)
+	trailAttachment0.Parent = movingMarker
+
+	local trailAttachment1 = Instance.new("Attachment")
+	trailAttachment1.Name = "TrailAttachment1"
+	trailAttachment1.Position = Vector3.new(0, -0.15, 0)
+	trailAttachment1.Parent = movingMarker
+
+	local trail = Instance.new("Trail")
+	trail.Name = "KnockbackDebugTrail"
+	trail.Attachment0 = trailAttachment0
+	trail.Attachment1 = trailAttachment1
+	trail.Lifetime = 0.25
+	trail.Enabled = true
+	trail.Parent = movingMarker
+
+	if label then
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "KnockbackDebugLabel"
+		billboard.Size = UDim2.fromOffset(180, 36)
+		billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+		billboard.AlwaysOnTop = true
+		billboard.Parent = movingMarker
+
+		local text = Instance.new("TextLabel")
+		text.BackgroundTransparency = 1
+		text.Size = UDim2.fromScale(1, 1)
+		text.Font = Enum.Font.GothamBold
+		text.TextSize = 13
+		text.TextColor3 = Color3.fromRGB(255, 255, 255)
+		text.TextStrokeTransparency = 0.2
+		text.Text = label
+		text.Parent = billboard
+	end
+
+	TweenService:Create(
+		movingMarker,
+		TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+		{
+			Position = endPosition,
+		}
+	):Play()
+
+	Debris:AddItem(startMarker, duration + 0.8)
+	Debris:AddItem(endMarker, duration + 0.8)
+	Debris:AddItem(movingMarker, duration + 0.8)
+end
+
+function MovementService:ClearCombatMovementControllers(root)
+	if not root or not root.Parent then
+		return
+	end
+
+	self:StopCarryController(root)
+	self:StopYHoldController(root)
+
+	for _, child in ipairs(root:GetChildren()) do
+		if child:IsA("LinearVelocity")
+			or child:IsA("AlignPosition")
+			or child:IsA("VectorForce")
+		then
+			local name = child.Name
+
+			if name == "CombatKnockbackLinearVelocity"
+				or name == "DownslamLinearVelocity"
+				or name == "TempAlignPosition"
+				or name == "BlueSnareHoldAlign"
+			then
+				child:Destroy()
+			end
+		elseif child:IsA("Attachment") then
+			local name = child.Name
+
+			if name == "CombatKnockbackAttachment"
+				or name == "DownslamVelocityAttachment"
+				or name == "TempAlignAttachment"
+				or name == "BlueSnareHoldAttachment"
+			then
+				child:Destroy()
+			end
+		end
+	end
+end
+
+function MovementService:ApplyForceKnockback(root, velocity, duration, maxForce, debugLabel)
+	if not root or not root.Parent then
+		return nil
+	end
+
+	if typeof(velocity) ~= "Vector3" then
+		return nil
+	end
+
+	duration = duration or 0.28
+	maxForce = maxForce or 120000
+
+	self:ClearCombatMovementControllers(root)
+
+	local character = root:FindFirstAncestorOfClass("Model")
+	local player = character and game.Players:GetPlayerFromCharacter(character)
+
+	if not player then
+		pcall(function()
+			root:SetNetworkOwner(nil)
+		end)
+	end
+
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "CombatKnockbackAttachment"
+	attachment.Parent = root
+
+	local linearVelocity = Instance.new("LinearVelocity")
+	linearVelocity.Name = "CombatKnockbackLinearVelocity"
+	linearVelocity.Attachment0 = attachment
+	linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+	linearVelocity.VectorVelocity = velocity
+	linearVelocity.MaxForce = maxForce
+	linearVelocity.Parent = root
+
+	self:ShowKnockbackDebug(root, velocity, duration, debugLabel or "Knockback")
+
+	task.delay(duration, function()
+		if linearVelocity and linearVelocity.Parent then
+			linearVelocity:Destroy()
+		end
+
+		if attachment and attachment.Parent then
+			attachment:Destroy()
+		end
+	end)
+
+	Debris:AddItem(linearVelocity, duration + 0.1)
+	Debris:AddItem(attachment, duration + 0.1)
+
+	return linearVelocity
+end
+
+function MovementService:ApplyStraightKnockback(root, direction, speed, upward, duration, maxForce, debugLabel)
+	if not root or not root.Parent then
+		return nil
+	end
+
+	if typeof(direction) ~= "Vector3" then
+		return nil
+	end
+
+	local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+
+	if flatDirection.Magnitude < 0.05 then
+		flatDirection = Vector3.new(0, 0, -1)
+	else
+		flatDirection = flatDirection.Unit
+	end
+
+	local velocity = (flatDirection * (speed or 80)) + Vector3.new(0, upward or 0, 0)
+
+	return self:ApplyForceKnockback(
+		root,
+		velocity,
+		duration or 0.28,
+		maxForce or 120000,
+		debugLabel or "Straight"
+	)
+end
+
+function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, data, debugLabel)
+	if not attackerRoot or not attackerRoot.Parent then
+		return nil
+	end
+
+	if not targetRoot or not targetRoot.Parent then
+		return nil
+	end
+
+	data = data or {}
+
+	local direction = self:GetDirectionBetween(attackerRoot, targetRoot)
+	direction = Vector3.new(direction.X, 0, direction.Z)
+
+	if direction.Magnitude < 0.05 then
+		direction = attackerRoot.CFrame.LookVector
+		direction = Vector3.new(direction.X, 0, direction.Z)
+	end
+
+	if direction.Magnitude < 0.05 then
+		direction = Vector3.new(0, 0, -1)
+	else
+		direction = direction.Unit
+	end
+
+	return self:ApplyStraightKnockback(
+		targetRoot,
+		direction,
+		data.Knockback or 80,
+		data.UpwardKnockback or 0,
+		data.KnockbackDuration or 0.28,
+		data.KnockbackMaxForce or 120000,
+		debugLabel or "Directional"
+	)
+end
+
+function MovementService:ApplyDownslamStyleKnockback(attackerRoot, targetRoot, data, debugLabel)
+	if not targetRoot or not targetRoot.Parent then
+		return nil
+	end
+
+	data = data or {}
+
+	local direction = Vector3.new(0, -1, 0)
+
+	if attackerRoot and attackerRoot.Parent then
+		local forward = attackerRoot.CFrame.LookVector
+		direction = Vector3.new(forward.X * 0.15, -1, forward.Z * 0.15)
+	end
+
+	if direction.Magnitude < 0.05 then
+		direction = Vector3.new(0, -1, 0)
+	else
+		direction = direction.Unit
+	end
+
+	local velocity = direction * (data.DownslamSpeed or data.Knockback or 110)
+
+	return self:ApplyForceKnockback(
+		targetRoot,
+		velocity,
+		data.KnockbackDuration or 0.22,
+		data.KnockbackMaxForce or 140000,
+		debugLabel or "Downslam"
+	)
 end
 
 return MovementService
