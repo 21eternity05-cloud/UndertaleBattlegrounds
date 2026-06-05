@@ -11,6 +11,8 @@ CombatConfig.DefaultJumpPower = 50
 CombatConfig.DefaultJumpHeight = 7.2
 
 CombatConfig.DebugHitboxes = false
+CombatConfig.DebugKnockback = false
+CombatConfig.DebugDamageNumbers = false
 CombatConfig.DebugEnabled = false
 
 CombatConfig.PostM5M1Immunity = 1
@@ -34,6 +36,14 @@ CombatConfig.DefaultCharacterName = "Chara"
 
 CombatConfig.StartingDust = 0
 CombatConfig.TorielDustCost = 2500
+
+-- Test dummy values
+CombatConfig.TestDummyAttackRange = 8
+CombatConfig.TestDummyAttackInterval = 0.36
+CombatConfig.TestDummyComboPause = 1.5
+CombatConfig.TestDummyRespawnTime = 1.5
+CombatConfig.TestDummyHealth = 100000
+CombatConfig.RespawnDummyHealth = 100
 
 CombatConfig.ValidCharacters = {
 	Chara = true,
@@ -145,8 +155,20 @@ CombatConfig.M1Data = {
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.6),
 
-		Knockback = 145,
-		UpwardKnockback = 80,
+		-- M5 should feel like a strong combo finisher.
+		-- Target feel: further + higher launch.
+		KnockbackPreset = "PresetKnockback",
+
+		PresetKnockbackSpeed = 76,
+		PresetKnockbackUpward = 36,
+		PresetKnockbackDuration = 0.34,
+		PresetKnockbackMaxForce = 80000,
+
+		-- Backward compatibility for older callers.
+		Knockback = 76,
+		UpwardKnockback = 36,
+		KnockbackDuration = 0.34,
+		KnockbackMaxForce = 80000,
 
 		Guardbreak = true,
 		GuardbreakStun = 1.4,
@@ -161,8 +183,10 @@ CombatConfig.M1Data = {
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 1.5, -6.4),
+
 		RawRadius = 5.25,
 		RawOffset = CFrame.new(0, 1, -4.8),
+
 		ComboRadius = 7.5,
 		ComboOffset = CFrame.new(0, 1.5, -6.4),
 
@@ -186,10 +210,14 @@ CombatConfig.M1Data = {
 		Radius = 7.5,
 		Offset = CFrame.new(0, -1.1, -6.5),
 
-		DownForwardSpeed = 75,
-		DownSpeed = -90,
+		-- Standard downslam preset.
+		-- Downslam should force the target downward, stun them in the air,
+		-- and end in ground splat when they hit the floor.
+		KnockbackPreset = "Downslam",
 
-		DownLaunchMaxForce = 100000,
+		DownForwardSpeed = 28,
+		DownSpeed = -72,
+		DownLaunchMaxForce = 85000,
 
 		AirStunMax = 1.5,
 		GroundSplatStun = 0.65,

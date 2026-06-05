@@ -50,17 +50,19 @@ function DamageNumberService:ShowDamage(targetRoot, amount, options)
 	holder.CFrame = CFrame.new(
 		targetRoot.Position
 			+ Vector3.new(
-				math.random(-12, 12) / 10,
-				3 + math.random(0, 8) / 10,
-				math.random(-12, 12) / 10
+				math.random(-16, 16) / 10,
+				4.5 + math.random(0, 10) / 10,
+				math.random(-16, 16) / 10
 			)
 	)
 	holder.Parent = workspace
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "DamageNumberGui"
-	billboard.Size = UDim2.fromOffset(100, 44)
+	billboard.Size = UDim2.fromOffset(190, 90)
+	billboard.StudsOffset = Vector3.new(0, 0, 0)
 	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 350
 	billboard.Parent = holder
 
 	local text = Instance.new("TextLabel")
@@ -68,30 +70,31 @@ function DamageNumberService:ShowDamage(targetRoot, amount, options)
 	text.BackgroundTransparency = 1
 	text.Size = UDim2.fromScale(1, 1)
 	text.Font = Enum.Font.GothamBlack
-	text.TextSize = options.TextSize or 24
-	text.TextColor3 = options.Color or Color3.fromRGB(255, 80, 80)
-	text.TextStrokeTransparency = 0.15
+	text.TextSize = options.TextSize or 48
+	text.TextColor3 = options.Color or Color3.fromRGB(255, 65, 65)
+	text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	text.TextStrokeTransparency = 0
 	text.Text = tostring(math.floor(amount + 0.5))
 	text.Parent = billboard
 
 	TweenService:Create(
 		holder,
-		TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{
-			Position = holder.Position + Vector3.new(0, 2.2, 0),
+			Position = holder.Position + Vector3.new(0, 3.25, 0),
 		}
 	):Play()
 
 	TweenService:Create(
 		text,
-		TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{
 			TextTransparency = 1,
 			TextStrokeTransparency = 1,
 		}
 	):Play()
 
-	Debris:AddItem(holder, 0.65)
+	Debris:AddItem(holder, 0.9)
 end
 
 return DamageNumberService

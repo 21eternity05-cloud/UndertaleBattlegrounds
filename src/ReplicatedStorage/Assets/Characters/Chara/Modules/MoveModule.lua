@@ -22,7 +22,6 @@ function CharaMoves.new(config)
 		RedSlash = require(MovesFolder:WaitForChild("RedSlash")),
 		KillingIntent = require(MovesFolder:WaitForChild("KillingIntent")),
 		SpecialHell = require(MovesFolder:WaitForChild("SpecialHell")),
-		Erase = require(MovesFolder:WaitForChild("Erase")),
 	}
 
 	return self

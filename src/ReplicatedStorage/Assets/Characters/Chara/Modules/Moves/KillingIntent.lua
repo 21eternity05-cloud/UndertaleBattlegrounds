@@ -1,8 +1,8 @@
 local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
 
 local KillingIntent = {
 	DisplayName = "Killing Intent",
-
 	AnimationName = nil,
 
 	Cooldown = 1,
@@ -12,23 +12,42 @@ local KillingIntent = {
 
 	Damage = 14,
 	Stun = 0.9,
-	Knockback = 85,
-	UpwardKnockback = 22,
 
 	Radius = 12,
 	Offset = CFrame.new(0, 0, -4),
 
+	-- Killing Intent counter hit now uses downslam-style movement.
+	KnockbackPreset = "Downslam",
+
+	DownForwardSpeed = 20,
+	DownSpeed = -72,
+	DownLaunchMaxForce = 85000,
+
+	AirStunMax = 1.35,
+	GroundSplatStun = 0.65,
+
+	SplatPartLifetime = 0.35,
+	SplatPartSize = Vector3.new(8, 0.25, 8),
+
+	-- Backward compatibility.
+	Knockback = 20,
+	UpwardKnockback = 0,
+	KnockbackDuration = 0.25,
+	KnockbackMaxForce = 85000,
+
+	Blockable = false,
 	CanBeBlocked = false,
 	Unblockable = true,
+
 	Guardbreak = true,
 	GuardbreakStun = 1.25,
-	CanBeCountered = false,
 
+	CanBeCountered = false,
 	IgnoresIFrames = true,
 	IgnoresArmor = true,
 
 	HitCancelsTarget = true,
-	CancelableByHit = true,
+	CancelableByHit = false,
 
 	HasIFrames = false,
 	HasArmor = false,
@@ -42,9 +61,9 @@ local HIT_ANIMATION = "KillingIntentHit"
 local STARTUP_TIME = 0.5
 local COUNTER_WINDOW = 1.35
 local WHIFF_ENDLAG = 1
+
 local HIT_FREEZE_TIME = 1.4
 local HIT_FINISH_DELAY = 0.35
-
 local ATTACKER_COUNTER_STUN = 1.65
 
 local function getOrCreateCounterAttackerValue(character)
@@ -72,6 +91,103 @@ local function safeSetCounterInvincible(character, enabled)
 	character:SetAttribute("Countering", enabled == true)
 end
 
+local function getGroundBelow(root, exclude)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = exclude or {}
+
+	return workspace:Raycast(root.Position, Vector3.new(0, -7, 0), params)
+end
+
+local function createSplatPart(position, moveData)
+	local size = moveData.SplatPartSize or Vector3.new(8, 0.25, 8)
+	local lifetime = moveData.SplatPartLifetime or 0.35
+
+	local part = Instance.new("Part")
+	part.Name = "KillingIntentDownslamSplat"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Material = Enum.Material.Neon
+	part.Color = Color3.fromRGB(255, 0, 0)
+	part.Transparency = 0.45
+	part.Size = size
+	part.CFrame = CFrame.new(position + Vector3.new(0, 0.08, 0))
+	part.Parent = workspace
+
+	Debris:AddItem(part, lifetime)
+end
+
+local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, moveData, linearVelocity, attachment)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetRoot or not targetRoot.Parent then return end
+
+	local startTime = os.clock()
+	local maxTime = moveData.AirStunMax or 1.35
+
+	if context.StateService and context.StateService.StunCharacter then
+		context.StateService:StunCharacter(targetCharacter, maxTime)
+	end
+
+	if context.StateService
+		and context.StateService.AnimationService
+		and context.StateService.AnimationService.PlayUniversalAnimation
+	then
+		context.StateService.AnimationService:PlayUniversalAnimation(targetCharacter, "DownslamAir", 0.05, 1, 1)
+	end
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function()
+		if not targetCharacter.Parent or not targetRoot.Parent then
+			connection:Disconnect()
+
+			if linearVelocity then linearVelocity:Destroy() end
+			if attachment then attachment:Destroy() end
+
+			return
+		end
+
+		if os.clock() - startTime > maxTime then
+			connection:Disconnect()
+
+			if linearVelocity then linearVelocity:Destroy() end
+			if attachment then attachment:Destroy() end
+
+			return
+		end
+
+		local result = getGroundBelow(targetRoot, { targetCharacter })
+
+		if result then
+			connection:Disconnect()
+
+			if linearVelocity then linearVelocity:Destroy() end
+			if attachment then attachment:Destroy() end
+
+			targetRoot.AssemblyLinearVelocity = Vector3.zero
+			targetRoot.AssemblyAngularVelocity = Vector3.zero
+
+			if context.StateService and context.StateService.StunCharacter then
+				context.StateService:StunCharacter(targetCharacter, moveData.GroundSplatStun or 0.65)
+			end
+
+			if context.StateService
+				and context.StateService.AnimationService
+				and context.StateService.AnimationService.PlayUniversalAnimation
+			then
+				context.StateService.AnimationService:PlayUniversalAnimation(targetCharacter, "DownslamSplat", 0.04, 1, 1)
+			end
+
+			if context.VFXService and context.VFXService.PlayUniversalSFXAtPart then
+				context.VFXService:PlayUniversalSFXAtPart("GroundSplat", targetRoot, 2)
+			end
+
+			createSplatPart(result.Position, moveData)
+		end
+	end)
+end
+
 function KillingIntent.Execute(context)
 	print("[KillingIntent] Execute started")
 
@@ -95,7 +211,7 @@ function KillingIntent.Execute(context)
 		return
 	end
 
-	local animationService = context.StateService.AnimationService
+	local animationService = context.StateService and context.StateService.AnimationService
 
 	if not animationService then
 		warn("[KillingIntent] Missing AnimationService on StateService")
@@ -107,7 +223,6 @@ function KillingIntent.Execute(context)
 	local oldJumpPower = humanoid.JumpPower
 	local oldJumpHeight = humanoid.JumpHeight
 	local oldAutoRotate = humanoid.AutoRotate
-
 	local movementLockConnection = nil
 
 	local function addActiveFrameHighlight()
@@ -132,6 +247,7 @@ function KillingIntent.Execute(context)
 		if not character or not character.Parent then return end
 
 		local existing = character:FindFirstChild("KillingIntentActiveHighlight")
+
 		if existing then
 			existing:Destroy()
 		end
@@ -209,7 +325,6 @@ function KillingIntent.Execute(context)
 
 		if context.StateService and context.StateService.StunCharacter then
 			context.StateService:StunCharacter(targetCharacter, duration)
-			return
 		end
 	end
 
@@ -226,9 +341,11 @@ function KillingIntent.Execute(context)
 
 	if not counterTrack then
 		warn("[KillingIntent] Could not play animation:", COUNTER_ANIMATION)
+
 		stopHardMovementLock()
 		removeActiveFrameHighlight()
 		context:FinishMove(0)
+
 		return
 	end
 
@@ -262,6 +379,7 @@ function KillingIntent.Execute(context)
 			removeActiveFrameHighlight()
 			stopHardMovementLock()
 			context:FinishMove(0)
+
 			return
 		end
 
@@ -314,8 +432,8 @@ function KillingIntent.Execute(context)
 
 	local function finish(delayTime)
 		if finished then return end
-		finished = true
 
+		finished = true
 		disconnect()
 		cleanupCounterState()
 
@@ -335,7 +453,10 @@ function KillingIntent.Execute(context)
 
 	local function getStoredAttacker()
 		local storedValue = character:FindFirstChild("CounterAttacker")
-		if not storedValue or not storedValue:IsA("ObjectValue") then return nil end
+
+		if not storedValue or not storedValue:IsA("ObjectValue") then
+			return nil
+		end
 
 		local attackerCharacter = storedValue.Value
 
@@ -365,8 +486,8 @@ function KillingIntent.Execute(context)
 		local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
 
 		removeActiveFrameHighlight()
-
 		safeSetCounterInvincible(character, true)
+
 		character:SetAttribute("CounterTriggered", true)
 		character:SetAttribute("DashLocked", true)
 		character:SetAttribute("MovementLocked", true)
@@ -405,11 +526,13 @@ function KillingIntent.Execute(context)
 			end
 
 			counterHitData.CanBeBlocked = false
+			counterHitData.Blockable = false
 			counterHitData.Unblockable = true
 			counterHitData.CanBeCountered = false
 			counterHitData.IgnoresIFrames = true
 			counterHitData.IgnoresArmor = true
 			counterHitData.HitCancelsTarget = true
+			counterHitData.PlayMoveHitVFX = true
 
 			local result
 
@@ -424,20 +547,34 @@ function KillingIntent.Execute(context)
 			else
 				targetHumanoid:TakeDamage(moveData.Damage or 14)
 
-				if moveData.Stun and moveData.Stun > 0 then
-					context.StateService:StunCharacter(targetCharacter, moveData.Stun)
-				end
-
 				if context.VFXService then
 					context.VFXService:EmitHitVFXOnVictim(targetRoot, character)
 				end
 
-				local direction = context.MovementService:GetDirectionBetween(root, targetRoot)
-				targetRoot.AssemblyLinearVelocity =
-					(direction * (moveData.Knockback or 85))
-					+ Vector3.new(0, moveData.UpwardKnockback or 22, 0)
-
 				result = "Hit"
+			end
+
+			if result == "Hit"
+				or result == "ArmoredHit"
+				or result == "Guardbreak"
+			then
+				if context.MovementService and context.MovementService.ApplyDownslamKnockback then
+					local linearVelocity, attachment = context.MovementService:ApplyDownslamKnockback(
+						root,
+						targetRoot,
+						counterHitData,
+						"KillingIntentDownslam"
+					)
+
+					monitorDownslamGroundSplat(
+						context,
+						targetCharacter,
+						targetRoot,
+						counterHitData,
+						linearVelocity,
+						attachment
+					)
+				end
 			end
 
 			print("[KillingIntent] Counter hit:", targetCharacter.Name, result)

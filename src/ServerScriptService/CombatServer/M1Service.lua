@@ -5,7 +5,16 @@ local Players = game:GetService("Players")
 local M1Service = {}
 M1Service.__index = M1Service
 
-function M1Service.new(config, stateService, hitboxService, movementService, blockService, vfxService, counterService, combatStatusService)
+function M1Service.new(
+	config,
+	stateService,
+	hitboxService,
+	movementService,
+	blockService,
+	vfxService,
+	counterService,
+	combatStatusService
+)
 	local self = setmetatable({}, M1Service)
 
 	self.Config = config
@@ -98,9 +107,15 @@ function M1Service:CanAttackBeBlocked(attackData)
 		return self.CombatStatusService:CanAttackBeBlocked(attackData)
 	end
 
-	if attackData.Unblockable == true then return false end
-	if attackData.CanBeBlocked == false then return false end
-	if attackData.Blockable == false then return false end
+	if attackData.Unblockable == true then
+		return false
+	end
+	if attackData.CanBeBlocked == false then
+		return false
+	end
+	if attackData.Blockable == false then
+		return false
+	end
 
 	return true
 end
@@ -129,7 +144,13 @@ function M1Service:TryTriggerCounter(targetCharacter, attackerCharacter, attackN
 	end
 
 	if self.StateService and self.StateService.TryTriggerCounter then
-		return self.StateService:TryTriggerCounter(targetCharacter, attackerCharacter, attackName, attackData, onCountered)
+		return self.StateService:TryTriggerCounter(
+			targetCharacter,
+			attackerCharacter,
+			attackName,
+			attackData,
+			onCountered
+		)
 	end
 
 	return false
@@ -143,14 +164,33 @@ function M1Service:TryHitCancelTarget(targetCharacter, attackData)
 	return false
 end
 
-function M1Service:CheckStandardHitStart(attackerCharacter, attackerRoot, targetCharacter, targetHumanoid, targetRoot, attackData, attackName, options)
+function M1Service:CheckStandardHitStart(
+	attackerCharacter,
+	attackerRoot,
+	targetCharacter,
+	targetHumanoid,
+	targetRoot,
+	attackData,
+	attackName,
+	options
+)
 	options = options or {}
 
-	if not attackerCharacter or not attackerCharacter.Parent then return "Invalid" end
-	if not attackerRoot or not attackerRoot.Parent then return "Invalid" end
-	if not targetCharacter or not targetCharacter.Parent then return "Invalid" end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return "Invalid" end
-	if not targetRoot or not targetRoot.Parent then return "Invalid" end
+	if not attackerCharacter or not attackerCharacter.Parent then
+		return "Invalid"
+	end
+	if not attackerRoot or not attackerRoot.Parent then
+		return "Invalid"
+	end
+	if not targetCharacter or not targetCharacter.Parent then
+		return "Invalid"
+	end
+	if not targetHumanoid or targetHumanoid.Health <= 0 then
+		return "Invalid"
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return "Invalid"
+	end
 
 	if self.CombatStatusService and self.CombatStatusService:HasIFrames(targetCharacter, attackData) then
 		print("[M1Service] Hit ignored by iframe:", targetCharacter.Name, attackName or "M1")
@@ -185,7 +225,15 @@ function M1Service:CheckStandardHitStart(attackerCharacter, attackerRoot, target
 	return "CanHit"
 end
 
-function M1Service:ApplyDamageAndStun(attackerCharacter, targetCharacter, targetHumanoid, targetRoot, attackData, stunDuration, stunAnimationKey)
+function M1Service:ApplyDamageAndStun(
+	attackerCharacter,
+	targetCharacter,
+	targetHumanoid,
+	targetRoot,
+	attackData,
+	stunDuration,
+	stunAnimationKey
+)
 	local armorInfo = self:GetArmorInfo(targetCharacter, attackData)
 
 	self:TryHitCancelTarget(targetCharacter, attackData)
@@ -203,7 +251,7 @@ function M1Service:ApplyDamageAndStun(attackerCharacter, targetCharacter, target
 		if self.DamageNumberService then
 			self.DamageNumberService:ShowDamage(targetRoot, finalDamage)
 		end
-		
+
 		if self.UltService and attackData.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end
@@ -227,8 +275,12 @@ function M1Service:ApplyDamageAndStun(attackerCharacter, targetCharacter, target
 end
 
 function M1Service:PlayCharacterActionSFX(character, root, actionName, fallbackSoundName)
-	if not self.VFXService then return end
-	if not self.VFXService.PlayCharacterSFXAtPart then return end
+	if not self.VFXService then
+		return
+	end
+	if not self.VFXService.PlayCharacterSFXAtPart then
+		return
+	end
 
 	local characterName = self:GetCharacterName(character)
 
@@ -287,7 +339,9 @@ function M1Service:CreateGroundSplatPart(position, data)
 end
 
 function M1Service:GetGroundBelow(root, excludeList)
-	if not root or not root.Parent then return nil end
+	if not root or not root.Parent then
+		return nil
+	end
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -297,8 +351,12 @@ function M1Service:GetGroundBelow(root, excludeList)
 end
 
 function M1Service:MonitorDownslamGroundSplat(targetCharacter, targetRoot, data, linearVelocity, attachment)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetRoot or not targetRoot.Parent then return end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
 
 	local startTime = os.clock()
 	local maxAirStun = data.AirStunMax or 1.5
@@ -397,8 +455,12 @@ end
 function M1Service:CanUseUptilt(character)
 	self.StateService:RefreshComboTimeout(character)
 
-	if character:GetAttribute("AirComboReady") then return false end
-	if character:GetAttribute("UsedUptiltInCombo") then return false end
+	if character:GetAttribute("AirComboReady") then
+		return false
+	end
+	if character:GetAttribute("UsedUptiltInCombo") then
+		return false
+	end
 
 	local currentCombo = character:GetAttribute("ComboCount") or 0
 
@@ -407,20 +469,29 @@ function M1Service:CanUseUptilt(character)
 	end
 
 	local cooldownUntil = character:GetAttribute("UptiltCooldownUntil") or 0
-	if os.clock() < cooldownUntil then return false end
+	if os.clock() < cooldownUntil then
+		return false
+	end
 
 	return true
 end
 
 function M1Service:DoUptilt(player)
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
-	if not character then return end
-	if not self.StateService:CanAttack(character) then return end
-	if not self:CanUseUptilt(character) then return end
+	if not character then
+		return
+	end
+	if not self.StateService:CanAttack(character) then
+		return
+	end
+	if not self:CanUseUptilt(character) then
+		return
+	end
 
 	local rawData = self.M1Data.Uptilt
 	local comboAtStart = character:GetAttribute("ComboCount") or 0
-	local hasM1Starter = comboAtStart > 0 and (os.clock() - (character:GetAttribute("LastM1Time") or 0)) <= self.Config.M1ResetTime
+	local hasM1Starter = comboAtStart > 0
+		and (os.clock() - (character:GetAttribute("LastM1Time") or 0)) <= self.Config.M1ResetTime
 	local isRawUptilt = comboAtStart == 0 or not hasM1Starter
 	local hitboxData = {}
 
@@ -461,77 +532,88 @@ function M1Service:DoUptilt(player)
 	print(player.Name .. " used UPTILT", isRawUptilt and "RAW" or "COMBO")
 
 	task.delay(rawData.HitDelay, function()
-		if not character.Parent then return end
-		if humanoid.Health <= 0 then return end
-		if character:GetAttribute("UsingMove") then return end
+		if not character.Parent then
+			return
+		end
+		if humanoid.Health <= 0 then
+			return
+		end
+		if character:GetAttribute("UsingMove") then
+			return
+		end
 
 		local hitSomething = false
 
-		self.HitboxService:PerformSphereHitbox(character, root, hitboxData, function(targetCharacter, targetHumanoid, targetRoot)
-			local result = self:CheckStandardHitStart(
-				character,
-				root,
-				targetCharacter,
-				targetHumanoid,
-				targetRoot,
-				attackData,
-				"Uptilt",
-				{
-					RespectM1Immunity = true,
-					BlockMode = "Normal",
-				}
-			)
+		self.HitboxService:PerformSphereHitbox(
+			character,
+			root,
+			hitboxData,
+			function(targetCharacter, targetHumanoid, targetRoot)
+				local result = self:CheckStandardHitStart(
+					character,
+					root,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					attackData,
+					"Uptilt",
+					{
+						RespectM1Immunity = true,
+						BlockMode = "Normal",
+					}
+				)
 
-			if result == "Countered" then
-				hitSomething = true
-				print("UPTILT COUNTERED")
-				return
-			end
-
-			if result == "IFrame" or result == "M1Immune" or result == "Invalid" then
-				return
-			end
-
-			if result == "Blocked" then
-				hitSomething = true
-				print("UPTILT BLOCKED")
-				return
-			end
-
-			hitSomething = true
-
-			local currentCombo = character:GetAttribute("ComboCount") or 0
-
-			character:SetAttribute("UsedUptiltInCombo", true)
-			character:SetAttribute("AirComboReady", true)
-			character:SetAttribute("ComboCount", math.clamp(currentCombo + 1, 1, self.FinalM1 - 1))
-			character:SetAttribute("LastM1Time", os.clock())
-
-			local armorInfo = self:ApplyDamageAndStun(
-				character,
-				targetCharacter,
-				targetHumanoid,
-				targetRoot,
-				attackData,
-				rawData.Stun
-			)
-
-			self:PlayM1ActionVisual(character, "UptiltHit", targetCharacter, targetRoot)
-
-			if not armorInfo.Active or not armorInfo.PreventsKnockback then
-				self.MovementService:StartUptiltCarry(root, targetRoot, rawData)
-			else
-				print("[M1Service] Armor prevented uptilt lift:", targetCharacter.Name)
-			end
-
-			task.delay(self.Config.AirComboTime, function()
-				if character and character.Parent then
-					character:SetAttribute("AirComboReady", false)
+				if result == "Countered" then
+					hitSomething = true
+					print("UPTILT COUNTERED")
+					return
 				end
-			end)
 
-			print("UPTILT HIT - AIR COMBO STARTED")
-		end)
+				if result == "IFrame" or result == "M1Immune" or result == "Invalid" then
+					return
+				end
+
+				if result == "Blocked" then
+					hitSomething = true
+					print("UPTILT BLOCKED")
+					return
+				end
+
+				hitSomething = true
+
+				local currentCombo = character:GetAttribute("ComboCount") or 0
+
+				character:SetAttribute("UsedUptiltInCombo", true)
+				character:SetAttribute("AirComboReady", true)
+				character:SetAttribute("ComboCount", math.clamp(currentCombo + 1, 1, self.FinalM1 - 1))
+				character:SetAttribute("LastM1Time", os.clock())
+
+				local armorInfo = self:ApplyDamageAndStun(
+					character,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					attackData,
+					rawData.Stun
+				)
+
+				self:PlayM1ActionVisual(character, "UptiltHit", targetCharacter, targetRoot)
+
+				if not armorInfo.Active or not armorInfo.PreventsKnockback then
+					self.MovementService:StartUptiltCarry(root, targetRoot, rawData)
+				else
+					print("[M1Service] Armor prevented uptilt lift:", targetCharacter.Name)
+				end
+
+				task.delay(self.Config.AirComboTime, function()
+					if character and character.Parent then
+						character:SetAttribute("AirComboReady", false)
+					end
+				end)
+
+				print("UPTILT HIT - AIR COMBO STARTED")
+			end
+		)
 
 		if not hitSomething then
 			task.delay(self.Config.M1ResetTime, function()
@@ -551,8 +633,12 @@ end
 
 function M1Service:DoDownslam(player)
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
-	if not character then return end
-	if not self.StateService:CanAttack(character) then return end
+	if not character then
+		return
+	end
+	if not self.StateService:CanAttack(character) then
+		return
+	end
 
 	local rawData = self.M1Data.Downslam
 	local attackData = self:BuildAttackData(rawData, {
@@ -580,77 +666,78 @@ function M1Service:DoDownslam(player)
 	print(player.Name .. " used AIR M5 DOWNSLAM")
 
 	task.delay(rawData.HitDelay, function()
-		if not character.Parent then return end
-		if humanoid.Health <= 0 then return end
-		if character:GetAttribute("UsingMove") then return end
+		if not character.Parent then
+			return
+		end
+		if humanoid.Health <= 0 then
+			return
+		end
+		if character:GetAttribute("UsingMove") then
+			return
+		end
 
-		self.HitboxService:PerformSphereHitbox(character, root, rawData, function(targetCharacter, targetHumanoid, targetRoot)
-			local result = self:CheckStandardHitStart(
-				character,
-				root,
-				targetCharacter,
-				targetHumanoid,
-				targetRoot,
-				attackData,
-				"Downslam",
-				{
-					RespectM1Immunity = false,
-					BlockMode = "None",
-				}
-			)
+		self.HitboxService:PerformSphereHitbox(
+			character,
+			root,
+			rawData,
+			function(targetCharacter, targetHumanoid, targetRoot)
+				local result = self:CheckStandardHitStart(
+					character,
+					root,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					attackData,
+					"Downslam",
+					{
+						RespectM1Immunity = false,
+						BlockMode = "None",
+					}
+				)
 
-			if result == "Countered" then
-				print("DOWNSLAM COUNTERED")
-				return
+				if result == "Countered" then
+					print("DOWNSLAM COUNTERED")
+					return
+				end
+
+				if result == "IFrame" or result == "Invalid" then
+					return
+				end
+
+				local armorInfo = self:ApplyDamageAndStun(
+					character,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					attackData,
+					rawData.AirStunMax or 1.5,
+					"DownslamAir"
+				)
+
+				self:PlayM1ActionVisual(character, "DownslamHit", targetCharacter, targetRoot)
+
+				self.VFXService:PlaySFXAtPart("DownslamHit", targetRoot, 3)
+
+				if armorInfo.Active and armorInfo.PreventsKnockback then
+					print("[M1Service] Armor prevented downslam knockback:", targetCharacter.Name)
+					return
+				end
+
+				local forward = root.CFrame.LookVector
+
+				self.MovementService:ClearCombatMovementControllers(root)
+				self.MovementService:ClearCombatMovementControllers(targetRoot)
+
+				local linearVelocity, attachment =
+					self.MovementService:ApplyDownslamKnockback(root, targetRoot, rawData, "Downslam")
+
+				root.AssemblyLinearVelocity = (forward * 12) + Vector3.new(0, -24, 0)
+
+				self:MonitorDownslamGroundSplat(targetCharacter, targetRoot, rawData, linearVelocity, attachment)
+
+				print("AIR M5 DOWNSLAM HIT")
 			end
-
-			if result == "IFrame" or result == "Invalid" then
-				return
-			end
-
-			local armorInfo = self:ApplyDamageAndStun(
-				character,
-				targetCharacter,
-				targetHumanoid,
-				targetRoot,
-				attackData,
-				rawData.AirStunMax or 1.5,
-				"DownslamAir"
-			)
-
-			self:PlayM1ActionVisual(character, "DownslamHit", targetCharacter, targetRoot)
-
-			self.VFXService:PlaySFXAtPart("DownslamHit", targetRoot, 3)
-
-			if armorInfo.Active and armorInfo.PreventsKnockback then
-				print("[M1Service] Armor prevented downslam knockback:", targetCharacter.Name)
-				return
-			end
-
-			local forward = root.CFrame.LookVector
-
-			self.MovementService:StopCarryController(root)
-			self.MovementService:StopCarryController(targetRoot)
-			self.MovementService:StopYHoldController(root)
-			self.MovementService:StopYHoldController(targetRoot)
-
-			local downslamVelocity =
-				(forward * (rawData.DownForwardSpeed or 75))
-				+ Vector3.new(0, rawData.DownSpeed or -90, 0)
-
-			local linearVelocity, attachment = self.MovementService:ApplyLinearVelocityUntilStopped(
-				targetRoot,
-				downslamVelocity,
-				rawData.DownLaunchMaxForce or 100000
-			)
-
-			root.AssemblyLinearVelocity =
-				(forward * 20) + Vector3.new(0, -35, 0)
-
-			self:MonitorDownslamGroundSplat(targetCharacter, targetRoot, rawData, linearVelocity, attachment)
-
-			print("AIR M5 DOWNSLAM HIT")
-		end)
+		)
 	end)
 
 	task.delay(rawData.Cooldown, function()
@@ -663,8 +750,12 @@ end
 
 function M1Service:DoNormalM1(player)
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
-	if not character then return end
-	if not self.StateService:CanAttack(character) then return end
+	if not character then
+		return
+	end
+	if not self.StateService:CanAttack(character) then
+		return
+	end
 
 	local combo = self:GetNextCombo(character)
 
@@ -695,118 +786,128 @@ function M1Service:DoNormalM1(player)
 	print(player.Name .. " used M" .. combo)
 
 	task.delay(rawData.HitDelay, function()
-		if not character.Parent then return end
-		if humanoid.Health <= 0 then return end
-		if character:GetAttribute("UsingMove") then return end
+		if not character.Parent then
+			return
+		end
+		if humanoid.Health <= 0 then
+			return
+		end
+		if character:GetAttribute("UsingMove") then
+			return
+		end
 
 		local hitSomething = false
 
-		self.HitboxService:PerformSphereHitbox(character, root, rawData, function(targetCharacter, targetHumanoid, targetRoot)
-			local blockMode = isFinal and "GuardbreakBlocking" or "Normal"
+		self.HitboxService:PerformSphereHitbox(
+			character,
+			root,
+			rawData,
+			function(targetCharacter, targetHumanoid, targetRoot)
+				local blockMode = isFinal and "GuardbreakBlocking" or "Normal"
 
-			local result = self:CheckStandardHitStart(
-				character,
-				root,
-				targetCharacter,
-				targetHumanoid,
-				targetRoot,
-				attackData,
-				"M" .. tostring(combo),
-				{
-					RespectM1Immunity = not isFinal,
-					BlockMode = blockMode,
-				}
-			)
+				local result = self:CheckStandardHitStart(
+					character,
+					root,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					attackData,
+					"M" .. tostring(combo),
+					{
+						RespectM1Immunity = not isFinal,
+						BlockMode = blockMode,
+					}
+				)
 
-			if result == "Countered" then
-				hitSomething = true
-				self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
-				print("M" .. combo .. " COUNTERED")
-				return
-			end
-
-			if result == "IFrame" or result == "M1Immune" or result == "Invalid" then
-				return
-			end
-
-			if result == "Blocked" then
-				hitSomething = true
-				self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
-				print("M" .. combo .. " BLOCKED")
-				return
-			end
-
-			if result == "Guardbreak" then
-				hitSomething = true
-
-				self.MovementService:StopCarryController(root)
-				self.MovementService:StopCarryController(targetRoot)
-				self.MovementService:StopYHoldController(root)
-				self.MovementService:StopYHoldController(targetRoot)
-
-				if self.UltService then
-					self.UltService:AwardGuardbreak(character, targetCharacter)
+				if result == "Countered" then
+					hitSomething = true
+					self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
+					print("M" .. combo .. " COUNTERED")
+					return
 				end
 
-				self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
-
-				print("M5 GUARDBREAK")
-				return
-			end
-
-			hitSomething = true
-
-			self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
-
-			local armorInfo = self:ApplyDamageAndStun(
-				character,
-				targetCharacter,
-				targetHumanoid,
-				targetRoot,
-				attackData,
-				rawData.Stun
-			)
-
-			if combo < self.FinalM1 then
-				if not armorInfo.Active or not armorInfo.PreventsKnockback then
-					self.MovementService:StartM1Carry(root, targetRoot, rawData)
-					self.MovementService:StartYHold(root, rawData.YHoldDuration or 0.4)
-					self.MovementService:StartYHold(targetRoot, rawData.YHoldDuration or 0.4)
-				else
-					print("[M1Service] Armor prevented M1 carry:", targetCharacter.Name)
+				if result == "IFrame" or result == "M1Immune" or result == "Invalid" then
+					return
 				end
 
-				print("M" .. combo .. " HIT")
-			else
-				self.MovementService:StopCarryController(root)
-				self.MovementService:StopCarryController(targetRoot)
-				self.MovementService:StopYHoldController(root)
-				self.MovementService:StopYHoldController(targetRoot)
+				if result == "Blocked" then
+					hitSomething = true
+					self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
+					print("M" .. combo .. " BLOCKED")
+					return
+				end
 
-				if not armorInfo.Active or not armorInfo.PreventsKnockback then
-					if self.MovementService and self.MovementService.ApplyDirectionalKnockback then
-						self.MovementService:ApplyDirectionalKnockback(root, targetRoot, rawData)
-					else
-						local direction = self.MovementService:GetDirectionBetween(root, targetRoot)
+				if result == "Guardbreak" then
+					hitSomething = true
 
-						targetRoot.AssemblyLinearVelocity =
-							(direction * rawData.Knockback)
-							+ Vector3.new(0, rawData.UpwardKnockback, 0)
+					self.MovementService:StopCarryController(root)
+					self.MovementService:StopCarryController(targetRoot)
+					self.MovementService:StopYHoldController(root)
+					self.MovementService:StopYHoldController(targetRoot)
+
+					if self.UltService then
+						self.UltService:AwardGuardbreak(character, targetCharacter)
 					end
+
+					self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
+
+					print("M5 GUARDBREAK")
+					return
+				end
+
+				hitSomething = true
+
+				self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
+
+				local armorInfo = self:ApplyDamageAndStun(
+					character,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					attackData,
+					rawData.Stun
+				)
+
+				if combo < self.FinalM1 then
+					if not armorInfo.Active or not armorInfo.PreventsKnockback then
+						self.MovementService:StartM1Carry(root, targetRoot, rawData)
+						self.MovementService:StartYHold(root, rawData.YHoldDuration or 0.4)
+						self.MovementService:StartYHold(targetRoot, rawData.YHoldDuration or 0.4)
+					else
+						print("[M1Service] Armor prevented M1 carry:", targetCharacter.Name)
+					end
+
+					print("M" .. combo .. " HIT")
 				else
-					print("[M1Service] Armor prevented M5 knockback:", targetCharacter.Name)
+					self.MovementService:StopCarryController(root)
+					self.MovementService:StopCarryController(targetRoot)
+					self.MovementService:StopYHoldController(root)
+					self.MovementService:StopYHoldController(targetRoot)
+
+					if not armorInfo.Active or not armorInfo.PreventsKnockback then
+						if self.MovementService and self.MovementService.ApplyPresetKnockback then
+							self.MovementService:ApplyPresetKnockback(root, targetRoot, rawData, "M5Preset")
+						elseif self.MovementService and self.MovementService.ApplyDirectionalKnockback then
+							self.MovementService:ApplyDirectionalKnockback(root, targetRoot, rawData, "M5Directional")
+						else
+							local direction = self.MovementService:GetDirectionBetween(root, targetRoot)
+							targetRoot.AssemblyLinearVelocity = (direction * 45) + Vector3.new(0, 28, 0)
+						end
+					else
+						print("[M1Service] Armor prevented M5 knockback:", targetCharacter.Name)
+					end
+
+					self.StateService:ApplyM1Immunity(targetCharacter, self.Config.PostM5M1Immunity or 1)
+					self.VFXService:PlaySFXAtPart("GroundM5", targetRoot, 3)
+
+					if self.UltService then
+						self.UltService:AwardComboEnder(character, targetCharacter)
+					end
+
+					print("GROUND M5 KNOCKBACK HIT")
 				end
-
-				self.StateService:ApplyM1Immunity(targetCharacter, self.Config.PostM5M1Immunity or 1)
-				self.VFXService:PlaySFXAtPart("GroundM5", targetRoot, 3)
-
-				if self.UltService then
-					self.UltService:AwardComboEnder(character, targetCharacter)
-				end
-
-				print("GROUND M5 KNOCKBACK HIT")
 			end
-		end)
+		)
 
 		if not hitSomething then
 			self:PlayM1Visual(character, combo, nil, nil, false)
@@ -826,8 +927,12 @@ end
 
 function M1Service:PerformM1(player, payload)
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
-	if not character then return end
-	if not self.StateService:CanAttack(character) then return end
+	if not character then
+		return
+	end
+	if not self.StateService:CanAttack(character) then
+		return
+	end
 
 	self.StateService:RefreshComboTimeout(character)
 
