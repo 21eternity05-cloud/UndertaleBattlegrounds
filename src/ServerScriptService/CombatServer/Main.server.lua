@@ -2,15 +2,16 @@ print("[CombatServer] Starting")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local combatFolder = script.Parent
+
+local Config = require(combatFolder:WaitForChild("CombatConfig"))
+
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local combatRemote = remotes:WaitForChild("CombatRemote")
 local characterRemote = remotes:WaitForChild("CharacterRemote")
 local moveRemote = remotes:WaitForChild("MoveRemote")
 
-local combatFolder = script.Parent
-
-local Config = require(combatFolder:WaitForChild("CombatConfig"))
-
+-- Core services
 local AnimationService = require(combatFolder:WaitForChild("AnimationService")).new(Config)
 local VFXService = require(combatFolder:WaitForChild("VFXService")).new(Config)
 local StateService = require(combatFolder:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
@@ -18,16 +19,19 @@ local HitboxService = require(combatFolder:WaitForChild("HitboxService")).new(Co
 local MovementService = require(combatFolder:WaitForChild("MovementService")).new(Config)
 local BlockService = require(combatFolder:WaitForChild("BlockService")).new(Config, StateService, VFXService)
 local WeaponService = require(combatFolder:WaitForChild("WeaponService")).new(Config)
+local DamageNumberService = require(combatFolder:WaitForChild("DamageNumberService")).new(Config)
+
+-- Player / progression services
 local ProgressionService = require(combatFolder:WaitForChild("ProgressionService")).new(Config)
 local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(Config, WeaponService, ProgressionService)
 local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
-local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
-local DamageNumberService = require(combatFolder:WaitForChild("DamageNumberService")).new(Config)
 
+-- Status / utility services
 local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
 local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
 local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
 local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
+local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
 
 local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
@@ -44,14 +48,10 @@ local ProjectileService = require(combatFolder:WaitForChild("ProjectileService")
 	VFXService,
 	CounterService,
 	CombatStatusService,
-	MovementService
+	MovementService,
+	DamageNumberService,
+	ProgressionService
 )
-
-StateService.CounterService = CounterService
-StateService.CombatStatusService = CombatStatusService
-StateService.ProjectileService = ProjectileService
-StateService.UltService = UltService
-StateService.CinematicService = CinematicService
 
 local M1Service = require(combatFolder:WaitForChild("M1Service")).new(
 	Config,
@@ -75,18 +75,40 @@ local MoveService = require(combatFolder:WaitForChild("MoveService")).new(
 	CombatStatusService
 )
 
+local GrabService = require(combatFolder:WaitForChild("GrabService")).new(
+	Config,
+	StateService,
+	MovementService,
+	CombatStatusService,
+	DamageNumberService,
+	ProgressionService
+)
+
+-- Cross-service wiring
+StateService.CounterService = CounterService
+StateService.CombatStatusService = CombatStatusService
+StateService.ProjectileService = ProjectileService
+StateService.UltService = UltService
+StateService.CinematicService = CinematicService
+
+M1Service.UltService = UltService
+M1Service.DamageNumberService = DamageNumberService
+
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
 MoveService.CinematicService = CinematicService
 MoveService.DamageNumberService = DamageNumberService
-
-M1Service.DamageNumberService = DamageNumberService
-M1Service.UltService = UltService
+MoveService.ProgressionService = ProgressionService
+MoveService.GrabService = GrabService
 
 ProjectileService.UltService = UltService
+ProjectileService.DamageNumberService = DamageNumberService
+ProjectileService.ProgressionService = ProgressionService
+
 CounterService.UltService = UltService
 UltService.ProgressionService = ProgressionService
 
+-- Remotes
 combatRemote.OnServerEvent:Connect(function(player, action, payload)
 	if action == "M1" then
 		M1Service:PerformM1(player, payload)
@@ -113,6 +135,7 @@ characterRemote.OnServerEvent:Connect(function(player, action, characterName)
 	end
 end)
 
+-- Startup
 StateService:StartCharacterSetup()
 ProgressionService:Start()
 CharacterService:Start()

@@ -24,7 +24,7 @@ local KillingIntent = {
 	DownLaunchMaxForce = 85000,
 
 	AirStunMax = 1.35,
-	GroundSplatStun = 0.65,
+	GroundSplatStun = 1.50,
 
 	SplatPartLifetime = 0.35,
 	SplatPartSize = Vector3.new(8, 0.25, 8),
@@ -58,7 +58,7 @@ local KillingIntent = {
 local COUNTER_ANIMATION = "KillingIntentCounter"
 local HIT_ANIMATION = "KillingIntentHit"
 
-local STARTUP_TIME = 0.5
+local STARTUP_TIME = 0.3
 local COUNTER_WINDOW = 1.35
 local WHIFF_ENDLAG = 1
 

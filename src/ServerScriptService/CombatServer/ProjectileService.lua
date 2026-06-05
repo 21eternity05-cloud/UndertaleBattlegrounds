@@ -5,7 +5,18 @@ local TweenService = game:GetService("TweenService")
 local ProjectileService = {}
 ProjectileService.__index = ProjectileService
 
-function ProjectileService.new(config, hitboxService, blockService, stateService, vfxService, counterService, combatStatusService, movementService)
+function ProjectileService.new(
+	config,
+	hitboxService,
+	blockService,
+	stateService,
+	vfxService,
+	counterService,
+	combatStatusService,
+	movementService,
+	damageNumberService,
+	progressionService
+)
 	local self = setmetatable({}, ProjectileService)
 
 	self.Config = config
@@ -16,6 +27,10 @@ function ProjectileService.new(config, hitboxService, blockService, stateService
 	self.CounterService = counterService
 	self.CombatStatusService = combatStatusService
 	self.MovementService = movementService
+	self.DamageNumberService = damageNumberService
+	self.ProgressionService = progressionService
+
+	self.UltService = nil
 
 	return self
 end
@@ -28,12 +43,14 @@ function ProjectileService:EnsurePrimaryPart(model)
 	end
 
 	local primary = model:FindFirstChild("PrimaryPart", true)
+
 	if primary and primary:IsA("BasePart") then
 		model.PrimaryPart = primary
 		return primary
 	end
 
 	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
+
 	if firstPart then
 		model.PrimaryPart = firstPart
 		return firstPart
@@ -161,6 +178,7 @@ function ProjectileService:CreateLinearVelocity(projectile, velocity, maxForce)
 	linearVelocity.Name = "ProjectileLinearVelocity"
 	linearVelocity.Attachment0 = attachment
 	linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
 	linearVelocity.MaxForce = maxForce or 150000
 	linearVelocity.VectorVelocity = velocity
 	linearVelocity.Parent = part
@@ -192,12 +210,18 @@ function ProjectileService:GetVelocityToTarget(startPosition, targetRoot, speed,
 	return direction.Unit * speed
 end
 
-function ProjectileService:BuildAttackData(data)
-	local attackData = {}
+function ProjectileService:CopyData(data)
+	local copy = {}
 
 	for key, value in pairs(data or {}) do
-		attackData[key] = value
+		copy[key] = value
 	end
+
+	return copy
+end
+
+function ProjectileService:BuildAttackData(data)
+	local attackData = self:CopyData(data)
 
 	if self.CombatStatusService and self.CombatStatusService.NormalizeAttackData then
 		return self.CombatStatusService:NormalizeAttackData(attackData)
@@ -234,6 +258,84 @@ function ProjectileService:BuildAttackData(data)
 	return attackData
 end
 
+function ProjectileService:BuildBeamAttackData(data, isFinalTick)
+	local attackData = self:CopyData(data)
+
+	if isFinalTick then
+		attackData.Damage = data.FinalDamage or data.Damage
+		attackData.Stun = data.FinalStun or data.Stun
+		attackData.Knockback = data.FinalKnockback or data.Knockback
+		attackData.UpwardKnockback = data.FinalUpwardKnockback or data.UpwardKnockback
+		attackData.KnockbackDuration = data.FinalKnockbackDuration or data.KnockbackDuration
+		attackData.KnockbackMaxForce = data.FinalKnockbackMaxForce or data.KnockbackMaxForce
+	else
+		-- By default, beam guardbreak happens only on the final tick.
+		if data.GuardbreakFinalOnly ~= false then
+			attackData.Guardbreak = false
+		end
+	end
+
+	return attackData
+end
+
+function ProjectileService:ShowDamageNumber(targetRoot, amount, options)
+	if not self.DamageNumberService then
+		return
+	end
+
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
+
+	if typeof(amount) ~= "number" or amount <= 0 then
+		return
+	end
+
+	self.DamageNumberService:ShowDamage(targetRoot, amount, options)
+end
+
+function ProjectileService:ReportDamage(ownerCharacter, targetCharacter, targetRoot, damageAmount, attackData)
+	if not ownerCharacter or not targetCharacter then
+		return
+	end
+
+	if typeof(damageAmount) ~= "number" or damageAmount <= 0 then
+		return
+	end
+
+	self:ShowDamageNumber(targetRoot, damageAmount)
+
+	if attackData and attackData.AwardsUlt == false then
+		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+
+		if humanoid and humanoid.Health <= 0 then
+			if self.ProgressionService and self.ProgressionService.AwardKill then
+				self.ProgressionService:AwardKill(ownerCharacter, targetCharacter)
+			elseif self.UltService
+				and self.UltService.ProgressionService
+				and self.UltService.ProgressionService.AwardKill
+			then
+				self.UltService.ProgressionService:AwardKill(ownerCharacter, targetCharacter)
+			end
+		end
+
+		return
+	end
+
+	if self.UltService and self.UltService.AwardDamageEvent then
+		self.UltService:AwardDamageEvent(ownerCharacter, targetCharacter, damageAmount)
+		return
+	end
+
+	if self.ProgressionService and self.ProgressionService.AwardKill then
+		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+
+		if humanoid and humanoid.Health <= 0 then
+			self.ProgressionService:AwardKill(ownerCharacter, targetCharacter)
+		end
+	end
+end
+
 function ProjectileService:ApplyProjectileHit(info)
 	local ownerCharacter = info.OwnerCharacter
 	local projectilePosition = info.ProjectilePosition
@@ -248,6 +350,12 @@ function ProjectileService:ApplyProjectileHit(info)
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return "Invalid" end
 	if not targetRoot or not targetRoot.Parent then return "Invalid" end
 	if not projectilePosition then return "Invalid" end
+
+	if self.CombatStatusService
+		and self.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, ownerCharacter)
+	then
+		return "DamageLocked"
+	end
 
 	if self.CombatStatusService and self.CombatStatusService:HasIFrames(targetCharacter, attackData) then
 		return "IFrame"
@@ -320,10 +428,7 @@ function ProjectileService:ApplyProjectileHit(info)
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
-
-		if self.UltService and attackData.AwardsUlt ~= false then
-			self.UltService:AwardDamageEvent(ownerCharacter, targetCharacter, finalDamage)
-		end
+		self:ReportDamage(ownerCharacter, targetCharacter, targetRoot, finalDamage, attackData)
 	end
 
 	if attackData.Stun and attackData.Stun > 0 then
@@ -347,6 +452,7 @@ function ProjectileService:ApplyProjectileHit(info)
 
 			if direction.Magnitude < 0.05 and self.MovementService then
 				local ownerRoot = ownerCharacter:FindFirstChild("HumanoidRootPart")
+
 				if ownerRoot then
 					direction = self.MovementService:GetDirectionBetween(ownerRoot, targetRoot)
 					direction = Vector3.new(direction.X, 0, direction.Z)
@@ -366,7 +472,8 @@ function ProjectileService:ApplyProjectileHit(info)
 					attackData.Knockback,
 					attackData.UpwardKnockback or 0,
 					attackData.KnockbackDuration,
-					attackData.KnockbackMaxForce
+					attackData.KnockbackMaxForce,
+					attackName
 				)
 			else
 				targetRoot.AssemblyLinearVelocity =
@@ -381,6 +488,107 @@ function ProjectileService:ApplyProjectileHit(info)
 	end
 
 	return "Hit"
+end
+
+function ProjectileService:PerformBeamTick(info)
+	local ownerCharacter = info.OwnerCharacter
+	local startPosition = info.BeamStartPosition or info.StartPosition
+	local direction = info.Direction
+	local attackData = self:BuildBeamAttackData(info.AttackData or {}, info.IsFinalTick == true)
+	local attackName = info.AttackName or "Beam"
+
+	if not ownerCharacter or not ownerCharacter.Parent then
+		return {}
+	end
+
+	if typeof(startPosition) ~= "Vector3" then
+		return {}
+	end
+
+	if typeof(direction) ~= "Vector3" or direction.Magnitude < 0.05 then
+		return {}
+	end
+
+	direction = direction.Unit
+
+	local length = info.BeamLength or attackData.BeamLength or 80
+	local step = info.BeamStep or attackData.BeamStep or 6
+	local radius = info.BeamRadius or attackData.BeamRadius or 5
+
+	local hitThisTick = {}
+	local results = {}
+
+	for distance = 0, length, step do
+		local position = startPosition + (direction * distance)
+
+		self.HitboxService:PerformSphereAtPosition(
+			ownerCharacter,
+			position,
+			radius,
+			function(targetCharacter, targetHumanoid, targetRoot)
+				if hitThisTick[targetCharacter] then
+					return
+				end
+
+				hitThisTick[targetCharacter] = true
+
+				local result = self:ApplyProjectileHit({
+					OwnerCharacter = ownerCharacter,
+					ProjectilePosition = position,
+					TargetCharacter = targetCharacter,
+					TargetHumanoid = targetHumanoid,
+					TargetRoot = targetRoot,
+					AttackData = attackData,
+					AttackName = attackName,
+					HitSoundCharacter = info.HitSoundCharacter,
+					HitSoundName = info.HitSoundName,
+				})
+
+				results[targetCharacter] = result
+
+				if info.OnBeamHit then
+					info.OnBeamHit(targetCharacter, targetHumanoid, targetRoot, result, position)
+				end
+			end
+		)
+	end
+
+	return results
+end
+
+function ProjectileService:RunBeam(info)
+	local activeTime = info.BeamActiveTime or 0.4
+	local tickRate = info.BeamTickRate or 0.08
+	local totalTicks = math.max(1, math.floor(activeTime / tickRate + 0.5))
+
+	for tickIndex = 1, totalTicks do
+		if info.IsActive and info.IsActive() == false then
+			break
+		end
+
+		local isFinalTick = tickIndex == totalTicks
+
+		if info.OnBeamTick then
+			info.OnBeamTick(tickIndex, isFinalTick)
+		end
+
+		self:PerformBeamTick({
+			OwnerCharacter = info.OwnerCharacter,
+			BeamStartPosition = info.BeamStartPosition or info.StartPosition,
+			Direction = info.Direction,
+			AttackData = info.AttackData,
+			AttackName = info.AttackName,
+			BeamLength = info.BeamLength,
+			BeamStep = info.BeamStep,
+			BeamRadius = info.BeamRadius,
+			IsFinalTick = isFinalTick,
+			HitSoundCharacter = info.HitSoundCharacter,
+			HitSoundName = info.HitSoundName,
+			OnBeamHit = info.OnBeamHit,
+		})
+
+		task.wait(tickRate)
+	end
 end
 
 function ProjectileService:CheckWorldHit(info, previousPosition, currentPosition)
@@ -429,6 +637,7 @@ end
 function ProjectileService:CheckCharacterHit(info)
 	local projectile = info.Projectile
 	local position = self:GetProjectilePosition(projectile)
+
 	if not position then return false end
 
 	local didHit = false
@@ -452,7 +661,7 @@ function ProjectileService:CheckCharacterHit(info)
 				HitSoundName = info.HitSoundName,
 			})
 
-			if result == "IFrame" or result == "Invalid" then
+			if result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
 				if info.OnPassThrough then
 					info.OnPassThrough(targetCharacter, targetHumanoid, targetRoot, result)
 				end
@@ -490,12 +699,14 @@ function ProjectileService:LaunchProjectile(info)
 	if not ownerCharacter or not ownerCharacter.Parent then return nil end
 
 	local part = self:GetProjectilePart(projectile)
+
 	if not part then
 		projectile:Destroy()
 		return nil
 	end
 
 	local startPosition = self:GetProjectilePosition(projectile)
+
 	if not startPosition then
 		projectile:Destroy()
 		return nil
@@ -552,6 +763,7 @@ function ProjectileService:LaunchProjectile(info)
 		end
 
 		local currentPosition = self:GetProjectilePosition(projectile)
+
 		if not currentPosition then
 			finished = true
 			if connection then connection:Disconnect() end

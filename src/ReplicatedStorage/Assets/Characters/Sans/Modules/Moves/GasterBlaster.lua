@@ -34,7 +34,11 @@ local GasterBlaster = {
 	FinalUpwardKnockback = 28,
 
 	Blockable = true,
+	CanBeBlocked = true,
+	Unblockable = false,
+
 	Guardbreak = true,
+	GuardbreakFinalOnly = true,
 	GuardbreakStun = 1.35,
 
 	CanBeCountered = true,
@@ -42,7 +46,13 @@ local GasterBlaster = {
 	CancelableByHit = true,
 
 	SpawnOffset = CFrame.new(0, 4.5, -5.5),
-	SpawnTweenTime = 0.16,
+
+	-- Blaster entrance/exit polish.
+	-- Positive Z moves it backward relative to the blaster facing direction.
+	FadeInOffset = CFrame.new(0, 0, 7),
+	FadeOutOffset = CFrame.new(0, 0, 7),
+	FadeInTime = 0.16,
+	FadeOutTime = 0.16,
 
 	JawOpenTime = 0.18,
 	JawOutDistance = 0,
@@ -82,12 +92,14 @@ local function ensurePrimaryPart(model)
 	end
 
 	local primary = model:FindFirstChild("PrimaryPart", true)
+
 	if primary and primary:IsA("BasePart") then
 		model.PrimaryPart = primary
 		return primary
 	end
 
 	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
+
 	if firstPart then
 		model.PrimaryPart = firstPart
 		return firstPart
@@ -108,19 +120,162 @@ local function setupBlasterParts(model)
 	end
 
 	local primary = ensurePrimaryPart(model)
+
 	if primary then
 		primary.Transparency = 1
 	end
 end
 
+local function getVisibleParts(model)
+	local primary = ensurePrimaryPart(model)
+	local parts = {}
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") and descendant ~= primary then
+			table.insert(parts, descendant)
+		end
+	end
+
+	return parts
+end
+
 local function forcePrimaryInvisible(model)
 	local primary = ensurePrimaryPart(model)
+
 	if primary then
 		primary.Transparency = 1
 		primary.CanCollide = false
 		primary.CanTouch = false
 		primary.CanQuery = false
 	end
+end
+
+local function capturePartTransparencies(model)
+	local transparencies = {}
+
+	for _, part in ipairs(getVisibleParts(model)) do
+		transparencies[part] = part.Transparency
+	end
+
+	return transparencies
+end
+
+local function setVisiblePartsTransparency(model, transparency)
+	for _, part in ipairs(getVisibleParts(model)) do
+		part.Transparency = transparency
+	end
+
+	forcePrimaryInvisible(model)
+end
+
+local function tweenVisibleParts(model, transparencies, tweenInfo, fadeOut)
+	for part, originalTransparency in pairs(transparencies) do
+		if part and part.Parent then
+			local goalTransparency = fadeOut and 1 or originalTransparency
+
+			TweenService:Create(
+				part,
+				tweenInfo,
+				{
+					Transparency = goalTransparency,
+				}
+			):Play()
+		end
+	end
+
+	forcePrimaryInvisible(model)
+end
+
+local function tweenModelPivot(model, startCFrame, endCFrame, tweenInfo)
+	if not model or not model.Parent then
+		return nil
+	end
+
+	local cframeValue = Instance.new("CFrameValue")
+	cframeValue.Name = "GasterBlasterTweenCFrame"
+	cframeValue.Value = startCFrame
+
+	local connection
+	connection = cframeValue:GetPropertyChangedSignal("Value"):Connect(function()
+		if model and model.Parent then
+			model:PivotTo(cframeValue.Value)
+			forcePrimaryInvisible(model)
+		end
+	end)
+
+	local tween = TweenService:Create(
+		cframeValue,
+		tweenInfo,
+		{
+			Value = endCFrame,
+		}
+	)
+
+	tween.Completed:Connect(function()
+		if connection then
+			connection:Disconnect()
+		end
+
+		if cframeValue then
+			cframeValue:Destroy()
+		end
+
+		if model and model.Parent then
+			model:PivotTo(endCFrame)
+			forcePrimaryInvisible(model)
+		end
+	end)
+
+	tween:Play()
+
+	return tween
+end
+
+local function fadeInBlaster(model, finalCFrame, data)
+	local offset = data.FadeInOffset or CFrame.new(0, 0, 7)
+	local startCFrame = finalCFrame * offset
+	local fadeInTime = data.FadeInTime or 0.16
+
+	local transparencies = capturePartTransparencies(model)
+	local tweenInfo = TweenInfo.new(
+		fadeInTime,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.Out
+	)
+
+	model:PivotTo(startCFrame)
+	setVisiblePartsTransparency(model, 1)
+	forcePrimaryInvisible(model)
+
+	tweenModelPivot(model, startCFrame, finalCFrame, tweenInfo)
+	tweenVisibleParts(model, transparencies, tweenInfo, false)
+
+	return transparencies
+end
+
+local function fadeOutBlaster(model, currentCFrame, transparencies, data)
+	if not model or not model.Parent then
+		return
+	end
+
+	local offset = data.FadeOutOffset or CFrame.new(0, 0, 7)
+	local endCFrame = currentCFrame * offset
+	local fadeOutTime = data.FadeOutTime or 0.16
+
+	local tweenInfo = TweenInfo.new(
+		fadeOutTime,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.Out
+	)
+
+	tweenModelPivot(model, currentCFrame, endCFrame, tweenInfo)
+	tweenVisibleParts(model, transparencies or capturePartTransparencies(model), tweenInfo, true)
+
+	task.delay(fadeOutTime + 0.03, function()
+		if model and model.Parent then
+			model:Destroy()
+		end
+	end)
 end
 
 local function getAimDirection(root, aimPosition)
@@ -170,6 +325,7 @@ local function getWorldBeamPosition(blaster)
 	end
 
 	local primary = ensurePrimaryPart(blaster)
+
 	if primary then
 		return primary.Position
 	end
@@ -247,185 +403,6 @@ local function createBeamVisual(startPosition, direction, data)
 	Debris:AddItem(beam, (data.BeamFadeTime or 0.12) + 0.08)
 end
 
-local function tryCounter(ctx, targetCharacter, hitPosition, data)
-	if data.CanBeCountered == false then
-		return false
-	end
-
-	if ctx.CounterService and ctx.CounterService.TryCounterHit then
-		return ctx.CounterService:TryCounterHit({
-			AttackerCharacter = ctx.Character,
-			TargetCharacter = targetCharacter,
-			AttackName = ctx.MoveId or "GasterBlaster",
-			AttackData = data,
-			HitPosition = hitPosition,
-		})
-	end
-
-	if ctx.StateService and ctx.StateService.TryTriggerCounter then
-		return ctx.StateService:TryTriggerCounter(targetCharacter, ctx.Character)
-	end
-
-	return false
-end
-
-local function applyBeamHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitPosition, data, isFinalTick)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
-	if not targetRoot or not targetRoot.Parent then return end
-
-	local attackData = {}
-
-	for key, value in pairs(data) do
-		attackData[key] = value
-	end
-
-	attackData.Damage = isFinalTick and (data.FinalDamage or data.Damage or 3) or (data.Damage or 3)
-	attackData.Stun = isFinalTick and (data.FinalStun or data.Stun or 0.25) or (data.Stun or 0.25)
-	attackData.Knockback = isFinalTick and (data.FinalKnockback or data.Knockback or 18) or (data.Knockback or 18)
-	attackData.UpwardKnockback = isFinalTick and (data.FinalUpwardKnockback or data.UpwardKnockback or 4) or (data.UpwardKnockback or 4)
-
-	if ctx.CombatStatusService and ctx.CombatStatusService.NormalizeAttackData then
-		attackData = ctx.CombatStatusService:NormalizeAttackData(attackData)
-	end
-
-	if ctx.CombatStatusService and ctx.CombatStatusService:HasIFrames(targetCharacter, attackData) then
-		return
-	end
-
-	if tryCounter(ctx, targetCharacter, hitPosition, attackData) then
-		print("[GasterBlaster] Countered by:", targetCharacter.Name)
-		return
-	end
-
-	local blockSource = {
-		Position = hitPosition,
-	}
-
-	if data.Blockable ~= false and ctx.BlockService and ctx.BlockService:CanBlockHit(targetCharacter, blockSource) then
-		if isFinalTick and data.Guardbreak then
-			ctx.StateService:GuardbreakCharacter(targetCharacter, data.GuardbreakStun or 1.35)
-
-			if ctx.UltService then
-				ctx.UltService:AwardGuardbreak(ctx.Character, targetCharacter)
-			end
-
-			if ctx.BlockService.PlayBlockBreakVFX then
-				ctx.BlockService:PlayBlockBreakVFX(targetRoot)
-			end
-
-			print("[GasterBlaster] Final tick guardbreak:", targetCharacter.Name)
-			return
-		end
-
-		ctx.BlockService:PlayBlockVFX(targetRoot)
-		print("[GasterBlaster] Blocked tick:", targetCharacter.Name)
-		return
-	end
-
-	local armorInfo = ctx.CombatStatusService and ctx.CombatStatusService:GetArmorInfo(targetCharacter, attackData) or {
-		Active = false,
-		DamageReduction = 0,
-		PreventsStun = false,
-		PreventsKnockback = false,
-	}
-
-	if ctx.CombatStatusService then
-		ctx.CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
-	end
-
-	local damage = attackData.Damage or 0
-	local finalDamage = damage
-
-	if armorInfo.Active then
-		finalDamage = damage * (1 - (armorInfo.DamageReduction or 0))
-	end
-
-	if finalDamage > 0 then
-		targetHumanoid:TakeDamage(finalDamage)
-
-		if ctx.UltService and attackData.AwardsUlt ~= false then
-			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, finalDamage)
-		end
-	end
-
-	local stun = attackData.Stun
-	if stun and stun > 0 then
-		if not armorInfo.Active or not armorInfo.PreventsStun then
-			ctx.StateService:StunCharacter(targetCharacter, stun)
-		end
-	end
-
-	if ctx.VFXService then
-		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
-	end
-
-	local direction = targetRoot.Position - hitPosition
-	direction = Vector3.new(direction.X, 0, direction.Z)
-
-	if direction.Magnitude < 0.05 then
-		direction = ctx.Root.CFrame.LookVector
-		direction = Vector3.new(direction.X, 0, direction.Z)
-	end
-
-	if direction.Magnitude < 0.05 then
-		direction = Vector3.new(0, 0, -1)
-	else
-		direction = direction.Unit
-	end
-
-	if not armorInfo.Active or not armorInfo.PreventsKnockback then
-		if ctx.MovementService and ctx.MovementService.ApplyStraightKnockback then
-			ctx.MovementService:ApplyStraightKnockback(
-				targetRoot,
-				direction,
-				attackData.Knockback,
-				attackData.UpwardKnockback or 0,
-				isFinalTick and 0.28 or 0.12,
-				isFinalTick and 130000 or 90000
-			)
-		else
-			targetRoot.AssemblyLinearVelocity =
-				(direction * attackData.Knockback)
-				+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
-		end
-	end
-
-	print("[GasterBlaster] Hit:", targetCharacter.Name, "Final:", isFinalTick)
-end
-
-local function doBeamTick(ctx, startPosition, direction, data, isFinalTick)
-	local length = data.BeamLength or 90
-	local step = data.BeamStep or 6
-	local radius = data.BeamRadius or 5.5
-
-	local hitThisTick = {}
-
-	for distance = 0, length, step do
-		local position = startPosition + (direction.Unit * distance)
-
-		ctx.HitboxService:PerformSphereAtPosition(
-			ctx.Character,
-			position,
-			radius,
-			function(targetCharacter, targetHumanoid, targetRoot)
-				if hitThisTick[targetCharacter] then return end
-				hitThisTick[targetCharacter] = true
-
-				applyBeamHit(
-					ctx,
-					targetCharacter,
-					targetHumanoid,
-					targetRoot,
-					position,
-					data,
-					isFinalTick
-				)
-			end
-		)
-	end
-end
-
 function GasterBlaster.Execute(ctx)
 	local data = ctx.MoveData
 	local character = ctx.Character
@@ -443,6 +420,12 @@ function GasterBlaster.Execute(ctx)
 	end
 
 	if not root then
+		ctx:FinishMove(0)
+		return
+	end
+
+	if not ctx.ProjectileService then
+		warn("[GasterBlaster] Missing ProjectileService")
 		ctx:FinishMove(0)
 		return
 	end
@@ -469,8 +452,8 @@ function GasterBlaster.Execute(ctx)
 	local finalCFrame = makeLookCFrame(spawnCFrame.Position, direction)
 
 	blaster.Parent = workspace
-	blaster:PivotTo(finalCFrame)
-	forcePrimaryInvisible(blaster)
+
+	local originalTransparencies = fadeInBlaster(blaster, finalCFrame, data)
 
 	playSansSFX(ctx, "EyeFlash", primary, 2)
 
@@ -479,7 +462,7 @@ function GasterBlaster.Execute(ctx)
 	task.wait(data.Startup or 0.18)
 
 	if not ctx:IsActive() then
-		blaster:Destroy()
+		fadeOutBlaster(blaster, blaster:GetPivot(), originalTransparencies, data)
 		ctx:FinishMove(0)
 		return
 	end
@@ -492,7 +475,7 @@ function GasterBlaster.Execute(ctx)
 	task.wait(data.ChargeTime or 0.45)
 
 	if not ctx:IsActive() then
-		blaster:Destroy()
+		fadeOutBlaster(blaster, blaster:GetPivot(), originalTransparencies, data)
 		ctx:FinishMove(0)
 		return
 	end
@@ -504,26 +487,44 @@ function GasterBlaster.Execute(ctx)
 	hideRightEye(blaster)
 	forcePrimaryInvisible(blaster)
 
-	local activeTime = data.BeamActiveTime or 0.4
-	local tickRate = data.BeamTickRate or 0.08
-	local totalTicks = math.max(1, math.floor(activeTime / tickRate + 0.5))
+	ctx.ProjectileService:RunBeam({
+		OwnerCharacter = character,
+		BeamStartPosition = beamStart,
+		Direction = direction,
 
-	for tickIndex = 1, totalTicks do
-		if not ctx:IsActive() then
-			break
-		end
+		AttackData = data,
+		AttackName = ctx.MoveId or "GasterBlaster",
 
-		local isFinalTick = tickIndex == totalTicks
+		BeamLength = data.BeamLength or 90,
+		BeamRadius = data.BeamRadius or 5.5,
+		BeamStep = data.BeamStep or 6,
+		BeamActiveTime = data.BeamActiveTime or 0.4,
+		BeamTickRate = data.BeamTickRate or 0.08,
 
-		createBeamVisual(beamStart, direction, data)
-		doBeamTick(ctx, beamStart, direction, data, isFinalTick)
+		IsActive = function()
+			return ctx:IsActive()
+		end,
 
-		task.wait(tickRate)
-	end
+		OnBeamTick = function()
+			createBeamVisual(beamStart, direction, data)
+		end,
 
-	task.delay(0.2, function()
+		OnBeamHit = function(targetCharacter, targetHumanoid, targetRoot, result)
+			if result == "Hit" or result == "ArmoredHit" then
+				print("[GasterBlaster] Hit:", targetCharacter.Name)
+			elseif result == "Guardbreak" then
+				print("[GasterBlaster] Guardbreak:", targetCharacter.Name)
+			elseif result == "Blocked" then
+				print("[GasterBlaster] Blocked:", targetCharacter.Name)
+			elseif result == "Countered" then
+				print("[GasterBlaster] Countered:", targetCharacter.Name)
+			end
+		end,
+	})
+
+	task.delay(0.08, function()
 		if blaster and blaster.Parent then
-			blaster:Destroy()
+			fadeOutBlaster(blaster, blaster:GetPivot(), originalTransparencies, data)
 		end
 	end)
 

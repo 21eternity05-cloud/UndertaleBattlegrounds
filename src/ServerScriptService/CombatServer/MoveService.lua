@@ -11,7 +11,16 @@ local VALID_MOVE_SLOTS = {
 	Ultimate = true,
 }
 
-function MoveService.new(config, stateService, hitboxService, movementService, blockService, vfxService, counterService, combatStatusService)
+function MoveService.new(
+	config,
+	stateService,
+	hitboxService,
+	movementService,
+	blockService,
+	vfxService,
+	counterService,
+	combatStatusService
+)
 	local self = setmetatable({}, MoveService)
 
 	self.Config = config
@@ -79,15 +88,25 @@ function MoveService:GetMoveModule(characterName)
 end
 
 function MoveService:GetMoveFromSlot(moveModule, moveSlot)
-	if not moveModule then return nil, nil end
-	if not moveModule.Slots then return nil, nil end
-	if not moveModule.Moves then return nil, nil end
+	if not moveModule then
+		return nil, nil
+	end
+	if not moveModule.Slots then
+		return nil, nil
+	end
+	if not moveModule.Moves then
+		return nil, nil
+	end
 
 	local moveId = moveModule.Slots[moveSlot]
-	if not moveId then return nil, nil end
+	if not moveId then
+		return nil, nil
+	end
 
 	local moveData = moveModule.Moves[moveId]
-	if not moveData then return nil, nil end
+	if not moveData then
+		return nil, nil
+	end
 
 	return moveId, moveData
 end
@@ -107,14 +126,28 @@ function MoveService:SetCooldown(player, moveId, cooldown)
 end
 
 function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
-	if not VALID_MOVE_SLOTS[moveSlot] then return false end
-	if not character then return false end
-	if not humanoid or humanoid.Health <= 0 then return false end
+	if not VALID_MOVE_SLOTS[moveSlot] then
+		return false
+	end
+	if not character then
+		return false
+	end
+	if not humanoid or humanoid.Health <= 0 then
+		return false
+	end
 
-	if character:GetAttribute("UsingMove") then return false end
-	if character:GetAttribute("Stunned") then return false end
-	if character:GetAttribute("Blocking") then return false end
-	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("UsingMove") then
+		return false
+	end
+	if character:GetAttribute("Stunned") then
+		return false
+	end
+	if character:GetAttribute("Blocking") then
+		return false
+	end
+	if character:GetAttribute("Guardbroken") then
+		return false
+	end
 
 	if self:IsOnCooldown(player, moveId) then
 		return false
@@ -124,7 +157,9 @@ function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
 end
 
 function MoveService:CancelM1IntoMove(character)
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	character:SetAttribute("Attacking", false)
 	character:SetAttribute("ComboCount", 0)
@@ -144,8 +179,12 @@ function MoveService:CancelM1IntoMove(character)
 end
 
 function MoveService:PlayMoveAnimation(character, moveData)
-	if not self.StateService.AnimationService then return nil end
-	if not moveData.AnimationName then return nil end
+	if not self.StateService.AnimationService then
+		return nil
+	end
+	if not moveData.AnimationName then
+		return nil
+	end
 
 	return self.StateService.AnimationService:PlayCharacterAnimation(
 		character,
@@ -158,15 +197,27 @@ function MoveService:PlayMoveAnimation(character, moveData)
 end
 
 function MoveService:RestoreMoveMovement(character)
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then return end
+	if not humanoid or humanoid.Health <= 0 then
+		return
+	end
 
-	if character:GetAttribute("Stunned") then return end
-	if character:GetAttribute("Guardbroken") then return end
-	if character:GetAttribute("Blocking") then return end
-	if character:GetAttribute("UsingMove") then return end
+	if character:GetAttribute("Stunned") then
+		return
+	end
+	if character:GetAttribute("Guardbroken") then
+		return
+	end
+	if character:GetAttribute("Blocking") then
+		return
+	end
+	if character:GetAttribute("UsingMove") then
+		return
+	end
 
 	humanoid.WalkSpeed = self.Config.DefaultWalkSpeed
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
@@ -175,8 +226,12 @@ function MoveService:RestoreMoveMovement(character)
 end
 
 function MoveService:EndMove(character, moveToken)
-	if not character or not character.Parent then return end
-	if character:GetAttribute("MoveToken") ~= moveToken then return end
+	if not character or not character.Parent then
+		return
+	end
+	if character:GetAttribute("MoveToken") ~= moveToken then
+		return
+	end
 
 	character:SetAttribute("UsingMove", false)
 
@@ -241,16 +296,39 @@ function MoveService:BuildAttackData(baseData, extraData)
 	return data
 end
 
-function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCharacter, targetHumanoid, targetRoot, attackData, attackName)
+function MoveService:ApplyStandardHit(
+	attackerCharacter,
+	attackerRoot,
+	targetCharacter,
+	targetHumanoid,
+	targetRoot,
+	attackData,
+	attackName
+)
 	local data = self:BuildAttackData(attackData)
 
-	if not attackerCharacter or not attackerCharacter.Parent then return "Invalid" end
-	if not attackerRoot or not attackerRoot.Parent then return "Invalid" end
-	if not targetCharacter or not targetCharacter.Parent then return "Invalid" end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return "Invalid" end
-	if not targetRoot or not targetRoot.Parent then return "Invalid" end
+	if not attackerCharacter or not attackerCharacter.Parent then
+		return "Invalid"
+	end
+	if not attackerRoot or not attackerRoot.Parent then
+		return "Invalid"
+	end
+	if not targetCharacter or not targetCharacter.Parent then
+		return "Invalid"
+	end
+	if not targetHumanoid or targetHumanoid.Health <= 0 then
+		return "Invalid"
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return "Invalid"
+	end
 
 	local status = self.CombatStatusService
+
+	if status and status:IsDamageLockedFromAttacker(targetCharacter, attackerCharacter) then
+		print("[MoveService] Hit ignored by damage lock:", targetCharacter.Name, attackName or "Attack")
+		return "DamageLocked"
+	end
 
 	if status and status:HasIFrames(targetCharacter, data) then
 		print("[MoveService] Hit ignored by iframe:", targetCharacter.Name, attackName or "Attack")
@@ -278,9 +356,7 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 	if status then
 		canBlock = status:CanAttackBeBlocked(data)
 	else
-		canBlock = data.Blockable ~= false
-			and data.CanBeBlocked ~= false
-			and data.Unblockable ~= true
+		canBlock = data.Blockable ~= false and data.CanBeBlocked ~= false and data.Unblockable ~= true
 	end
 
 	if canBlock and self.BlockService:CanBlockHit(targetCharacter, attackerRoot) then
@@ -359,8 +435,7 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 			else
 				local direction = self.MovementService:GetDirectionBetween(attackerRoot, targetRoot)
 
-				targetRoot.AssemblyLinearVelocity =
-					(direction * data.Knockback)
+				targetRoot.AssemblyLinearVelocity = (direction * data.Knockback)
 					+ Vector3.new(0, data.UpwardKnockback or 0, 0)
 			end
 		else
@@ -375,7 +450,18 @@ function MoveService:ApplyStandardHit(attackerCharacter, attackerRoot, targetCha
 	return "Hit"
 end
 
-function MoveService:BuildContext(player, character, humanoid, root, characterName, moveSlot, moveId, moveData, moveToken, payload)
+function MoveService:BuildContext(
+	player,
+	character,
+	humanoid,
+	root,
+	characterName,
+	moveSlot,
+	moveId,
+	moveData,
+	moveToken,
+	payload
+)
 	local finished = false
 	local moveService = self
 
@@ -409,6 +495,9 @@ function MoveService:BuildContext(player, character, humanoid, root, characterNa
 		ProjectileService = self.ProjectileService,
 		UltService = self.UltService,
 		CinematicService = self.CinematicService,
+		GrabService = self.GrabService,
+		DamageNumberService = self.DamageNumberService,
+		ProgressionService = self.ProgressionService,
 
 		CharacterName = characterName,
 		MoveSlot = moveSlot,
@@ -417,14 +506,43 @@ function MoveService:BuildContext(player, character, humanoid, root, characterNa
 		MoveToken = moveToken,
 
 		Payload = payload,
+
+		ReportNoUltDamage = function(ctx, targetCharacter, targetRoot, damageAmount)
+			if self.GrabService and self.GrabService.ReportNoUltDamage then
+				self.GrabService:ReportNoUltDamage(character, targetCharacter, targetRoot, damageAmount)
+				return
+			end
+
+			if self.DamageNumberService and targetRoot then
+				self.DamageNumberService:ShowDamage(targetRoot, damageAmount, {
+					TextSize = 46,
+				})
+			end
+
+			local humanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
+
+			if humanoid and humanoid.Health <= 0 and self.ProgressionService then
+				self.ProgressionService:AwardKill(character, targetCharacter)
+			end
+		end,
 	}
 
 	function context:IsActive()
-		if finished then return false end
-		if not character or not character.Parent then return false end
-		if not humanoid or humanoid.Health <= 0 then return false end
-		if character:GetAttribute("MoveToken") ~= moveToken then return false end
-		if not character:GetAttribute("UsingMove") then return false end
+		if finished then
+			return false
+		end
+		if not character or not character.Parent then
+			return false
+		end
+		if not humanoid or humanoid.Health <= 0 then
+			return false
+		end
+		if character:GetAttribute("MoveToken") ~= moveToken then
+			return false
+		end
+		if not character:GetAttribute("UsingMove") then
+			return false
+		end
 
 		return true
 	end
@@ -449,7 +567,9 @@ function MoveService:BuildContext(player, character, humanoid, root, characterNa
 	end
 
 	function context:FinishMove(delayTime)
-		if finished then return end
+		if finished then
+			return
+		end
 		finished = true
 
 		task.delay(delayTime or 0, function()
@@ -469,7 +589,13 @@ function MoveService:BuildContext(player, character, humanoid, root, characterNa
 		)
 	end
 
-	function context:ApplyStandardHit(targetCharacter2, targetHumanoid2, targetRoot2, customAttackData, customAttackName)
+	function context:ApplyStandardHit(
+		targetCharacter2,
+		targetHumanoid2,
+		targetRoot2,
+		customAttackData,
+		customAttackName
+	)
 		return moveService:ApplyStandardHit(
 			character,
 			root,
@@ -491,11 +617,18 @@ function MoveService:PerformDefaultMove(context)
 	local attackData = self:BuildAttackData(moveData)
 
 	task.delay(moveData.HitDelay or 0.1, function()
-		if not context:IsActive() then return end
+		if not context:IsActive() then
+			return
+		end
 
-		self.HitboxService:PerformSphereHitbox(character, root, moveData, function(targetCharacter, targetHumanoid, targetRoot)
-			context:ApplyStandardHit(targetCharacter, targetHumanoid, targetRoot, attackData, context.MoveId)
-		end)
+		self.HitboxService:PerformSphereHitbox(
+			character,
+			root,
+			moveData,
+			function(targetCharacter, targetHumanoid, targetRoot)
+				context:ApplyStandardHit(targetCharacter, targetHumanoid, targetRoot, attackData, context.MoveId)
+			end
+		)
 	end)
 
 	context:FinishMove(moveData.LockTime or moveData.Duration or 0.5)
@@ -510,11 +643,17 @@ function MoveService:PerformMove(player, moveRequest)
 		payload = moveRequest
 	end
 
-	if typeof(moveSlot) ~= "string" then return end
-	if not VALID_MOVE_SLOTS[moveSlot] then return end
+	if typeof(moveSlot) ~= "string" then
+		return
+	end
+	if not VALID_MOVE_SLOTS[moveSlot] then
+		return
+	end
 
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
-	if not character then return end
+	if not character then
+		return
+	end
 
 	local characterName = self:GetCharacterName(character)
 	local moveModule = self:GetMoveModule(characterName)
@@ -524,7 +663,7 @@ function MoveService:PerformMove(player, moveRequest)
 		warn("[MoveService] Missing move for slot:", characterName, moveSlot)
 		return
 	end
-	
+
 	if moveSlot == "Ultimate" then
 		if not self.UltService or not self.UltService:CanUseUltimate(player) then
 			warn("[MoveService] Ultimate is not ready")
@@ -563,7 +702,7 @@ function MoveService:PerformMove(player, moveRequest)
 	if not self:CanUseMove(player, character, humanoid, moveSlot, moveId) then
 		return
 	end
-	
+
 	if moveSlot == "Ultimate" then
 		self.UltService:SpendUlt(player)
 	end
@@ -623,13 +762,23 @@ function MoveService:PerformMove(player, moveRequest)
 	end
 end
 
-function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damageAmount)
+function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damageAmount, targetRoot)
 	if not attackerCharacter or not targetCharacter then
 		return
 	end
 
-	if not damageAmount or damageAmount <= 0 then
+	if typeof(damageAmount) ~= "number" or damageAmount <= 0 then
 		return
+	end
+
+	if not targetRoot then
+		targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+	end
+
+	-- Debug damage numbers should be shown for every reported damage event,
+	-- even if the move does not award ult.
+	if self.DamageNumberService and targetRoot then
+		self.DamageNumberService:ShowDamage(targetRoot, damageAmount)
 	end
 
 	if self.UltService and self.UltService.AwardDamageEvent then

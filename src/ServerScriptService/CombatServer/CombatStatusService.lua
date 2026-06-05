@@ -340,4 +340,92 @@ function CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
 	return true
 end
 
+function CombatStatusService:GetOrCreateDamageOwnerValue(character)
+	if not character then
+		return nil
+	end
+
+	local value = character:FindFirstChild("DamageOwner")
+
+	if not value then
+		value = Instance.new("ObjectValue")
+		value.Name = "DamageOwner"
+		value.Parent = character
+	end
+
+	return value
+end
+
+function CombatStatusService:SetDamageLock(targetCharacter, attackerCharacter, duration)
+	if not targetCharacter or not targetCharacter.Parent then
+		return nil
+	end
+
+	if not attackerCharacter or not attackerCharacter.Parent then
+		return nil
+	end
+
+	duration = duration or 3
+
+	local ownerValue = self:GetOrCreateDamageOwnerValue(targetCharacter)
+
+	if ownerValue then
+		ownerValue.Value = attackerCharacter
+	end
+
+	targetCharacter:SetAttribute("DamageLocked", true)
+	targetCharacter:SetAttribute("DamageLockExpiresAt", os.clock() + duration)
+
+	return ownerValue
+end
+
+function CombatStatusService:ClearDamageLock(targetCharacter, attackerCharacter)
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+
+	local ownerValue = targetCharacter:FindFirstChild("DamageOwner")
+
+	if attackerCharacter and ownerValue and ownerValue.Value ~= attackerCharacter then
+		return
+	end
+
+	if ownerValue then
+		ownerValue.Value = nil
+	end
+
+	targetCharacter:SetAttribute("DamageLocked", false)
+	targetCharacter:SetAttribute("DamageLockExpiresAt", 0)
+end
+
+function CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, attackerCharacter)
+	if not targetCharacter or not targetCharacter.Parent then
+		return false
+	end
+
+	if targetCharacter:GetAttribute("DamageLocked") ~= true then
+		return false
+	end
+
+	local expiresAt = targetCharacter:GetAttribute("DamageLockExpiresAt") or 0
+
+	if expiresAt > 0 and os.clock() > expiresAt then
+		self:ClearDamageLock(targetCharacter)
+		return false
+	end
+
+	local ownerValue = targetCharacter:FindFirstChild("DamageOwner")
+
+	if not ownerValue or not ownerValue.Value then
+		self:ClearDamageLock(targetCharacter)
+		return false
+	end
+
+	if ownerValue.Value == attackerCharacter then
+		return false
+	end
+
+	return true
+end
+
 return CombatStatusService

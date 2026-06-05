@@ -192,6 +192,13 @@ function M1Service:CheckStandardHitStart(
 		return "Invalid"
 	end
 
+	if self.CombatStatusService
+		and self.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, attackerCharacter)
+	then
+		print("[M1Service] Hit ignored by damage lock:", targetCharacter.Name, attackName or "M1")
+		return "DamageLocked"
+	end
+
 	if self.CombatStatusService and self.CombatStatusService:HasIFrames(targetCharacter, attackData) then
 		print("[M1Service] Hit ignored by iframe:", targetCharacter.Name, attackName or "M1")
 		return "IFrame"
@@ -569,7 +576,7 @@ function M1Service:DoUptilt(player)
 					return
 				end
 
-				if result == "IFrame" or result == "M1Immune" or result == "Invalid" then
+				if result == "IFrame" or result == "M1Immune" or result == "DamageLocked" or result == "Invalid" then
 					return
 				end
 
@@ -700,7 +707,7 @@ function M1Service:DoDownslam(player)
 					return
 				end
 
-				if result == "IFrame" or result == "Invalid" then
+				if result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
 					return
 				end
 
@@ -826,7 +833,7 @@ function M1Service:DoNormalM1(player)
 					return
 				end
 
-				if result == "IFrame" or result == "M1Immune" or result == "Invalid" then
+				if result == "IFrame" or result == "M1Immune" or result == "DamageLocked" or result == "Invalid" then
 					return
 				end
 

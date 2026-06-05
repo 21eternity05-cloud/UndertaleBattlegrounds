@@ -164,7 +164,7 @@ CombatConfig.M1Data = {
 	},
 
 	[5] = {
-		Damage = 7,
+		Damage = 9,
 		Stun = 1.05,
 		Cooldown = 0.56,
 		HitDelay = 0.12,
@@ -192,7 +192,7 @@ CombatConfig.M1Data = {
 	},
 
 	Uptilt = {
-		Damage = 5,
+		Damage = 1,
 		Stun = 1.65,
 		Cooldown = 0.42,
 		MoveCooldown = 0.8,
@@ -220,7 +220,7 @@ CombatConfig.M1Data = {
 	},
 
 	Downslam = {
-		Damage = 9,
+		Damage = 6,
 		Cooldown = 0.62,
 		HitDelay = 0.12,
 

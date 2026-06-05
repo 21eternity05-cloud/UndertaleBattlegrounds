@@ -29,34 +29,34 @@ local BadTime = {
 
 	HasIFrames = true,
 	IFrameStart = 0,
-	IFrameEnd = 14,
+	IFrameEnd = 16,
 
 	HasArmor = true,
 	ArmorStart = 0,
-	ArmorEnd = 14,
+	ArmorEnd = 16,
 	ArmorDamageReduction = 1,
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
 
 	BoneShotCount = 18, 
-	BoneShotDamage = 0.35,
+	BoneShotDamage = 1,
 	BoneShotRadius = 7.5,
 	BoneShotSpawnMinRadius = 38,
 	BoneShotSpawnMaxRadius = 52,
 	BoneShotTravelTime = 0.34,
 
 	BoneZoneCount = 4,
-	BoneZoneDamage = 3,
+	BoneZoneDamage = 4,
 
 	BoneWallCount = 8,
-	BoneWallDamage = 3.5,
+	BoneWallDamage = 4,
 	BoneWallFireInterval = 0.4,
 	BoneWallTravelTime = 0.48,
 
 	BlasterCircleRounds = 6,
 	BlasterRingCount = 14,
-	BlasterDamage = 0.75,
+	BlasterDamage = 2,
 	BlasterScale = 1,
 	BlasterChargeTime = 0.52,
 	BlasterShotInterval = 0.055,
@@ -379,9 +379,24 @@ local function reportDamage(ctx, targetCharacter, damage)
 	end
 end
 
+local function canDamageTarget(ctx, targetCharacter)
+	if not ctx or not targetCharacter then
+		return false
+	end
+
+	if ctx.CombatStatusService
+		and ctx.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, ctx.Character)
+	then
+		return false
+	end
+
+	return true
+end
+
 local function lethalDamage(ctx, targetCharacter, targetHumanoid, damage)
 	if not targetCharacter or not targetCharacter.Parent then return end
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+	if not canDamageTarget(ctx, targetCharacter) then return end
 
 	damage = damage or 999
 	targetHumanoid:TakeDamage(damage)
@@ -389,6 +404,10 @@ local function lethalDamage(ctx, targetCharacter, targetHumanoid, damage)
 end
 
 local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, targetRoot, sourcePosition, damage)
+	if not canDamageTarget(ctx, targetCharacter) then
+		return false
+	end
+
 	if wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition) then
 		return false
 	end
@@ -834,6 +853,10 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 					damage
 				)
 			else
+				if not canDamageTarget(ctx, hitCharacter) then
+					return
+				end
+
 				nonlethalDamage(hitCharacter, hitHumanoid, damage)
 
 				if ctx.VFXService then
@@ -1210,7 +1233,11 @@ local function runBlueGravityFinale(ctx, data)
 		if not targetCharacter then return end
 
 		targetRoot.AssemblyLinearVelocity = velocity
-		nonlethalDamage(targetCharacter, targetHumanoid, perHit)
+
+		if canDamageTarget(ctx, targetCharacter) then
+			nonlethalDamage(targetCharacter, targetHumanoid, perHit)
+		end
+
 		playSansMoveVFX(ctx, "BlueHeart", targetCharacter, targetRoot)
 		playSansSFX(ctx, "Teleport", targetRoot, 2)
 
@@ -1360,6 +1387,10 @@ function BadTime.Execute(ctx)
 			cinematicService:ClearTemporaryCombatStatus(character)
 		end
 
+		if ctx.CombatStatusService then
+			ctx.CombatStatusService:ClearDamageLock(targetCharacter, character)
+		end
+
 		clearBadTimeVictimLock(
 			targetCharacter,
 			targetHumanoid,
@@ -1452,6 +1483,10 @@ function BadTime.Execute(ctx)
 	end
 
 	print("[BadTime] Confirmed:", targetCharacter.Name)
+
+	if ctx.CombatStatusService then
+		ctx.CombatStatusService:SetDamageLock(targetCharacter, character, data.SequenceTime or 11.5)
+	end
 
 	if cinematicService then
 		sansLockState = cinematicService:LockCharacter(character, {

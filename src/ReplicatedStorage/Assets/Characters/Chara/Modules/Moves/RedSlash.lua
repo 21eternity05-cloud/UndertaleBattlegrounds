@@ -8,7 +8,7 @@ local RedSlash = {
 	MaxLockTime = 1.7,
 
 	Damage = 8,
-	Stun = 0.65,
+	Stun = 1,
 
 	Radius = 5,
 	Offset = CFrame.new(0, 0, -4),
@@ -34,7 +34,7 @@ local RedSlash = {
 	Unblockable = false,
 
 	Guardbreak = true,
-	GuardbreakStun = 1.35,
+	GuardbreakStun = 1.8,
 
 	CanBeCountered = true,
 	HitCancelsTarget = true,

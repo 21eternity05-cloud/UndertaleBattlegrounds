@@ -67,9 +67,13 @@ local VICTIM_ANIMATIONS = { "SpecialHellVictim", "UltGrabVictim" }
 local GRAB_MARKER = "Grab"
 local HELL_MARKER = "Hell"
 
-local function reportDamage(ctx, targetCharacter, damage)
-	if not ctx or not targetCharacter then return end
-	if typeof(damage) ~= "number" or damage <= 0 then return end
+local function reportDamage(ctx, targetCharacter, targetRoot, damage)
+	if not ctx or not targetCharacter then
+		return
+	end
+	if typeof(damage) ~= "number" or damage <= 0 then
+		return
+	end
 
 	local moveData = ctx.MoveData
 	local awardsUlt = true
@@ -80,7 +84,7 @@ local function reportDamage(ctx, targetCharacter, damage)
 
 	if awardsUlt then
 		if ctx.ReportDamageEvent then
-			ctx:ReportDamageEvent(targetCharacter, damage)
+			ctx:ReportDamageEvent(targetCharacter, damage, targetRoot)
 		elseif ctx.UltService and ctx.UltService.AwardDamageEvent then
 			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
 		end
@@ -88,18 +92,28 @@ local function reportDamage(ctx, targetCharacter, damage)
 		return
 	end
 
-	-- Ultimate / no-ult-gain path:
-	-- Do NOT call AwardDamageEvent, because that gives ult from damage.
-	-- Only award kill/Dust/banner if the target died.
+	if ctx.ReportNoUltDamage then
+		ctx:ReportNoUltDamage(targetCharacter, targetRoot, damage)
+		return
+	end
+
+	if ctx.GrabService and ctx.GrabService.ReportNoUltDamage then
+		ctx.GrabService:ReportNoUltDamage(ctx.Character, targetCharacter, targetRoot, damage)
+		return
+	end
+
+	if ctx.DamageNumberService and targetRoot then
+		ctx.DamageNumberService:ShowDamage(targetRoot, damage, {
+			TextSize = 56,
+		})
+	end
+
 	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 
 	if humanoid and humanoid.Health <= 0 then
 		if ctx.ProgressionService and ctx.ProgressionService.AwardKill then
 			ctx.ProgressionService:AwardKill(ctx.Character, targetCharacter)
-		elseif ctx.UltService
-			and ctx.UltService.ProgressionService
-			and ctx.UltService.ProgressionService.AwardKill
-		then
+		elseif ctx.UltService and ctx.UltService.ProgressionService and ctx.UltService.ProgressionService.AwardKill then
 			ctx.UltService.ProgressionService:AwardKill(ctx.Character, targetCharacter)
 		end
 	end
@@ -162,8 +176,12 @@ local function playFirstAnimation(ctx, character, names, fadeTime, speed, looped
 end
 
 local function stopAnimation(ctx, character, animationNames, fadeTime)
-	if not ctx.StateService or not ctx.StateService.AnimationService then return end
-	if not ctx.StateService.AnimationService.StopCharacterAnimationByName then return end
+	if not ctx.StateService or not ctx.StateService.AnimationService then
+		return
+	end
+	if not ctx.StateService.AnimationService.StopCharacterAnimationByName then
+		return
+	end
 
 	for _, animationName in ipairs(animationNames) do
 		ctx.StateService.AnimationService:StopCharacterAnimationByName(character, animationName, fadeTime or 0.08)
@@ -267,8 +285,12 @@ local function getGroundPositionFromOrigin(character, victimCharacter, originCFr
 end
 
 local function lockGrabVictim(ctx, victimCharacter, victimHumanoid, duration)
-	if not victimCharacter or not victimCharacter.Parent then return end
-	if not victimHumanoid or not victimHumanoid.Parent then return end
+	if not victimCharacter or not victimCharacter.Parent then
+		return
+	end
+	if not victimHumanoid or not victimHumanoid.Parent then
+		return
+	end
 
 	victimCharacter:SetAttribute("Grabbed", true)
 	victimCharacter:SetAttribute("CinematicLocked", true)
@@ -332,17 +354,15 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 	warning.CFrame = CFrame.new(groundPosition)
 	warning.Parent = workspace
 
-	TweenService:Create(
-		warning,
-		TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{
-			Size = moveData.HellWarningSize or Vector3.new(23, 0.18, 23),
-			Transparency = 0.18,
-		}
-	):Play()
+	TweenService:Create(warning, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = moveData.HellWarningSize or Vector3.new(23, 0.18, 23),
+		Transparency = 0.18,
+	}):Play()
 
 	task.delay(0.3, function()
-		if not warning or not warning.Parent then return end
+		if not warning or not warning.Parent then
+			return
+		end
 
 		local beamFinalSize = moveData.HellBeamFinalSize or Vector3.new(18, 95, 18)
 		local beamHeight = moveData.HellBeamHeight or (beamFinalSize.Y / 2)
@@ -360,14 +380,11 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 		beam.CFrame = CFrame.new(groundPosition + Vector3.new(0, 0.5, 0))
 		beam.Parent = workspace
 
-		local growTween = TweenService:Create(
-			beam,
-			TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-			{
+		local growTween =
+			TweenService:Create(beam, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 				Size = beamFinalSize,
 				CFrame = CFrame.new(groundPosition + Vector3.new(0, beamHeight, 0)),
-			}
-		)
+			})
 
 		growTween:Play()
 
@@ -382,14 +399,10 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 
 		task.delay(0.55, function()
 			if beam and beam.Parent then
-				TweenService:Create(
-					beam,
-					TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{
-						Transparency = 1,
-						Size = Vector3.new(4, beamFinalSize.Y, 4),
-					}
-				):Play()
+				TweenService:Create(beam, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Transparency = 1,
+					Size = Vector3.new(4, beamFinalSize.Y, 4),
+				}):Play()
 			end
 		end)
 
@@ -456,7 +469,9 @@ function SpecialHell.Execute(ctx)
 	end
 
 	local function cleanup()
-		if finished then return end
+		if finished then
+			return
+		end
 		finished = true
 
 		disconnectAll()
@@ -493,12 +508,18 @@ function SpecialHell.Execute(ctx)
 		end
 
 		if victimCharacter and victimCharacter.Parent then
+			if ctx.CombatStatusService then
+				ctx.CombatStatusService:ClearDamageLock(victimCharacter, character)
+			end
+
 			victimCharacter:SetAttribute("Grabbed", false)
 			victimCharacter:SetAttribute("CinematicLocked", false)
 			cinematicService:ClearTemporaryCombatStatus(victimCharacter)
 		end
 
-		if victimCharacter and victimHumanoid and oldVictimState then
+		if oldVictimState and ctx.GrabService and ctx.GrabService.UnlockCharacter then
+			ctx.GrabService:UnlockCharacter(oldVictimState)
+		elseif victimCharacter and victimHumanoid and oldVictimState then
 			unlockGrabVictim(victimCharacter, victimHumanoid, oldVictimState)
 		end
 
@@ -515,9 +536,15 @@ function SpecialHell.Execute(ctx)
 	end
 
 	local function doHell()
-		if hellResolved then return end
-		if not victimCharacter or not victimHumanoid or not victimRoot then return end
-		if not victimCharacter.Parent or victimHumanoid.Health <= 0 then return end
+		if hellResolved then
+			return
+		end
+		if not victimCharacter or not victimHumanoid or not victimRoot then
+			return
+		end
+		if not victimCharacter.Parent or victimHumanoid.Health <= 0 then
+			return
+		end
 
 		hellResolved = true
 
@@ -531,8 +558,13 @@ function SpecialHell.Execute(ctx)
 		cinematicService:ImpactFrame(victimCharacter, "RedBlack", nil, nil, nil, 0.08)
 
 		local damage = moveData.Damage or 999
-		victimHumanoid:TakeDamage(damage)
-		reportDamage(ctx, victimCharacter, damage)
+
+		if not ctx.CombatStatusService
+			or not ctx.CombatStatusService:IsDamageLockedFromAttacker(victimCharacter, character)
+		then
+			victimHumanoid:TakeDamage(damage)
+			reportDamage(ctx, victimCharacter, victimRoot, damage)
+		end
 	end
 
 	local function playConfirmedCinematic()
@@ -545,12 +577,26 @@ function SpecialHell.Execute(ctx)
 
 		stopAnimation(ctx, character, STARTUP_ANIMATIONS, 0.04)
 
-		oldVictimState = {
-			WalkSpeed = victimHumanoid.WalkSpeed,
-			JumpPower = victimHumanoid.JumpPower,
-			JumpHeight = victimHumanoid.JumpHeight,
-			AutoRotate = victimHumanoid.AutoRotate,
-		}
+		if ctx.GrabService and ctx.GrabService.LockCharacter then
+			oldVictimState = ctx.GrabService:LockCharacter(victimCharacter, {
+				Duration = moveData.Duration or 8.5,
+				AttackerCharacter = character,
+				IFrameActive = true,
+				ArmorActive = true,
+				ArmorDamageReduction = 1,
+				CancelCurrentMove = true,
+				ClearCombatMovement = true,
+			})
+		else
+			oldVictimState = {
+				WalkSpeed = victimHumanoid.WalkSpeed,
+				JumpPower = victimHumanoid.JumpPower,
+				JumpHeight = victimHumanoid.JumpHeight,
+				AutoRotate = victimHumanoid.AutoRotate,
+			}
+
+			lockGrabVictim(ctx, victimCharacter, victimHumanoid, moveData.Duration or 8.5)
+		end
 
 		lockGrabVictim(ctx, victimCharacter, victimHumanoid, moveData.Duration or 8.5)
 
@@ -622,9 +668,17 @@ function SpecialHell.Execute(ctx)
 	end
 
 	local function tryConfirmGrab(targetCharacter, targetHumanoid, targetRoot)
-		if confirmed or finished then return false end
+		if confirmed or finished then
+			return false
+		end
 
 		if not cinematicService:IsValidGrabTarget(ctx, targetCharacter, targetHumanoid, targetRoot, moveData) then
+			return false
+		end
+
+		if ctx.CombatStatusService
+			and ctx.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, character)
+		then
 			return false
 		end
 
@@ -635,6 +689,10 @@ function SpecialHell.Execute(ctx)
 		victimCharacter = targetCharacter
 		victimHumanoid = targetHumanoid
 		victimRoot = targetRoot
+
+		if ctx.CombatStatusService then
+			ctx.CombatStatusService:SetDamageLock(victimCharacter, character, moveData.Duration or 8.5)
+		end
 
 		print("[SpecialHell] Grab confirmed:", targetCharacter.Name)
 		playConfirmedCinematic()
@@ -669,7 +727,9 @@ function SpecialHell.Execute(ctx)
 	local grabMarkerReached = false
 
 	addConnection(startupTrack:GetMarkerReachedSignal(GRAB_MARKER):Connect(function()
-		if finished or confirmed then return end
+		if finished or confirmed then
+			return
+		end
 
 		if not ctx:IsActive() then
 			finish(0)
@@ -681,23 +741,21 @@ function SpecialHell.Execute(ctx)
 		local hitOnce = false
 		local startTime = os.clock()
 
-		while ctx:IsActive()
+		while
+			ctx:IsActive()
 			and not finished
 			and not confirmed
 			and os.clock() - startTime < (moveData.GrabActiveTime or 0.15)
 		do
-			ctx.HitboxService:PerformSphereAtCFrame(
-				character,
-				root.CFrame,
-				{
-					Radius = moveData.Radius or 7,
-					Offset = moveData.Offset or CFrame.new(0, 0, -5),
-				},
-				function(targetCharacter, targetHumanoid, targetRoot)
-					if hitOnce then return end
-					hitOnce = tryConfirmGrab(targetCharacter, targetHumanoid, targetRoot)
+			ctx.HitboxService:PerformSphereAtCFrame(character, root.CFrame, {
+				Radius = moveData.Radius or 7,
+				Offset = moveData.Offset or CFrame.new(0, 0, -5),
+			}, function(targetCharacter, targetHumanoid, targetRoot)
+				if hitOnce then
+					return
 				end
-			)
+				hitOnce = tryConfirmGrab(targetCharacter, targetHumanoid, targetRoot)
+			end)
 
 			task.wait(moveData.GrabTickRate or 0.03)
 		end
@@ -709,7 +767,9 @@ function SpecialHell.Execute(ctx)
 	end))
 
 	addConnection(startupTrack.Ended:Connect(function()
-		if finished or confirmed then return end
+		if finished or confirmed then
+			return
+		end
 
 		if not grabMarkerReached then
 			warn("[SpecialHell] Startup ended before Grab marker")
