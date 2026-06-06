@@ -2,7 +2,7 @@ local KnifeDash = {
 	DisplayName = "Knife Dash",
 	AnimationName = "KnifeDash",
 
-	Cooldown = 7,
+	Cooldown = 8.5,
 	MaxLockTime = 1.6,
 
 	Windup = 0.32,
@@ -32,7 +32,7 @@ local KnifeDash = {
 	HasArmor = false,
 
 	Hitbox = {
-		Radius = 6,
+		Radius = 6.2,
 		StartOffset = -7.5,
 		EndOffset = -22,
 	},

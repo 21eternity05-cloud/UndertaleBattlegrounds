@@ -103,7 +103,7 @@ CombatConfig.BlockAnimation = "Block"
 CombatConfig.M1Data = {
 	[1] = {
 		Damage = 4,
-		Stun = 0.78,
+		Stun = 0.6,
 		Cooldown = 0.30,
 		HitDelay = 0.08,
 
@@ -119,7 +119,7 @@ CombatConfig.M1Data = {
 
 	[2] = {
 		Damage = 4,
-		Stun = 0.8,
+		Stun = 0.6,
 		Cooldown = 0.30,
 		HitDelay = 0.08,
 
@@ -135,7 +135,7 @@ CombatConfig.M1Data = {
 
 	[3] = {
 		Damage = 5,
-		Stun = 0.85,
+		Stun = 0.6,
 		Cooldown = 0.32,
 		HitDelay = 0.09,
 
@@ -151,7 +151,7 @@ CombatConfig.M1Data = {
 
 	[4] = {
 		Damage = 5,
-		Stun = 0.88,
+		Stun = 0.6,
 		Cooldown = 0.32,
 		HitDelay = 0.09,
 
@@ -195,7 +195,7 @@ CombatConfig.M1Data = {
 
 	Uptilt = {
 		Damage = 1,
-		Stun = 1,
+		Stun = 0.7,
 		Cooldown = 0.42,
 		MoveCooldown = 0.8,
 		HitDelay = 0.1,

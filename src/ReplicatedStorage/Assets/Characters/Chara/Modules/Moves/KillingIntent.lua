@@ -13,7 +13,7 @@ local KillingIntent = {
 	Damage = 14,
 	Stun = 2.25,
 
-	Radius = 12,
+	Radius = 20,
 	Offset = CFrame.new(0, 0, -4),
 
 	-- Killing Intent counter hit now uses downslam-style movement.

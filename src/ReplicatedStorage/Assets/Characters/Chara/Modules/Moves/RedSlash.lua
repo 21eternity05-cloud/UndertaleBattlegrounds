@@ -10,8 +10,8 @@ local RedSlash = {
 	Damage = 16,
 	Stun = 1,
 
-	Radius = 5,
-	Offset = CFrame.new(0, 0, -4),
+	Radius = 7,
+	Offset = CFrame.new(0, 0, -6.4),
 
 	-- Red Slash should feel like M5 knockback,
 	-- but with more forward strength.
