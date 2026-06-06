@@ -5,7 +5,7 @@ local SpecialHell = {
 	DisplayName = "Special Hell",
 	AnimationName = nil,
 
-	Cooldown = 1,
+	Cooldown = 3,
 	Duration = 8.5,
 	LockTime = 8.5,
 	MaxLockTime = 9,
@@ -298,9 +298,7 @@ local function setKnifeCollision(character, enabled)
 		end
 	end
 
-	local equippedWeapons = character:FindFirstChild("EquippedWeapons")
-	applyToObject(equippedWeapons)
-
+	applyToObject(character:FindFirstChild("EquippedWeapons"))
 	applyToObject(character:FindFirstChild("RealKnife", true))
 	applyToObject(character:FindFirstChild("Knife", true))
 end
@@ -380,6 +378,77 @@ local function positionVictimForGrab(attackerRoot, victimRoot, distance)
 		victimPosition,
 		Vector3.new(attackerPosition.X, victimPosition.Y, attackerPosition.Z)
 	)
+end
+
+local function lockGrabAttacker(character, humanoid, root, duration)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	if not humanoid or not humanoid.Parent then
+		return nil
+	end
+
+	local oldState = {
+		WalkSpeed = humanoid.WalkSpeed,
+		JumpPower = humanoid.JumpPower,
+		JumpHeight = humanoid.JumpHeight,
+		AutoRotate = humanoid.AutoRotate,
+		JumpEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping),
+		RootAnchored = root and root.Anchored or false,
+	}
+
+	character:SetAttribute("Grabbing", true)
+	character:SetAttribute("CinematicLocked", true)
+	character:SetAttribute("MovementLocked", true)
+	character:SetAttribute("DashLocked", true)
+	character:SetAttribute("Attacking", true)
+	character:SetAttribute("UsingMove", true)
+	character:SetAttribute("JumpLockedUntil", os.clock() + (duration or 8.5))
+
+	humanoid.WalkSpeed = 0
+	humanoid.Jump = false
+	humanoid.JumpPower = 0
+	humanoid.JumpHeight = 0
+	humanoid.AutoRotate = false
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+
+	if root then
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.Anchored = true
+	end
+
+	return oldState
+end
+
+local function unlockGrabAttacker(character, humanoid, root, oldState)
+	if not oldState then
+		return
+	end
+
+	if character and character.Parent then
+		character:SetAttribute("Grabbing", false)
+		character:SetAttribute("CinematicLocked", false)
+		character:SetAttribute("MovementLocked", false)
+		character:SetAttribute("DashLocked", false)
+		character:SetAttribute("Attacking", false)
+		character:SetAttribute("UsingMove", false)
+	end
+
+	if root and root.Parent then
+		root.Anchored = oldState.RootAnchored == true
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	end
+
+	if humanoid and humanoid.Parent and humanoid.Health > 0 then
+		humanoid.WalkSpeed = oldState.WalkSpeed or 16
+		humanoid.JumpPower = oldState.JumpPower or 50
+		humanoid.JumpHeight = oldState.JumpHeight or 7.2
+		humanoid.AutoRotate = oldState.AutoRotate ~= false
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, oldState.JumpEnabled ~= false)
+	end
 end
 
 local function lockGrabVictim(ctx, victimCharacter, victimHumanoid, duration)
@@ -545,6 +614,7 @@ function SpecialHell.Execute(ctx)
 	local victimHumanoid = nil
 	local victimRoot = nil
 	local oldVictimState = nil
+	local attackerGrabState = nil
 
 	local function addConnection(connection)
 		if connection then
@@ -558,6 +628,18 @@ function SpecialHell.Execute(ctx)
 		end
 
 		markerConnections = {}
+	end
+
+	local function clearTempStatus(targetCharacter)
+		if not targetCharacter then
+			return
+		end
+
+		if ctx.CombatStatusService and ctx.CombatStatusService.ClearTemporaryCombatStatus then
+			ctx.CombatStatusService:ClearTemporaryCombatStatus(targetCharacter)
+		elseif ctx.CinematicService and ctx.CinematicService.ClearTemporaryCombatStatus then
+			ctx.CinematicService:ClearTemporaryCombatStatus(targetCharacter)
+		end
 	end
 
 	local function cleanup()
@@ -584,16 +666,13 @@ function SpecialHell.Execute(ctx)
 			victimTrack:Stop(0.08)
 		end
 
-		if character and character.Parent then
-			character:SetAttribute("Grabbing", false)
-			character:SetAttribute("CinematicLocked", false)
-
-			if ctx.CombatStatusService and ctx.CombatStatusService.ClearTemporaryCombatStatus then
-				ctx.CombatStatusService:ClearTemporaryCombatStatus(character)
-			end
+		if attackerGrabState then
+			unlockGrabAttacker(character, humanoid, root, attackerGrabState)
+			attackerGrabState = nil
 		end
 
 		if character and character.Parent then
+			clearTempStatus(character)
 			forceKnifeCollisionOffForAWhile(character, 1.5)
 		end
 
@@ -605,9 +684,7 @@ function SpecialHell.Execute(ctx)
 			victimCharacter:SetAttribute("Grabbed", false)
 			victimCharacter:SetAttribute("CinematicLocked", false)
 
-			if ctx.CombatStatusService and ctx.CombatStatusService.ClearTemporaryCombatStatus then
-				ctx.CombatStatusService:ClearTemporaryCombatStatus(victimCharacter)
-			end
+			clearTempStatus(victimCharacter)
 		end
 
 		if oldVictimState and ctx.GrabService and ctx.GrabService.UnlockCharacter then
@@ -658,6 +735,14 @@ function SpecialHell.Execute(ctx)
 		end
 	end
 
+	local function setTempStatus(targetCharacter, statusData)
+		if ctx.CombatStatusService and ctx.CombatStatusService.SetTemporaryCombatStatus then
+			ctx.CombatStatusService:SetTemporaryCombatStatus(targetCharacter, statusData)
+		elseif ctx.CinematicService and ctx.CinematicService.SetTemporaryCombatStatus then
+			ctx.CinematicService:SetTemporaryCombatStatus(targetCharacter, statusData)
+		end
+	end
+
 	local function playConfirmedCinematic()
 		confirmed = true
 
@@ -669,6 +754,8 @@ function SpecialHell.Execute(ctx)
 		end
 
 		stopAnimation(ctx, character, STARTUP_ANIMATIONS, 0.04)
+
+		attackerGrabState = lockGrabAttacker(character, humanoid, root, moveData.Duration or 8.5)
 
 		if ctx.GrabService and ctx.GrabService.LockCharacter then
 			oldVictimState = ctx.GrabService:LockCharacter(victimCharacter, {
@@ -692,25 +779,23 @@ function SpecialHell.Execute(ctx)
 			lockGrabVictim(ctx, victimCharacter, victimHumanoid, moveData.Duration or 8.5)
 		end
 
-		if ctx.CombatStatusService and ctx.CombatStatusService.SetTemporaryCombatStatus then
-			ctx.CombatStatusService:SetTemporaryCombatStatus(character, {
-				IFrameActive = true,
-				ArmorActive = true,
-				ArmorDamageReduction = 1,
-				ArmorPreventsStun = true,
-				ArmorPreventsKnockback = true,
-				ArmorPreventsHitCancel = true,
-			})
+		setTempStatus(character, {
+			IFrameActive = true,
+			ArmorActive = true,
+			ArmorDamageReduction = 1,
+			ArmorPreventsStun = true,
+			ArmorPreventsKnockback = true,
+			ArmorPreventsHitCancel = true,
+		})
 
-			ctx.CombatStatusService:SetTemporaryCombatStatus(victimCharacter, {
-				IFrameActive = true,
-				ArmorActive = true,
-				ArmorDamageReduction = 1,
-				ArmorPreventsStun = true,
-				ArmorPreventsKnockback = true,
-				ArmorPreventsHitCancel = true,
-			})
-		end
+		setTempStatus(victimCharacter, {
+			IFrameActive = true,
+			ArmorActive = true,
+			ArmorDamageReduction = 1,
+			ArmorPreventsStun = true,
+			ArmorPreventsKnockback = true,
+			ArmorPreventsHitCancel = true,
+		})
 
 		positionVictimForGrab(root, victimRoot, moveData.CinematicDistance or 4.926)
 
@@ -786,37 +871,20 @@ function SpecialHell.Execute(ctx)
 		return true
 	end
 
-	if ctx.CombatStatusService and ctx.CombatStatusService.SetTemporaryCombatStatus then
-		ctx.CombatStatusService:SetTemporaryCombatStatus(character, {
-			IFrameActive = true,
-			ArmorActive = true,
-			ArmorDamageReduction = moveData.ArmorDamageReduction or 1,
-			ArmorPreventsStun = true,
-			ArmorPreventsKnockback = true,
-			ArmorPreventsHitCancel = true,
-		})
-	elseif ctx.CinematicService then
-		ctx.CinematicService:SetTemporaryCombatStatus(character, {
-			IFrameActive = true,
-			ArmorActive = true,
-			ArmorDamageReduction = moveData.ArmorDamageReduction or 1,
-			ArmorPreventsStun = true,
-			ArmorPreventsKnockback = true,
-			ArmorPreventsHitCancel = true,
-		})
-	end
+	setTempStatus(character, {
+		IFrameActive = true,
+		ArmorActive = true,
+		ArmorDamageReduction = moveData.ArmorDamageReduction or 1,
+		ArmorPreventsStun = true,
+		ArmorPreventsKnockback = true,
+		ArmorPreventsHitCancel = true,
+	})
 
 	local startupTrack = select(1, playFirstAnimation(ctx, character, STARTUP_ANIMATIONS, 0.04, 1, false))
 
 	if not startupTrack then
 		warn("[SpecialHell] Missing startup animation")
-
-		if ctx.CombatStatusService and ctx.CombatStatusService.ClearTemporaryCombatStatus then
-			ctx.CombatStatusService:ClearTemporaryCombatStatus(character)
-		elseif ctx.CinematicService then
-			ctx.CinematicService:ClearTemporaryCombatStatus(character)
-		end
-
+		clearTempStatus(character)
 		ctx:FinishMove(0)
 		return
 	end

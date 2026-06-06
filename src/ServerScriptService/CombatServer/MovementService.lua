@@ -14,6 +14,7 @@ function MovementService.new(config)
 	self.ActiveYHoldControllers = {}
 	self.ActiveCombatKnockbacks = {}
 	self.ActiveCollisionChecks = {}
+	self.ActiveGroundSplatDownslams = {}
 
 	return self
 end
@@ -68,6 +69,28 @@ function MovementService:StopCollisionCheck(root)
 	end
 end
 
+function MovementService:StopGroundSplatDownslam(root)
+	local active = self.ActiveGroundSplatDownslams[root]
+
+	if not active then
+		return
+	end
+
+	if active.Connection then
+		active.Connection:Disconnect()
+	end
+
+	if active.LinearVelocity and active.LinearVelocity.Parent then
+		active.LinearVelocity:Destroy()
+	end
+
+	if active.Attachment and active.Attachment.Parent then
+		active.Attachment:Destroy()
+	end
+
+	self.ActiveGroundSplatDownslams[root] = nil
+end
+
 function MovementService:ClearCombatMovementControllers(root)
 	if not root or not root.Parent then
 		return
@@ -78,6 +101,10 @@ function MovementService:ClearCombatMovementControllers(root)
 
 	if self.StopCollisionCheck then
 		self:StopCollisionCheck(root)
+	end
+
+	if self.StopGroundSplatDownslam then
+		self:StopGroundSplatDownslam(root)
 	end
 
 	if self.ActiveCombatKnockbacks and self.ActiveCombatKnockbacks[root] then
@@ -95,14 +122,13 @@ function MovementService:ClearCombatMovementControllers(root)
 	end
 
 	for _, child in ipairs(root:GetChildren()) do
-		if child:IsA("LinearVelocity")
-			or child:IsA("AlignPosition")
-			or child:IsA("VectorForce")
-		then
+		if child:IsA("LinearVelocity") or child:IsA("AlignPosition") or child:IsA("VectorForce") then
 			local name = child.Name
 
-			if name == "CombatKnockbackLinearVelocity"
+			if
+				name == "CombatKnockbackLinearVelocity"
 				or name == "DownslamLinearVelocity"
+				or name == "GroundSplatDownslamLinearVelocity"
 				or name == "TempAlignPosition"
 				or name == "BlueSnareHoldAlign"
 				or name == "DummyUptiltAlign"
@@ -113,8 +139,10 @@ function MovementService:ClearCombatMovementControllers(root)
 		elseif child:IsA("Attachment") then
 			local name = child.Name
 
-			if name == "CombatKnockbackAttachment"
+			if
+				name == "CombatKnockbackAttachment"
 				or name == "DownslamVelocityAttachment"
+				or name == "GroundSplatDownslamAttachment"
 				or name == "TempAlignAttachment"
 				or name == "BlueSnareHoldAttachment"
 				or name == "DummyUptiltAttachment"
@@ -282,11 +310,13 @@ function MovementService:ShowKnockbackDebug(root, velocity, duration, label)
 		{ Position = endPosition }
 	):Play()
 
-	TweenService:Create(
-		orb,
-		TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-		{ Position = endPosition }
-	):Play()
+	TweenService
+		:Create(
+			orb,
+			TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+			{ Position = endPosition }
+		)
+		:Play()
 
 	Debris:AddItem(startMarker, duration + 1)
 	Debris:AddItem(endMarker, duration + 1)
@@ -332,7 +362,8 @@ function MovementService:ApplyForceKnockback(targetRoot, velocity, duration, max
 	self:ShowKnockbackDebug(targetRoot, velocity, duration, debugLabel or "Force")
 
 	task.delay(duration, function()
-		if self.ActiveCombatKnockbacks[targetRoot]
+		if
+			self.ActiveCombatKnockbacks[targetRoot]
 			and self.ActiveCombatKnockbacks[targetRoot].LinearVelocity == linearVelocity
 		then
 			self.ActiveCombatKnockbacks[targetRoot] = nil
@@ -353,8 +384,6 @@ function MovementService:ApplyForceKnockback(targetRoot, velocity, duration, max
 	return linearVelocity, attachment
 end
 
--- Preset Knockback:
--- Short combo-ender pop, fixed upward launch, around 20 studs feeling.
 function MovementService:ApplyPresetKnockback(attackerRoot, targetRoot, data, debugLabel)
 	if not attackerRoot or not attackerRoot.Parent then
 		return nil, nil
@@ -366,10 +395,7 @@ function MovementService:ApplyPresetKnockback(attackerRoot, targetRoot, data, de
 
 	data = data or {}
 
-	local direction = self:GetFlatDirection(
-		targetRoot.Position - attackerRoot.Position,
-		attackerRoot.CFrame.LookVector
-	)
+	local direction = self:GetFlatDirection(targetRoot.Position - attackerRoot.Position, attackerRoot.CFrame.LookVector)
 
 	local speed = data.PresetKnockbackSpeed or data.KnockbackSpeed or data.Knockback or 48
 	local upward = data.PresetKnockbackUpward or data.UpwardKnockback or 28
@@ -378,17 +404,9 @@ function MovementService:ApplyPresetKnockback(attackerRoot, targetRoot, data, de
 
 	local velocity = direction * speed + Vector3.new(0, upward, 0)
 
-	return self:ApplyForceKnockback(
-		targetRoot,
-		velocity,
-		duration,
-		maxForce,
-		debugLabel or "PresetKnockback"
-	)
+	return self:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel or "PresetKnockback")
 end
 
--- Directional Knockback:
--- X/Z only. No upward launch. Optional Y-hold.
 function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, data, debugLabel)
 	if not attackerRoot or not attackerRoot.Parent then
 		return nil, nil
@@ -400,10 +418,7 @@ function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, dat
 
 	data = data or {}
 
-	local direction = self:GetFlatDirection(
-		targetRoot.Position - attackerRoot.Position,
-		attackerRoot.CFrame.LookVector
-	)
+	local direction = self:GetFlatDirection(targetRoot.Position - attackerRoot.Position, attackerRoot.CFrame.LookVector)
 
 	local speed = data.DirectionalSpeed or data.HorizontalKnockback or data.Knockback or 38
 	local duration = data.DirectionalDuration or data.KnockbackDuration or 0.3
@@ -412,13 +427,8 @@ function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, dat
 
 	local velocity = direction * speed
 
-	local linearVelocity, attachment = self:ApplyForceKnockback(
-		targetRoot,
-		velocity,
-		duration,
-		maxForce,
-		debugLabel or "DirectionalXZ"
-	)
+	local linearVelocity, attachment =
+		self:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel or "DirectionalXZ")
 
 	if yHoldDuration and yHoldDuration > 0 then
 		self:StartYHold(targetRoot, yHoldDuration)
@@ -431,7 +441,6 @@ function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, dat
 	return linearVelocity, attachment
 end
 
--- Backward compatibility. Old callers of ApplyStraightKnockback should now mean X/Z only.
 function MovementService:ApplyStraightKnockback(targetRoot, direction, speed, upward, duration, maxForce, debugLabel)
 	local flatDirection = self:GetFlatDirection(direction)
 	local velocity = flatDirection * (speed or 38)
@@ -445,8 +454,6 @@ function MovementService:ApplyStraightKnockback(targetRoot, direction, speed, up
 	)
 end
 
--- Preset Downslam:
--- Always downward, slight forward, monitored by M1Service until ground splat.
 function MovementService:ApplyDownslamKnockback(attackerRoot, targetRoot, data, debugLabel)
 	if not attackerRoot or not attackerRoot.Parent then
 		return nil, nil
@@ -489,12 +496,10 @@ function MovementService:ApplyDownslamKnockback(attackerRoot, targetRoot, data, 
 	return linearVelocity, attachment
 end
 
--- Backward compatibility.
 function MovementService:ApplyDownslamStyleKnockback(attackerRoot, targetRoot, data)
 	return self:ApplyDownslamKnockback(attackerRoot, targetRoot, data, "Downslam")
 end
 
--- Old function kept, but now debugged.
 function MovementService:ApplyLinearVelocityUntilStopped(root, velocity, maxForce)
 	if not root or not root.Parent then
 		return nil, nil
@@ -521,6 +526,251 @@ function MovementService:ApplyLinearVelocityUntilStopped(root, velocity, maxForc
 	return linearVelocity, attachment
 end
 
+function MovementService:CreateGroundSplatPart(position, data)
+	local part = Instance.new("Part")
+	part.Name = "GroundSlamSplatPlaceholder"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Material = Enum.Material.Neon
+	part.Color = Color3.fromRGB(255, 255, 255)
+	part.Transparency = 0.4
+	part.Size = data.SplatPartSize or Vector3.new(8, 0.25, 8)
+	part.CFrame = CFrame.new(position)
+	part.Parent = workspace
+
+	Debris:AddItem(part, data.SplatPartLifetime or 0.35)
+
+	return part
+end
+
+function MovementService:PlayGroundSplatVFX(targetRoot, groundPosition, services)
+	services = services or {}
+
+	local vfxService = services.VFXService
+
+	if not vfxService then
+		return
+	end
+
+	if vfxService.EmitAttachmentAtWorldPosition then
+		vfxService:EmitAttachmentAtWorldPosition(
+			"GroundSplatCrack",
+			groundPosition + Vector3.new(0, 0.12, 0),
+			1.25,
+			true
+		)
+	end
+
+	if vfxService.PlaySFXAtPart then
+		vfxService:PlaySFXAtPart("GroundSplat", targetRoot, 3)
+	elseif vfxService.PlayCharacterSFXAtPart then
+		vfxService:PlayCharacterSFXAtPart("Universal", "GroundSplat", targetRoot, 3)
+	end
+end
+
+function MovementService:ApplyGroundSplatDownslam(
+	attackerRoot,
+	targetCharacter,
+	targetHumanoid,
+	targetRoot,
+	data,
+	services,
+	debugLabel
+)
+	if not attackerRoot or not attackerRoot.Parent then
+		return nil, nil
+	end
+
+	if not targetCharacter or not targetCharacter.Parent then
+		return nil, nil
+	end
+
+	if not targetHumanoid then
+		return nil, nil
+	end
+
+	if not targetRoot or not targetRoot.Parent then
+		return nil, nil
+	end
+
+	data = data or {}
+	services = services or {}
+
+	self:ClearCombatMovementControllers(targetRoot)
+	self:SetServerOwnershipIfNPC(targetRoot)
+
+	local stateService = services.StateService
+	local vfxService = services.VFXService
+
+	if stateService and stateService.StunCharacter then
+		stateService:StunCharacter(targetCharacter, data.AirStunMax or 1.15, data.AirAnimationName or "DownslamAir")
+	end
+
+	if vfxService then
+		if vfxService.EmitHitVFXOnVictim and services.AttackerCharacter then
+			vfxService:EmitHitVFXOnVictim(targetRoot, services.AttackerCharacter)
+		end
+
+		if vfxService.PlaySFXAtPart then
+			vfxService:PlaySFXAtPart("DownslamHit", targetRoot, 3)
+		elseif vfxService.PlayCharacterSFXAtPart then
+			vfxService:PlayCharacterSFXAtPart("Universal", "DownslamHit", targetRoot, 3)
+		end
+	end
+
+	local forward = self:GetFlatDirection(attackerRoot.CFrame.LookVector)
+	local forwardSpeed = data.DownForwardSpeed or data.DownslamForwardSpeed or 10
+	local downSpeed = data.DownSpeed or data.DownslamDownSpeed or -95
+	local maxForce = data.DownLaunchMaxForce or data.KnockbackMaxForce or 90000
+
+	local velocity = forward * forwardSpeed + Vector3.new(0, downSpeed, 0)
+
+	targetRoot.AssemblyLinearVelocity = Vector3.zero
+	targetRoot.AssemblyAngularVelocity = Vector3.zero
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "GroundSplatDownslamAttachment"
+	attachment.Parent = targetRoot
+
+	local linearVelocity = Instance.new("LinearVelocity")
+	linearVelocity.Name = "GroundSplatDownslamLinearVelocity"
+	linearVelocity.Attachment0 = attachment
+	linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+	linearVelocity.VectorVelocity = velocity
+	linearVelocity.MaxForce = maxForce
+	linearVelocity.Parent = targetRoot
+
+	self.ActiveGroundSplatDownslams[targetRoot] = {
+		Connection = nil,
+		LinearVelocity = linearVelocity,
+		Attachment = attachment,
+	}
+
+	self:ShowKnockbackDebug(targetRoot, velocity, data.AirStunMax or 1.15, debugLabel or "GroundSplatDownslam")
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {
+		targetCharacter,
+		services.AttackerCharacter,
+	}
+
+	local startTime = os.clock()
+	local maxAirTime = data.AirStunMax or 1.15
+	local minAirTime = data.MinAirTime or 0.08
+	local groundRayDistance = data.GroundRayDistance or 5
+	local finished = false
+
+	local function cleanupVelocity()
+		if self.ActiveGroundSplatDownslams[targetRoot] then
+			self.ActiveGroundSplatDownslams[targetRoot] = nil
+		end
+
+		if linearVelocity and linearVelocity.Parent then
+			linearVelocity:Destroy()
+		end
+
+		if attachment and attachment.Parent then
+			attachment:Destroy()
+		end
+	end
+
+	local function finishSplat(groundPosition)
+		if finished then
+			return
+		end
+
+		finished = true
+
+		cleanupVelocity()
+
+		if targetRoot and targetRoot.Parent then
+			targetRoot.AssemblyLinearVelocity = Vector3.zero
+			targetRoot.AssemblyAngularVelocity = Vector3.zero
+		end
+
+		local splatPosition = groundPosition
+
+		if not splatPosition and targetRoot and targetRoot.Parent then
+			splatPosition = targetRoot.Position - Vector3.new(0, 2.8, 0)
+		end
+
+		if splatPosition then
+			self:CreateGroundSplatPart(splatPosition + Vector3.new(0, 0.08, 0), data)
+
+			self:PlayGroundSplatVFX(targetRoot, splatPosition, services)
+		end
+
+		if stateService and stateService.StunCharacter and targetCharacter and targetCharacter.Parent then
+			stateService:StunCharacter(
+				targetCharacter,
+				data.GroundSplatStun or 0.55,
+				data.SplatAnimationName or "DownslamSplat"
+			)
+		end
+
+		if
+			stateService
+			and stateService.StunCharacter
+			and targetCharacter
+			and targetCharacter.Parent
+			and targetHumanoid
+			and targetHumanoid.Health > 0
+		then
+			stateService:StunCharacter(
+				targetCharacter,
+				data.GroundSplatStun or 0.55,
+				data.SplatAnimationName or "DownslamSplat"
+			)
+		end
+
+	end
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function()
+		if finished then
+			connection:Disconnect()
+			return
+		end
+
+		if not targetCharacter.Parent or not targetRoot.Parent then
+			connection:Disconnect()
+			cleanupVelocity()
+			return
+		end
+
+		local elapsed = os.clock() - startTime
+
+		if elapsed >= maxAirTime then
+			connection:Disconnect()
+			finishSplat(nil)
+			return
+		end
+
+		if elapsed < minAirTime then
+			return
+		end
+
+		local result = workspace:Raycast(targetRoot.Position, Vector3.new(0, -groundRayDistance, 0), params)
+
+		if result then
+			connection:Disconnect()
+			finishSplat(result.Position)
+			return
+		end
+	end)
+
+	self.ActiveGroundSplatDownslams[targetRoot].Connection = connection
+
+	Debris:AddItem(linearVelocity, maxAirTime + 0.25)
+	Debris:AddItem(attachment, maxAirTime + 0.25)
+
+	return linearVelocity, attachment
+end
+
 function MovementService:StartHorizontalCollisionStop(root, direction, duration, linearVelocity, attachment)
 	if not root or not root.Parent then
 		return
@@ -529,6 +779,7 @@ function MovementService:StartHorizontalCollisionStop(root, direction, duration,
 	self:StopCollisionCheck(root)
 
 	local startTime = os.clock()
+
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -536,6 +787,7 @@ function MovementService:StartHorizontalCollisionStop(root, direction, duration,
 	params.FilterDescendantsInstances = character and { character } or {}
 
 	local connection
+
 	connection = RunService.Heartbeat:Connect(function()
 		if not root or not root.Parent then
 			connection:Disconnect()
@@ -561,6 +813,7 @@ function MovementService:StartHorizontalCollisionStop(root, direction, duration,
 			end
 
 			root.AssemblyLinearVelocity = Vector3.zero
+
 			connection:Disconnect()
 			self.ActiveCollisionChecks[root] = nil
 		end
@@ -577,8 +830,8 @@ function MovementService:StartYHold(root, duration)
 	self:StopYHoldController(root)
 
 	local startTime = os.clock()
-
 	local connection
+
 	connection = RunService.Heartbeat:Connect(function()
 		if not root.Parent then
 			connection:Disconnect()
@@ -595,11 +848,8 @@ function MovementService:StartYHold(root, duration)
 		end
 
 		local currentVelocity = root.AssemblyLinearVelocity
-		root.AssemblyLinearVelocity = Vector3.new(
-			currentVelocity.X,
-			0,
-			currentVelocity.Z
-		)
+
+		root.AssemblyLinearVelocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z)
 	end)
 
 	self.ActiveYHoldControllers[root] = connection
@@ -620,12 +870,11 @@ function MovementService:StartM1Carry(attackerRoot, targetRoot, data)
 	local startTime = os.clock()
 	local duration = data.CarryDuration or 0.35
 
-	local victimDirection = self:GetFlatDirection(
-		targetRoot.Position - attackerRoot.Position,
-		attackerRoot.CFrame.LookVector
-	)
+	local victimDirection =
+		self:GetFlatDirection(targetRoot.Position - attackerRoot.Position, attackerRoot.CFrame.LookVector)
 
 	local connection
+
 	connection = RunService.Heartbeat:Connect(function()
 		if not attackerRoot.Parent or not targetRoot.Parent then
 			connection:Disconnect()
@@ -649,17 +898,9 @@ function MovementService:StartM1Carry(attackerRoot, targetRoot, data)
 		local attackerHorizontalVelocity = chaseDirection * (data.AttackerChaseSpeed or 22)
 		local victimHorizontalVelocity = victimDirection * (data.VictimPushSpeed or 20)
 
-		attackerRoot.AssemblyLinearVelocity = Vector3.new(
-			attackerHorizontalVelocity.X,
-			0,
-			attackerHorizontalVelocity.Z
-		)
+		attackerRoot.AssemblyLinearVelocity = Vector3.new(attackerHorizontalVelocity.X, 0, attackerHorizontalVelocity.Z)
 
-		targetRoot.AssemblyLinearVelocity = Vector3.new(
-			victimHorizontalVelocity.X,
-			0,
-			victimHorizontalVelocity.Z
-		)
+		targetRoot.AssemblyLinearVelocity = Vector3.new(victimHorizontalVelocity.X, 0, victimHorizontalVelocity.Z)
 	end)
 
 	self.ActiveCarryControllers[attackerRoot] = connection
@@ -722,11 +963,7 @@ function MovementService:StartUptiltCarry(attackerRoot, targetRoot, data)
 		horizontalOffset = attackerRoot.CFrame.LookVector * (data.MinHorizontalSpacing or 4)
 	end
 
-	local attackerGoal = Vector3.new(
-		attackerStartPosition.X,
-		targetY,
-		attackerStartPosition.Z
-	)
+	local attackerGoal = Vector3.new(attackerStartPosition.X, targetY, attackerStartPosition.Z)
 
 	local victimGoal = attackerGoal + horizontalOffset
 

@@ -108,22 +108,34 @@ local function getVFXTemplate(ctx, name)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
+	if not ctx.VFXService then
+		return
+	end
+	if not ctx.VFXService.PlayCharacterSFXAtPart then
+		return
+	end
+	if not parentPart or not parentPart.Parent then
+		return
+	end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 3)
 end
 
 local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterMoveVFX then return end
+	if not ctx.VFXService then
+		return
+	end
+	if not ctx.VFXService.PlayCharacterMoveVFX then
+		return
+	end
 
 	ctx.VFXService:PlayCharacterMoveVFX(ctx.Character, moveName, targetCharacter, targetRoot)
 end
 
 local function setupWorldObject(object)
-	if not object then return end
+	if not object then
+		return
+	end
 
 	for _, descendant in ipairs(object:GetDescendants()) do
 		if descendant:IsA("BasePart") then
@@ -145,7 +157,9 @@ local function setupWorldObject(object)
 end
 
 local function ensurePrimaryPart(model)
-	if not model or not model:IsA("Model") then return nil end
+	if not model or not model:IsA("Model") then
+		return nil
+	end
 
 	if model.PrimaryPart then
 		return model.PrimaryPart
@@ -169,7 +183,9 @@ local function ensurePrimaryPart(model)
 end
 
 local function forcePrimaryInvisible(model)
-	if not model or not model:IsA("Model") then return end
+	if not model or not model:IsA("Model") then
+		return
+	end
 
 	local primary = ensurePrimaryPart(model)
 
@@ -182,7 +198,9 @@ local function forcePrimaryInvisible(model)
 end
 
 local function pivotObject(object, cframe)
-	if not object then return end
+	if not object then
+		return
+	end
 
 	if object:IsA("Model") then
 		ensurePrimaryPart(object)
@@ -210,18 +228,16 @@ local function getVisualParts(object)
 end
 
 local function fadeOutObject(object, fadeTime)
-	if not object or not object.Parent then return end
+	if not object or not object.Parent then
+		return
+	end
 
 	fadeTime = fadeTime or 0.15
 
 	for _, part in ipairs(getVisualParts(object)) do
-		TweenService:Create(
-			part,
-			TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Transparency = 1,
-			}
-		):Play()
+		TweenService:Create(part, TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+		}):Play()
 	end
 
 	if object:IsA("Model") then
@@ -232,7 +248,9 @@ local function fadeOutObject(object, fadeTime)
 end
 
 local function emitAttachmentToPart(template, part, lifetime, name, keepEnabled)
-	if not template or not part or not part.Parent then return nil end
+	if not template or not part or not part.Parent then
+		return nil
+	end
 
 	if not template:IsA("Attachment") then
 		warn("[BadTime] Expected Attachment VFX:", template.Name)
@@ -265,7 +283,9 @@ end
 
 local function startHeadAttachment(ctx, character, templateName, lifetime, keepEnabled)
 	local template = getVFXTemplate(ctx, templateName)
-	if not template then return nil end
+	if not template then
+		return nil
+	end
 
 	local head = character and character:FindFirstChild("Head")
 	if not head then
@@ -316,9 +336,15 @@ local function makeConfirmAttackData(data)
 end
 
 local function wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition)
-	if not targetCharacter or not targetRoot then return false end
-	if not ctx.BlockService then return false end
-	if not ctx.BlockService.CanBlockHit then return false end
+	if not targetCharacter or not targetRoot then
+		return false
+	end
+	if not ctx.BlockService then
+		return false
+	end
+	if not ctx.BlockService.CanBlockHit then
+		return false
+	end
 
 	local blockSource = {
 		Position = sourcePosition,
@@ -340,7 +366,8 @@ local function canDamageTarget(ctx, targetCharacter)
 		return false
 	end
 
-	if ctx.CombatStatusService
+	if
+		ctx.CombatStatusService
 		and ctx.CombatStatusService.IsDamageLockedFromAttacker
 		and ctx.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, ctx.Character)
 	then
@@ -351,8 +378,12 @@ local function canDamageTarget(ctx, targetCharacter)
 end
 
 local function reportDamage(ctx, targetCharacter, targetRoot, damage)
-	if not ctx or not targetCharacter then return end
-	if typeof(damage) ~= "number" or damage <= 0 then return end
+	if not ctx or not targetCharacter then
+		return
+	end
+	if typeof(damage) ~= "number" or damage <= 0 then
+		return
+	end
 
 	local moveData = ctx.MoveData
 	local awardsUlt = true
@@ -392,19 +423,22 @@ local function reportDamage(ctx, targetCharacter, targetRoot, damage)
 	if humanoid and humanoid.Health <= 0 then
 		if ctx.ProgressionService and ctx.ProgressionService.AwardKill then
 			ctx.ProgressionService:AwardKill(ctx.Character, targetCharacter)
-		elseif ctx.UltService
-			and ctx.UltService.ProgressionService
-			and ctx.UltService.ProgressionService.AwardKill
-		then
+		elseif ctx.UltService and ctx.UltService.ProgressionService and ctx.UltService.ProgressionService.AwardKill then
 			ctx.UltService.ProgressionService:AwardKill(ctx.Character, targetCharacter)
 		end
 	end
 end
 
 local function nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, damage)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
-	if not canDamageTarget(ctx, targetCharacter) then return end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if not targetHumanoid or targetHumanoid.Health <= 0 then
+		return
+	end
+	if not canDamageTarget(ctx, targetCharacter) then
+		return
+	end
 
 	damage = damage or 0
 
@@ -418,9 +452,15 @@ local function nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot,
 end
 
 local function lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, damage)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
-	if not canDamageTarget(ctx, targetCharacter) then return end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if not targetHumanoid or targetHumanoid.Health <= 0 then
+		return
+	end
+	if not canDamageTarget(ctx, targetCharacter) then
+		return
+	end
 
 	damage = damage or 999
 
@@ -447,7 +487,9 @@ local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, tar
 end
 
 local function teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
-	if not targetRoot or not targetRoot.Parent then return end
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
 
 	targetRoot.AssemblyLinearVelocity = Vector3.zero
 	targetRoot.AssemblyAngularVelocity = Vector3.zero
@@ -458,7 +500,9 @@ end
 
 local function cloneM1Bone(ctx)
 	local template = getVFXTemplate(ctx, "M1Bone")
-	if not template then return nil end
+	if not template then
+		return nil
+	end
 
 	local bone = template:Clone()
 	bone.Name = "BadTimeBoneShot"
@@ -478,21 +522,21 @@ end
 
 local function spawnBoneShotAtVictim(ctx, data, index, count)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then return end
+	if not targetCharacter then
+		return
+	end
 
 	local bone = cloneM1Bone(ctx)
-	if not bone then return end
+	if not bone then
+		return
+	end
 
 	local angle = math.rad((360 / math.max(count, 1)) * index + math.random(-12, 12))
 	local radius = math.random(data.BoneShotSpawnMinRadius or 38, data.BoneShotSpawnMaxRadius or 52)
 	local height = math.random(9, 14)
 
 	local targetPosition = targetRoot.Position + Vector3.new(0, 1.4, 0)
-	local startPosition = targetRoot.Position + Vector3.new(
-		math.cos(angle) * radius,
-		height,
-		math.sin(angle) * radius
-	)
+	local startPosition = targetRoot.Position + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
 
 	local startCFrame = CFrame.lookAt(startPosition, targetPosition)
 	local endCFrame = CFrame.lookAt(targetPosition, targetPosition + (targetPosition - startPosition).Unit)
@@ -539,7 +583,9 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 			targetPosition,
 			data.BoneShotRadius or 7.5,
 			function(hitCharacter, hitHumanoid, hitRoot)
-				if hitOnce then return end
+				if hitOnce then
+					return
+				end
 				hitOnce = true
 
 				blockableSequenceDamage(
@@ -560,10 +606,14 @@ end
 
 local function spawnBoneZoneAtVictim(ctx, data)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then return end
+	if not targetCharacter then
+		return
+	end
 
 	local template = getVFXTemplate(ctx, "BoneZone")
-	if not template then return end
+	if not template then
+		return
+	end
 
 	local zoneModel = template:Clone()
 	zoneModel.Name = "BadTimeBoneZone"
@@ -580,7 +630,9 @@ local function spawnBoneZoneAtVictim(ctx, data)
 
 	task.wait(0.34)
 
-	if not zoneModel.Parent then return end
+	if not zoneModel.Parent then
+		return
+	end
 
 	playSansSFX(ctx, "BoneUp", targetRoot, 2)
 
@@ -604,13 +656,10 @@ local function spawnBoneZoneAtVictim(ctx, data)
 			end
 		end)
 
-		local tween = TweenService:Create(
-			cframeValue,
-			TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{
+		local tween =
+			TweenService:Create(cframeValue, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 				Value = endCFrame,
-			}
-		)
+			})
 
 		tween:Play()
 
@@ -625,24 +674,14 @@ local function spawnBoneZoneAtVictim(ctx, data)
 
 	local hitOnce = false
 
-	ctx.HitboxService:PerformSphereAtPosition(
-		ctx.Character,
-		position,
-		10,
-		function(hitCharacter, hitHumanoid, hitRoot)
-			if hitOnce then return end
-			hitOnce = true
-
-			blockableSequenceDamage(
-				ctx,
-				hitCharacter,
-				hitHumanoid,
-				hitRoot,
-				position,
-				data.BoneZoneDamage or 4
-			)
+	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, position, 10, function(hitCharacter, hitHumanoid, hitRoot)
+		if hitOnce then
+			return
 		end
-	)
+		hitOnce = true
+
+		blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, position, data.BoneZoneDamage or 4)
+	end)
 
 	task.delay(0.5, function()
 		fadeOutObject(zoneModel, 0.16)
@@ -653,10 +692,14 @@ end
 
 local function spawnTrackingBoneWall(ctx, data, sideIndex)
 	local template = getVFXTemplate(ctx, "BoneWall")
-	if not template then return end
+	if not template then
+		return
+	end
 
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then return end
+	if not targetCharacter then
+		return
+	end
 
 	local wall = template:Clone()
 	wall.Name = "BadTimeTrackingBoneWall"
@@ -717,7 +760,9 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 				wallCFrame.Position,
 				8,
 				function(hitCharacter, hitHumanoid, hitRoot)
-					if hitDone then return end
+					if hitDone then
+						return
+					end
 					hitDone = true
 
 					blockableSequenceDamage(
@@ -837,14 +882,10 @@ local function createBeamVisual(startPosition, direction, length, radius, fadeTi
 	beam.CFrame = CFrame.lookAt(center, center + direction.Unit)
 	beam.Parent = workspace
 
-	TweenService:Create(
-		beam,
-		TweenInfo.new(fadeTime or 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{
-			Transparency = 1,
-			Size = Vector3.new(radius * 0.25, radius * 0.25, length),
-		}
-	):Play()
+	TweenService:Create(beam, TweenInfo.new(fadeTime or 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Transparency = 1,
+		Size = Vector3.new(radius * 0.25, radius * 0.25, length),
+	}):Play()
 
 	Debris:AddItem(beam, (fadeTime or 0.18) + 0.08)
 end
@@ -865,18 +906,13 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 		data.BlasterBeamStep or 6,
 		radius,
 		function(hitCharacter, hitHumanoid, hitRoot, hitPosition)
-			if hitOnce then return end
+			if hitOnce then
+				return
+			end
 			hitOnce = true
 
 			if blockable ~= false then
-				blockableSequenceDamage(
-					ctx,
-					hitCharacter,
-					hitHumanoid,
-					hitRoot,
-					hitPosition,
-					damage
-				)
+				blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, hitPosition, damage)
 			else
 				nonlethalDamage(ctx, hitCharacter, hitHumanoid, hitRoot, damage)
 
@@ -889,7 +925,9 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 end
 
 local function tweenBlasterIn(blaster, startCFrame, finalCFrame, tweenTime)
-	if not blaster or not blaster.Parent then return nil, nil end
+	if not blaster or not blaster.Parent then
+		return nil, nil
+	end
 
 	local cframeValue = Instance.new("CFrameValue")
 	cframeValue.Value = startCFrame
@@ -922,13 +960,9 @@ local function tweenBlasterIn(blaster, startCFrame, finalCFrame, tweenTime)
 	)
 
 	for _, part in ipairs(getVisualParts(blaster)) do
-		TweenService:Create(
-			part,
-			TweenInfo.new(tweenTime or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Transparency = 0,
-			}
-		):Play()
+		TweenService:Create(part, TweenInfo.new(tweenTime or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 0,
+		}):Play()
 	end
 
 	moveTween:Play()
@@ -937,7 +971,9 @@ local function tweenBlasterIn(blaster, startCFrame, finalCFrame, tweenTime)
 end
 
 local function tweenBlasterOut(blaster, currentCFrame, moveDirection, distance, fadeTime)
-	if not blaster or not blaster.Parent then return end
+	if not blaster or not blaster.Parent then
+		return
+	end
 
 	fadeTime = fadeTime or 0.16
 	distance = distance or 7
@@ -966,22 +1002,14 @@ local function tweenBlasterOut(blaster, currentCFrame, moveDirection, distance, 
 		end
 	end)
 
-	TweenService:Create(
-		cframeValue,
-		TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{
-			Value = endCFrame,
-		}
-	):Play()
+	TweenService:Create(cframeValue, TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Value = endCFrame,
+	}):Play()
 
 	for _, part in ipairs(getVisualParts(blaster)) do
-		TweenService:Create(
-			part,
-			TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Transparency = 1,
-			}
-		):Play()
+		TweenService:Create(part, TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+		}):Play()
 	end
 
 	task.delay(fadeTime + 0.03, function()
@@ -999,12 +1027,27 @@ local function tweenBlasterOut(blaster, currentCFrame, moveDirection, distance, 
 	end)
 end
 
-local function spawnGasterBlasterAtVictim(ctx, data, angle, scale, damage, chargeTime, beamLength, beamRadius, beamStep, giant)
+local function spawnGasterBlasterAtVictim(
+	ctx,
+	data,
+	angle,
+	scale,
+	damage,
+	chargeTime,
+	beamLength,
+	beamRadius,
+	beamStep,
+	giant
+)
 	local template = getVFXTemplate(ctx, "GasterBlaster")
-	if not template then return end
+	if not template then
+		return
+	end
 
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-	if not targetCharacter then return end
+	if not targetCharacter then
+		return
+	end
 
 	local blaster = template:Clone()
 	blaster.Name = giant and "BadTimeGiantGasterBlaster" or "BadTimeGasterBlaster"
@@ -1049,7 +1092,9 @@ local function spawnGasterBlasterAtVictim(ctx, data, angle, scale, damage, charg
 		cframeValue:Destroy()
 	end
 
-	if not blaster.Parent then return end
+	if not blaster.Parent then
+		return
+	end
 
 	pivotObject(blaster, finalCFrame)
 
@@ -1062,7 +1107,9 @@ local function spawnGasterBlasterAtVictim(ctx, data, angle, scale, damage, charg
 
 	task.wait(chargeTime or 0.75)
 
-	if not blaster.Parent then return end
+	if not blaster.Parent then
+		return
+	end
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 
@@ -1089,27 +1136,12 @@ local function spawnGasterBlasterAtVictim(ctx, data, angle, scale, damage, charg
 	playSansSFX(ctx, "GasterBlasterShoot", primary, 3)
 	hideBlasterRightEye(blaster)
 
-	createBeamVisual(
-		beamStart,
-		beamDirection,
-		beamLength or 78,
-		beamRadius or 5.5,
-		giant and 0.24 or 0.18
-	)
+	createBeamVisual(beamStart, beamDirection, beamLength or 78, beamRadius or 5.5, giant and 0.24 or 0.18)
 
 	local oldStep = data.BlasterBeamStep
 	data.BlasterBeamStep = beamStep or oldStep or 6
 
-	hitVictimWithBeam(
-		ctx,
-		data,
-		beamStart,
-		beamDirection,
-		beamLength or 78,
-		beamRadius or 5.5,
-		damage,
-		true
-	)
+	hitVictimWithBeam(ctx, data, beamStart, beamDirection, beamLength or 78, beamRadius or 5.5, damage, true)
 
 	data.BlasterBeamStep = oldStep
 
@@ -1126,7 +1158,9 @@ end
 
 local function runBoneShotSpam(ctx, data)
 	for index = 1, data.BoneShotCount or 18 do
-		if not ctx:IsActive() then return end
+		if not ctx:IsActive() then
+			return
+		end
 
 		spawnBoneShotAtVictim(ctx, data, index, data.BoneShotCount or 18)
 
@@ -1138,7 +1172,9 @@ end
 
 local function runBoneZones(ctx, data)
 	for _ = 1, data.BoneZoneCount or 4 do
-		if not ctx:IsActive() then return end
+		if not ctx:IsActive() then
+			return
+		end
 
 		spawnBoneZoneAtVictim(ctx, data)
 
@@ -1150,7 +1186,9 @@ end
 
 local function runBoneWalls(ctx, data)
 	for index = 1, data.BoneWallCount or 2 do
-		if not ctx:IsActive() then return end
+		if not ctx:IsActive() then
+			return
+		end
 
 		task.spawn(function()
 			spawnTrackingBoneWall(ctx, data, index)
@@ -1167,10 +1205,14 @@ local function runBlasterRing(ctx, data)
 	local rounds = data.BlasterCircleRounds or 6
 
 	for round = 1, rounds do
-		if not ctx:IsActive() then return end
+		if not ctx:IsActive() then
+			return
+		end
 
 		for index = 1, count do
-			if not ctx:IsActive() then return end
+			if not ctx:IsActive() then
+				return
+			end
 
 			local angleOffset = (round - 1) * (math.pi / count)
 			local angle = math.rad((360 / count) * index) + angleOffset
@@ -1208,7 +1250,9 @@ local function runGiantBlasters(ctx, data)
 	}
 
 	for _, angle in ipairs(angles) do
-		if not ctx:IsActive() then return end
+		if not ctx:IsActive() then
+			return
+		end
 
 		task.spawn(function()
 			spawnGasterBlasterAtVictim(
@@ -1234,7 +1278,9 @@ end
 local function runBlueGravityFinale(ctx, data)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 
-	if not targetCharacter then return end
+	if not targetCharacter then
+		return
+	end
 
 	local totalDamage = data.GravitySpamTotalDamage or 10
 	local perHit = totalDamage / 4
@@ -1247,11 +1293,15 @@ local function runBlueGravityFinale(ctx, data)
 	}
 
 	for _, velocity in ipairs(velocities) do
-		if not ctx:IsActive() then return end
+		if not ctx:IsActive() then
+			return
+		end
 
 		targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 
-		if not targetCharacter then return end
+		if not targetCharacter then
+			return
+		end
 
 		targetRoot.AssemblyLinearVelocity = velocity
 
@@ -1267,7 +1317,15 @@ end
 local function finalSlam(ctx, data)
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 
-	if not targetCharacter then return end
+	if not targetCharacter then
+		return
+	end
+	if not targetHumanoid then
+		return
+	end
+	if not targetRoot then
+		return
+	end
 
 	local slamData = {}
 
@@ -1275,29 +1333,34 @@ local function finalSlam(ctx, data)
 		slamData[key] = value
 	end
 
+	slamData.KnockbackPreset = "Downslam"
 	slamData.DownForwardSpeed = data.FinalSlamForwardSpeed or 12
 	slamData.DownSpeed = data.FinalSlamDownSpeed or -95
 	slamData.DownLaunchMaxForce = data.FinalSlamMaxForce or 95000
 	slamData.AirStunMax = data.FinalSlamAirStunMax or 1.1
 	slamData.GroundSplatStun = data.FinalSlamGroundSplatStun or 0.45
+	slamData.PostSplatM1Immunity = data.FinalSlamM1Immunity or 1
+	slamData.SplatPartLifetime = data.SplatPartLifetime or 0.35
+	slamData.SplatPartSize = data.SplatPartSize or Vector3.new(10, 0.25, 10)
+	slamData.AirAnimationName = "DownslamAir"
+	slamData.SplatAnimationName = "DownslamSplat"
 
-	if ctx.MovementService and ctx.MovementService.ApplyDownslamKnockback then
-		ctx.MovementService:ApplyDownslamKnockback(
-			ctx.Root,
-			targetRoot,
-			slamData,
-			"BadTimeFinalSlam"
-		)
+	if ctx.MovementService and ctx.MovementService.ApplyGroundSplatDownslam then
+		ctx.MovementService:ApplyGroundSplatDownslam(ctx.Root, targetCharacter, targetHumanoid, targetRoot, slamData, {
+			StateService = ctx.StateService,
+			VFXService = ctx.VFXService,
+			AttackerCharacter = ctx.Character,
+		}, "BadTimeFinalSlam")
+	elseif ctx.MovementService and ctx.MovementService.ApplyDownslamKnockback then
+		ctx.MovementService:ApplyDownslamKnockback(ctx.Root, targetRoot, slamData, "BadTimeFinalSlam")
 	else
 		targetRoot.AssemblyLinearVelocity = Vector3.new(0, slamData.DownSpeed, 0)
 	end
 
-	task.wait(0.22)
+	task.wait(0.08)
 
-	lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 35)
-
-	if ctx.VFXService then
-		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
+	if targetHumanoid.Health > 0 then
+		lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 35)
 	end
 
 	if ctx.CinematicService then
@@ -1342,7 +1405,9 @@ function BadTime.Execute(ctx)
 	local cinematicService = ctx.CinematicService
 
 	local function cleanup()
-		if finished then return end
+		if finished then
+			return
+		end
 		finished = true
 
 		if eyeGlowAttachment then
@@ -1411,13 +1476,8 @@ function BadTime.Execute(ctx)
 		return
 	end
 
-	local confirmResult = ctx:ApplyStandardHit(
-		targetCharacter,
-		targetHumanoid,
-		targetRoot,
-		makeConfirmAttackData(data),
-		"BadTime"
-	)
+	local confirmResult =
+		ctx:ApplyStandardHit(targetCharacter, targetHumanoid, targetRoot, makeConfirmAttackData(data), "BadTime")
 
 	if confirmResult == "Blocked" then
 		print("[BadTime] Blocked")
@@ -1452,11 +1512,7 @@ function BadTime.Execute(ctx)
 	-- DamageLock only prevents other players from damaging/stealing this victim.
 	-- It does NOT stun, grab, movement-lock, dash-lock, or block-lock the victim.
 	if ctx.CombatStatusService and ctx.CombatStatusService.SetDamageLock then
-		ctx.CombatStatusService:SetDamageLock(
-			targetCharacter,
-			character,
-			data.SequenceTime or 11.5
-		)
+		ctx.CombatStatusService:SetDamageLock(targetCharacter, character, data.SequenceTime or 11.5)
 	end
 
 	if cinematicService then

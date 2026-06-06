@@ -6,7 +6,7 @@ local BoneZone = {
 	DisplayName = "Bone Zone",
 	AnimationName = "BoneZone",
 
-	Cooldown = 1,
+	Cooldown = 11,
 	MaxLockTime = 0.35,
 
 	RequiresTarget = true,
@@ -17,7 +17,7 @@ local BoneZone = {
 
 	Radius = 9,
 
-	Damage = 13,
+	Damage = 11,
 	Stun = 0.75,
 
 	Knockback = 120,

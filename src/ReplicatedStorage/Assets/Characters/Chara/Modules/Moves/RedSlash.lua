@@ -2,12 +2,12 @@ local RedSlash = {
 	DisplayName = "Red Slash",
 	AnimationName = nil,
 
-	Cooldown = 1,
+	Cooldown = 11,
 	Duration = 1.45,
 	LockTime = 1.45,
 	MaxLockTime = 1.7,
 
-	Damage = 8,
+	Damage = 12,
 	Stun = 1,
 
 	Radius = 5,

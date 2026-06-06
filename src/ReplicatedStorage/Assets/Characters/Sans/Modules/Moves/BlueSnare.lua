@@ -4,16 +4,13 @@ local RunService = game:GetService("RunService")
 local BlueSnare = {
 	DisplayName = "Blue Snare",
 
-	-- Initial/miss animation.
 	AnimationName = "BlueSnare",
-
-	-- Plays only after the hitbox confirms.
 	HitAnimationName = "BlueSnareHit",
 
-	Cooldown = 1, -- testing value; later maybe 7-9
-	Duration = 1.45,
-	LockTime = 1.35,
-	MaxLockTime = 1.7,
+	Cooldown = 13,
+	Duration = 1.6,
+	LockTime = 1.45,
+	MaxLockTime = 1.9,
 
 	RequiresTarget = false,
 	RequiresAim = false,
@@ -26,20 +23,28 @@ local BlueSnare = {
 	Radius = 7,
 	Offset = CFrame.new(0, 0, -5),
 
-	Damage = 5,
-	FinalDamage = 6,
+	Damage = 2,
+	FinalDamage = 4,
 	Stun = 1.15,
 
-	Knockback = 135,
-	UpwardKnockback = 38,
-	KnockbackDuration = 0.28,
-	KnockbackMaxForce = 130000,
+	KnockbackPreset = "Downslam",
 
-	HoldHeight = 7.5,
-	HoldForwardOffset = 5.25,
-	HoldResponsiveness = 45,
-	HoldMaxForce = 120000,
-	HoldMaxVelocity = 70,
+	DownForwardSpeed = 10,
+	DownSpeed = -95,
+	DownLaunchMaxForce = 90000,
+
+	AirStunMax = 1.15,
+	GroundSplatStun = 0.55,
+	PostSplatM1Immunity = 0,
+
+	SplatPartLifetime = 0.35,
+	SplatPartSize = Vector3.new(8, 0.25, 8),
+
+	HoldHeight = 18,
+	HoldForwardOffset = 8.5,
+	HoldResponsiveness = 55,
+	HoldMaxForce = 140000,
+	HoldMaxVelocity = 90,
 
 	Blockable = true,
 	CanBeBlocked = true,
@@ -85,7 +90,7 @@ local function playHitAnimation(ctx)
 
 	local animationService = ctx.StateService.AnimationService
 
-	if moveData.AnimationName then
+	if moveData.AnimationName and animationService.StopCharacterAnimationByName then
 		animationService:StopCharacterAnimationByName(character, moveData.AnimationName, 0.05)
 	end
 
@@ -107,10 +112,16 @@ local function makeAttackData(moveData)
 	end
 
 	attackData.AttackType = "Move"
-	attackData.Damage = moveData.Damage or 5
+	attackData.Damage = moveData.Damage or 4
 	attackData.Stun = moveData.Stun or 1.15
+
+	-- Initial hit only catches. No movement yet.
+	attackData.KnockbackPreset = nil
 	attackData.Knockback = 0
 	attackData.UpwardKnockback = 0
+	attackData.DownForwardSpeed = nil
+	attackData.DownSpeed = nil
+	attackData.DownLaunchMaxForce = nil
 
 	attackData.Guardbreak = false
 	attackData.PlayMoveHitVFX = false
@@ -138,9 +149,9 @@ local function createHoldAlign(targetRoot, holdPosition, moveData)
 	alignPosition.RigidityEnabled = false
 	alignPosition.ReactionForceEnabled = false
 	alignPosition.ApplyAtCenterOfMass = true
-	alignPosition.Responsiveness = moveData.HoldResponsiveness or 45
-	alignPosition.MaxForce = moveData.HoldMaxForce or 120000
-	alignPosition.MaxVelocity = moveData.HoldMaxVelocity or 70
+	alignPosition.Responsiveness = moveData.HoldResponsiveness or 55
+	alignPosition.MaxForce = moveData.HoldMaxForce or 140000
+	alignPosition.MaxVelocity = moveData.HoldMaxVelocity or 90
 	alignPosition.Parent = targetRoot
 
 	Debris:AddItem(alignPosition, (moveData.HoldTime or 0.85) + 0.35)
@@ -150,11 +161,11 @@ local function createHoldAlign(targetRoot, holdPosition, moveData)
 end
 
 local function cleanupHold(alignPosition, attachment)
-	if alignPosition then
+	if alignPosition and alignPosition.Parent then
 		alignPosition:Destroy()
 	end
 
-	if attachment then
+	if attachment and attachment.Parent then
 		attachment:Destroy()
 	end
 end
@@ -170,24 +181,8 @@ local function getHoldPosition(root, moveData)
 	end
 
 	return root.Position
-		+ (forward * (moveData.HoldForwardOffset or 5.25))
-		+ Vector3.new(0, moveData.HoldHeight or 7.5, 0)
-end
-
-local function getKnockbackDirection(root, targetRoot)
-	local direction = targetRoot.Position - root.Position
-	direction = Vector3.new(direction.X, 0, direction.Z)
-
-	if direction.Magnitude < 0.05 then
-		direction = root.CFrame.LookVector
-		direction = Vector3.new(direction.X, 0, direction.Z)
-	end
-
-	if direction.Magnitude < 0.05 then
-		return Vector3.new(0, 0, -1)
-	end
-
-	return direction.Unit
+		+ (forward * (moveData.HoldForwardOffset or 8.5))
+		+ Vector3.new(0, moveData.HoldHeight or 13.5, 0)
 end
 
 local function stopCombatMovement(ctx, root, victimRoot)
@@ -196,56 +191,149 @@ local function stopCombatMovement(ctx, root, victimRoot)
 	end
 
 	if ctx.MovementService.ClearCombatMovementControllers then
-		ctx.MovementService:ClearCombatMovementControllers(root)
-		ctx.MovementService:ClearCombatMovementControllers(victimRoot)
+		if root then
+			ctx.MovementService:ClearCombatMovementControllers(root)
+		end
+
+		if victimRoot then
+			ctx.MovementService:ClearCombatMovementControllers(victimRoot)
+		end
+
 		return
 	end
 
 	if ctx.MovementService.StopCarryController then
-		ctx.MovementService:StopCarryController(root)
-		ctx.MovementService:StopCarryController(victimRoot)
+		if root then
+			ctx.MovementService:StopCarryController(root)
+		end
+
+		if victimRoot then
+			ctx.MovementService:StopCarryController(victimRoot)
+		end
 	end
 
 	if ctx.MovementService.StopYHoldController then
-		ctx.MovementService:StopYHoldController(root)
-		ctx.MovementService:StopYHoldController(victimRoot)
+		if root then
+			ctx.MovementService:StopYHoldController(root)
+		end
+
+		if victimRoot then
+			ctx.MovementService:StopYHoldController(victimRoot)
+		end
 	end
+end
+
+local function reportDamage(ctx, targetCharacter, targetRoot, damage)
+	if not ctx or not targetCharacter then
+		return
+	end
+
+	if typeof(damage) ~= "number" or damage <= 0 then
+		return
+	end
+
+	if ctx.DamageNumberService and targetRoot then
+		ctx.DamageNumberService:ShowDamage(targetRoot, damage, {
+			TextSize = 46,
+		})
+	end
+
+	if ctx.ReportDamageEvent then
+		ctx:ReportDamageEvent(targetCharacter, damage, targetRoot)
+		return
+	end
+
+	if ctx.UltService and ctx.UltService.AwardDamageEvent then
+		ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
+	end
+end
+
+local function makeFinalDownslamData(moveData)
+	local slamData = {}
+
+	for key, value in pairs(moveData or {}) do
+		slamData[key] = value
+	end
+
+	slamData.KnockbackPreset = "Downslam"
+
+	slamData.DownForwardSpeed = moveData.DownForwardSpeed or 10
+	slamData.DownSpeed = moveData.DownSpeed or -95
+	slamData.DownLaunchMaxForce = moveData.DownLaunchMaxForce or 90000
+
+	slamData.AirStunMax = moveData.AirStunMax or 1.15
+	slamData.GroundSplatStun = moveData.GroundSplatStun or 0.55
+	slamData.PostSplatM1Immunity = moveData.PostSplatM1Immunity or 1
+
+	slamData.SplatPartLifetime = moveData.SplatPartLifetime or 0.35
+	slamData.SplatPartSize = moveData.SplatPartSize or Vector3.new(8, 0.25, 8)
+
+	slamData.AirAnimationName = "DownslamAir"
+	slamData.SplatAnimationName = "DownslamSplat"
+
+	return slamData
 end
 
 local function applyFinalHit(ctx, targetCharacter, targetHumanoid, targetRoot)
 	local moveData = ctx.MoveData
 
 	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetHumanoid or targetHumanoid.Health <= 0 then return end
+	if not targetHumanoid then return end
 	if not targetRoot or not targetRoot.Parent then return end
 
-	local damage = moveData.FinalDamage or 6
-	targetHumanoid:TakeDamage(damage)
+	local damage = moveData.FinalDamage or 8
+	local slamData = makeFinalDownslamData(moveData)
 
-	if ctx.UltService then
-		ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
-	end
+	stopCombatMovement(ctx, ctx.Root, targetRoot)
 
-	if ctx.VFXService then
-		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
-	end
+	targetRoot.AssemblyLinearVelocity = Vector3.zero
+	targetRoot.AssemblyAngularVelocity = Vector3.zero
 
-	local direction = getKnockbackDirection(ctx.Root, targetRoot)
-
-	if ctx.MovementService and ctx.MovementService.ApplyStraightKnockback then
-		ctx.MovementService:ApplyStraightKnockback(
+	-- IMPORTANT:
+	-- Start downslam first so ground splat VFX still happens even if the damage kills.
+	if ctx.MovementService and ctx.MovementService.ApplyGroundSplatDownslam then
+		ctx.MovementService:ApplyGroundSplatDownslam(
+			ctx.Root,
+			targetCharacter,
+			targetHumanoid,
 			targetRoot,
-			direction,
-			moveData.Knockback or 135,
-			moveData.UpwardKnockback or 38,
-			moveData.KnockbackDuration or 0.28,
-			moveData.KnockbackMaxForce or 130000
+			slamData,
+			{
+				StateService = ctx.StateService,
+				VFXService = ctx.VFXService,
+				AttackerCharacter = ctx.Character,
+			},
+			"BlueSnareFinalDownslam"
+		)
+	elseif ctx.MovementService and ctx.MovementService.ApplyDownslamKnockback then
+		ctx.MovementService:ApplyDownslamKnockback(
+			ctx.Root,
+			targetRoot,
+			slamData,
+			"BlueSnareFinalDownslam"
 		)
 	else
+		local forward = ctx.Root.CFrame.LookVector
+		forward = Vector3.new(forward.X, 0, forward.Z)
+
+		if forward.Magnitude < 0.05 then
+			forward = Vector3.new(0, 0, -1)
+		else
+			forward = forward.Unit
+		end
+
 		targetRoot.AssemblyLinearVelocity =
-			(direction * (moveData.Knockback or 135))
-			+ Vector3.new(0, moveData.UpwardKnockback or 38, 0)
+			(forward * (slamData.DownForwardSpeed or 10))
+			+ Vector3.new(0, slamData.DownSpeed or -95, 0)
 	end
+
+	-- Damage happens after downslam begins.
+	if targetHumanoid.Health > 0 then
+		targetHumanoid:TakeDamage(damage)
+		reportDamage(ctx, targetCharacter, targetRoot, damage)
+	end
+
+	playSansSFX(ctx, "M1", targetRoot, 2)
 end
 
 function BlueSnare.Execute(ctx)
@@ -325,6 +413,8 @@ function BlueSnare.Execute(ctx)
 				print("[BlueSnare] Blocked")
 			elseif result == "Countered" then
 				print("[BlueSnare] Countered")
+			elseif result == "DamageLocked" then
+				print("[BlueSnare] Target damage locked")
 			end
 		end
 	)
@@ -345,6 +435,7 @@ function BlueSnare.Execute(ctx)
 	stopCombatMovement(ctx, root, victimRoot)
 
 	victimRoot.AssemblyLinearVelocity = Vector3.zero
+	victimRoot.AssemblyAngularVelocity = Vector3.zero
 
 	local holdPosition = getHoldPosition(root, moveData)
 	local alignPosition, attachment = createHoldAlign(victimRoot, holdPosition, moveData)
@@ -373,7 +464,17 @@ function BlueSnare.Execute(ctx)
 			return
 		end
 
-		if not victimHumanoid or victimHumanoid.Health <= 0 then
+		if not victimHumanoid then
+			if holdConnection then
+				holdConnection:Disconnect()
+				holdConnection = nil
+			end
+
+			cleanupHold(alignPosition, attachment)
+			return
+		end
+
+		if victimHumanoid.Health <= 0 then
 			if holdConnection then
 				holdConnection:Disconnect()
 				holdConnection = nil
@@ -433,10 +534,10 @@ function BlueSnare.Execute(ctx)
 	if victimCharacter
 		and victimCharacter.Parent
 		and victimHumanoid
-		and victimHumanoid.Health > 0
 		and victimRoot
 		and victimRoot.Parent
 	then
+		stopCombatMovement(ctx, root, victimRoot)
 		applyFinalHit(ctx, victimCharacter, victimHumanoid, victimRoot)
 	end
 

@@ -5,7 +5,7 @@ local SlashBarrage = {
 
 	AnimationName = nil,
 
-	Cooldown = 1,
+	Cooldown = 8,
 	Duration = 1.65,
 	LockTime = 1.65,
 	MaxLockTime = 2,

@@ -2,7 +2,7 @@ local BoneShot = {
 	DisplayName = "Bone Shot",
 	AnimationName = "BoneShot",
 
-	Cooldown = 1,
+	Cooldown = 5.5,
 	MaxLockTime = 0.45,
 
 	RequiresTarget = true,
@@ -17,10 +17,10 @@ local BoneShot = {
 	ProjectileSpeed = 165,
 	ProjectileLifetime = 3,
 
-	Damage = 3,
+	Damage = 3.5,
 	Stun = 0.75,
 
-	HitRadius = 4.5,
+	HitRadius = 2.5,
 
 	CanBeBlocked = true,
 	Unblockable = false,

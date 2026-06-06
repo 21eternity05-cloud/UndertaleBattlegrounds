@@ -6,7 +6,7 @@ local GasterBlaster = {
 	DisplayName = "Gaster Blaster",
 	AnimationName = "GasterBlaster",
 
-	Cooldown = 1, -- testing value; later use 10-14
+	Cooldown = 10, -- testing value; later use 10-14
 	Duration = 1.25,
 	LockTime = 0.9,
 	MaxLockTime = 1.35,
