@@ -7,6 +7,9 @@ local SHOP_FOLDER_NAME = "SHOP"
 local SHOP_PLACEHOLDER_NAME = "Placeholder"
 local PREVIEW_FOLDER_NAME = "ClientShopPreviews"
 local PREVIEW_NAME_PREFIX = "ClientShopPreview_"
+local PREVIEW_CAMERA_DISTANCE = 7.25
+local PREVIEW_CAMERA_HEIGHT = 1.85
+local PREVIEW_FOCUS_HEIGHT = 1.35
 
 function ShopPreviewController.new(player, replicatedStorage)
 	local self = setmetatable({}, ShopPreviewController)
@@ -15,12 +18,14 @@ function ShopPreviewController.new(player, replicatedStorage)
 	self.ReplicatedStorage = replicatedStorage
 	self.ShopLocationRemote = nil
 	self.ActivePreviewModel = nil
+	self.ActivePreviewIdleTrack = nil
 	self.OldCameraType = nil
 	self.OldCameraSubject = nil
 	self.OldCameraCFrame = nil
 	self.CameraHoldCharacter = nil
 	self.ShopCameraCFrame = nil
 	self.LastCharacterName = nil
+	self.LastSkinName = nil
 	self.LastShopPosition = nil
 
 	return self
@@ -37,6 +42,20 @@ function ShopPreviewController:GetShopLocationRemote()
 	if remote and remote:IsA("RemoteFunction") then
 		self.ShopLocationRemote = remote
 		return remote
+	end
+
+	return nil
+end
+
+function ShopPreviewController:GetIdleAnimation(characterName)
+	local assets = self.ReplicatedStorage:FindFirstChild("Assets")
+	local characters = assets and assets:FindFirstChild("Characters")
+	local characterFolder = characters and characters:FindFirstChild(characterName)
+	local animationsFolder = characterFolder and characterFolder:FindFirstChild("Animations")
+	local idleAnimation = animationsFolder and animationsFolder:FindFirstChild("Idle")
+
+	if idleAnimation and idleAnimation:IsA("Animation") then
+		return idleAnimation
 	end
 
 	return nil
@@ -174,16 +193,48 @@ function ShopPreviewController:GetPreviewFolder()
 	return folder
 end
 
-function ShopPreviewController:GetCharacterModel(characterName)
+function ShopPreviewController:GetSkinData(characterFolder, skinName)
+	local modulesFolder = characterFolder and characterFolder:FindFirstChild("Modules")
+	local skinModule = modulesFolder and modulesFolder:FindFirstChild("SkinModule")
+
+	if not skinModule or not skinModule:IsA("ModuleScript") then
+		return nil, skinName or "Default"
+	end
+
+	local success, skinConfig = pcall(require, skinModule)
+	if not success or typeof(skinConfig) ~= "table" then
+		warn("[ShopPreviewController] Failed to load SkinModule for", characterFolder:GetFullName())
+		return nil, skinName or "Default"
+	end
+
+	local defaultSkinName = skinConfig.DefaultSkin or "Default"
+	local resolvedSkinName = skinName or defaultSkinName
+	local skinData = skinConfig.Skins and skinConfig.Skins[resolvedSkinName]
+
+	if not skinData then
+		resolvedSkinName = defaultSkinName
+		skinData = skinConfig.Skins and skinConfig.Skins[resolvedSkinName]
+	end
+
+	return skinData, resolvedSkinName
+end
+
+function ShopPreviewController:GetCharacterFolder(characterName)
 	local assets = self.ReplicatedStorage:FindFirstChild("Assets")
 	local characters = assets and assets:FindFirstChild("Characters")
-	local characterFolder = characters and characters:FindFirstChild(characterName)
+
+	return characters and characters:FindFirstChild(characterName) or nil
+end
+
+function ShopPreviewController:GetCharacterModel(characterName, skinName)
+	local characterFolder = self:GetCharacterFolder(characterName)
 
 	if not characterFolder then
 		return nil
 	end
 
 	local characterModelFolder = characterFolder:FindFirstChild("CharacterModel")
+	local skinData = self:GetSkinData(characterFolder, skinName)
 
 	if characterModelFolder then
 		if characterModelFolder:IsA("Model") then
@@ -191,7 +242,20 @@ function ShopPreviewController:GetCharacterModel(characterName)
 		end
 
 		if characterModelFolder:IsA("Folder") then
-			local namedModel = characterModelFolder:FindFirstChild(characterName)
+			local skinModelName = skinData and skinData.CharacterModelName
+			local namedModel = skinModelName and characterModelFolder:FindFirstChild(skinModelName)
+
+			if namedModel and namedModel:IsA("Model") then
+				return namedModel
+			end
+
+			namedModel = characterModelFolder:FindFirstChild("Default")
+
+			if namedModel and namedModel:IsA("Model") then
+				return namedModel
+			end
+
+			namedModel = characterModelFolder:FindFirstChild(characterName)
 
 			if namedModel and namedModel:IsA("Model") then
 				return namedModel
@@ -219,17 +283,208 @@ end
 function ShopPreviewController:MakePreviewModelSafe(model)
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
-			descendant.Anchored = true
+			descendant.Anchored = false
 			descendant.CanCollide = false
 			descendant.CanTouch = false
 			descendant.CanQuery = false
+			descendant.Massless = true
+		elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
+			descendant.Disabled = true
+		end
+	end
+
+	local root = model:FindFirstChild("HumanoidRootPart", true)
+
+	if root and root:IsA("BasePart") then
+		root.Anchored = true
+	end
+end
+
+function ShopPreviewController:PreparePreviewWeapon(model)
+	if model:IsA("BasePart") then
+		model.Anchored = false
+		model.CanCollide = false
+		model.CanTouch = false
+		model.CanQuery = false
+		model.Massless = true
+	end
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = false
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+			descendant.Massless = true
 		elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
 			descendant.Disabled = true
 		end
 	end
 end
 
+function ShopPreviewController:FindWeaponHandle(weapon)
+	for _, handleName in ipairs({
+		"HandleKnife",
+		"Handle",
+		"HandleSword",
+		"HandleShield",
+		"HandleStaff",
+		"BoneStaffHandle",
+		"SwordHandle",
+		"ShieldHandle",
+	}) do
+		local handle = weapon:FindFirstChild(handleName, true)
+
+		if handle and handle:IsA("BasePart") then
+			return handle
+		end
+	end
+
+	if weapon:IsA("BasePart") then
+		return weapon
+	end
+
+	return weapon:FindFirstChildWhichIsA("BasePart", true)
+end
+
+function ShopPreviewController:WeldWeaponPartsToHandle(weapon, handle)
+	for _, part in ipairs(weapon:GetDescendants()) do
+		if part:IsA("BasePart") and part ~= handle then
+			local alreadyConnected = false
+
+			for _, child in ipairs(part:GetChildren()) do
+				if child:IsA("WeldConstraint") or child:IsA("Weld") or child:IsA("Motor6D") then
+					alreadyConnected = true
+					break
+				end
+			end
+
+			if not alreadyConnected then
+				local weld = Instance.new("WeldConstraint")
+				weld.Name = "PreviewWeaponWeld"
+				weld.Part0 = handle
+				weld.Part1 = part
+				weld.Parent = handle
+			end
+		end
+	end
+end
+
+function ShopPreviewController:GetPreviewWeaponLimb(characterName, weaponData)
+	if weaponData.LimbName then
+		return weaponData.LimbName
+	end
+
+	local weaponName = tostring(weaponData.WeaponName or "")
+	local motorName = tostring(weaponData.MotorTemplateName or "")
+	local combinedName = string.lower(weaponName .. " " .. motorName)
+
+	if string.find(combinedName, "shield") then
+		return "Left Arm"
+	end
+
+	return "Right Arm"
+end
+
+function ShopPreviewController:EquipSinglePreviewWeapon(previewModel, characterFolder, weaponData, index)
+	if typeof(weaponData) ~= "table" then
+		return
+	end
+
+	local weaponName = weaponData.WeaponName
+	local motorTemplateName = weaponData.MotorTemplateName
+
+	if typeof(weaponName) ~= "string" or weaponName == "" then
+		return
+	end
+
+	local weaponsFolder = characterFolder:FindFirstChild("Weapons")
+	if not weaponsFolder then
+		warn("[ShopPreviewController] Missing Weapons folder for", characterFolder.Name)
+		return
+	end
+
+	local weaponTemplate = weaponsFolder:FindFirstChild(weaponName)
+	if not weaponTemplate then
+		warn("[ShopPreviewController] Missing preview weapon:", characterFolder.Name, weaponName)
+		return
+	end
+
+	local motorTemplate = nil
+	if typeof(motorTemplateName) == "string" and motorTemplateName ~= "" then
+		motorTemplate = weaponsFolder:FindFirstChild(motorTemplateName)
+	end
+
+	if not motorTemplate or not motorTemplate:IsA("Motor6D") then
+		warn("[ShopPreviewController] Missing preview Motor6D template:", characterFolder.Name, tostring(motorTemplateName))
+		return
+	end
+
+	local limbName = self:GetPreviewWeaponLimb(characterFolder.Name, weaponData)
+	local limb = previewModel:FindFirstChild(limbName, true)
+
+	if not limb or not limb:IsA("BasePart") then
+		warn("[ShopPreviewController] Missing preview limb:", characterFolder.Name, limbName)
+		return
+	end
+
+	local weapon = weaponTemplate:Clone()
+	weapon.Name = "PreviewWeapon_" .. tostring(index or 1) .. "_" .. weaponName
+	weapon.Parent = previewModel
+
+	local handle = self:FindWeaponHandle(weapon)
+	if not handle then
+		weapon:Destroy()
+		warn("[ShopPreviewController] Preview weapon has no handle:", characterFolder.Name, weaponName)
+		return
+	end
+
+	self:PreparePreviewWeapon(weapon)
+	self:WeldWeaponPartsToHandle(weapon, handle)
+
+	local motor = motorTemplate:Clone()
+	motor.Name = "PreviewWeaponMotor_" .. tostring(index or 1)
+	motor.Part0 = limb
+	motor.Part1 = handle
+	motor.Parent = limb
+end
+
+function ShopPreviewController:EquipPreviewWeapons(previewModel, characterName, skinName)
+	local characterFolder = self:GetCharacterFolder(characterName)
+	if not characterFolder then
+		return
+	end
+
+	local skinData = self:GetSkinData(characterFolder, skinName)
+	if not skinData then
+		return
+	end
+
+	if typeof(skinData.Weapons) == "table" then
+		for index, weaponData in ipairs(skinData.Weapons) do
+			self:EquipSinglePreviewWeapon(previewModel, characterFolder, weaponData, index)
+		end
+
+		return
+	end
+
+	self:EquipSinglePreviewWeapon(previewModel, characterFolder, {
+		WeaponName = skinData.WeaponName,
+		MotorTemplateName = skinData.MotorTemplateName,
+		LimbName = skinData.LimbName,
+	}, 1)
+end
+
 function ShopPreviewController:DestroyActivePreview()
+	if self.ActivePreviewIdleTrack then
+		pcall(function()
+			self.ActivePreviewIdleTrack:Stop(0)
+			self.ActivePreviewIdleTrack:Destroy()
+		end)
+
+		self.ActivePreviewIdleTrack = nil
+	end
+
 	local model = self.ActivePreviewModel
 	self.ActivePreviewModel = nil
 
@@ -244,7 +499,43 @@ function ShopPreviewController:DestroyActivePreview()
 	end
 end
 
-function ShopPreviewController:SetupPreviewModel(characterName)
+function ShopPreviewController:PlayPreviewIdle(characterName, model)
+	local idleAnimation = self:GetIdleAnimation(characterName)
+	if not idleAnimation then
+		warn("[ShopPreviewController] No preview Idle animation for", characterName)
+		return
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		warn("[ShopPreviewController] Preview model has no Humanoid for", characterName)
+		return
+	end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+
+	local success, track = pcall(function()
+		return animator:LoadAnimation(idleAnimation)
+	end)
+
+	if not success or not track then
+		warn("[ShopPreviewController] Failed to play preview idle for", characterName)
+		return
+	end
+
+	track.Looped = true
+	track.Name = "PreviewIdle"
+	track.Priority = Enum.AnimationPriority.Idle
+	track:Play(0.15)
+	self.ActivePreviewIdleTrack = track
+end
+
+function ShopPreviewController:SetupPreviewModel(characterName, skinName)
 	self:DestroyActivePreview()
 
 	local placeholder = self:GetShopPlaceholder()
@@ -257,19 +548,21 @@ function ShopPreviewController:SetupPreviewModel(characterName)
 		return
 	end
 
-	local sourceModel = self:GetCharacterModel(characterName)
+	local sourceModel = self:GetCharacterModel(characterName, skinName)
 	local previewCFrame = placeholder.CFrame * CFrame.Angles(0, math.rad(180), 0)
 
 	if sourceModel then
 		local clone = sourceModel:Clone()
-		clone.Name = PREVIEW_NAME_PREFIX .. characterName
+		clone.Name = PREVIEW_NAME_PREFIX .. characterName .. "_" .. tostring(skinName or "Default")
 		self:MakePreviewModelSafe(clone)
 		clone.Parent = previewFolder
 		clone:PivotTo(previewCFrame)
+		self:EquipPreviewWeapons(clone, characterName, skinName)
 		self.ActivePreviewModel = clone
+		self:PlayPreviewIdle(characterName, clone)
 	else
 		local fallback = Instance.new("Model")
-		fallback.Name = PREVIEW_NAME_PREFIX .. characterName
+		fallback.Name = PREVIEW_NAME_PREFIX .. characterName .. "_" .. tostring(skinName or "Default")
 
 		local body = Instance.new("Part")
 		body.Name = "PreviewPlaceholderBody"
@@ -288,8 +581,28 @@ function ShopPreviewController:SetupPreviewModel(characterName)
 	end
 end
 
-function ShopPreviewController:Enter(characterName)
+function ShopPreviewController:GetPreviewCameraCFrame(placeholder)
+	local model = self.ActivePreviewModel
+	local root = model and model:FindFirstChild("HumanoidRootPart", true)
+
+	if root and root:IsA("BasePart") then
+		local focus = root.Position + Vector3.new(0, PREVIEW_FOCUS_HEIGHT, 0)
+		local cameraPosition = root.Position
+			+ (root.CFrame.LookVector * PREVIEW_CAMERA_DISTANCE)
+			+ Vector3.new(0, PREVIEW_CAMERA_HEIGHT, 0)
+
+		return CFrame.lookAt(cameraPosition, focus)
+	end
+
+	local focusPosition = placeholder.Position + Vector3.new(0, PREVIEW_FOCUS_HEIGHT, 0)
+	local cameraPosition = (placeholder.CFrame * CFrame.new(0, PREVIEW_CAMERA_HEIGHT, PREVIEW_CAMERA_DISTANCE)).Position
+
+	return CFrame.lookAt(cameraPosition, focusPosition)
+end
+
+function ShopPreviewController:Enter(characterName, skinName)
 	self.LastCharacterName = characterName
+	self.LastSkinName = skinName
 	self:RequestShopStream()
 
 	local camera = Workspace.CurrentCamera
@@ -306,11 +619,9 @@ function ShopPreviewController:Enter(characterName)
 		self.CameraHoldCharacter = self.Player.Character
 	end
 
-	self:SetupPreviewModel(characterName)
+	self:SetupPreviewModel(characterName, skinName)
 
-	local focusPosition = placeholder.Position + Vector3.new(0, 2.8, 0)
-	local cameraPosition = (placeholder.CFrame * CFrame.new(0, 3.2, 11)).Position
-	local shopCameraCFrame = CFrame.lookAt(cameraPosition, focusPosition)
+	local shopCameraCFrame = self:GetPreviewCameraCFrame(placeholder)
 
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = shopCameraCFrame
@@ -357,7 +668,7 @@ function ShopPreviewController:HandleCharacterRespawnedDuringCustomize(character
 	task.wait(0.2)
 
 	if not self.ShopCameraCFrame and self.LastCharacterName then
-		self:Enter(self.LastCharacterName)
+		self:Enter(self.LastCharacterName, self.LastSkinName)
 	end
 
 	local function reapplyShopCamera()

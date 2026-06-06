@@ -20,10 +20,16 @@ local MovementService = require(combatFolder:WaitForChild("MovementService")).ne
 local BlockService = require(combatFolder:WaitForChild("BlockService")).new(Config, StateService, VFXService)
 local WeaponService = require(combatFolder:WaitForChild("WeaponService")).new(Config)
 local DamageNumberService = require(combatFolder:WaitForChild("DamageNumberService")).new(Config)
+local CharacterMorphService = require(combatFolder:WaitForChild("CharacterMorphService")).new(Config)
 
 -- Player / progression services
 local ProgressionService = require(combatFolder:WaitForChild("ProgressionService")).new(Config)
-local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(Config, WeaponService, ProgressionService)
+local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(
+	Config,
+	WeaponService,
+	ProgressionService,
+	CharacterMorphService
+)
 local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
 
 -- Status / utility services
@@ -123,10 +129,40 @@ moveRemote.OnServerEvent:Connect(function(player, moveRequest)
 	MoveService:PerformMove(player, moveRequest)
 end)
 
-characterRemote.OnServerEvent:Connect(function(player, action, characterName)
+local function parseCharacterRequest(action, payload)
+	if action == "SelectCharacter" and typeof(payload) == "string" then
+		return payload, nil
+	end
+
+	if (action == "PlayAsCharacter" or action == "SelectCharacter") and typeof(payload) == "table" then
+		local characterName = payload.CharacterName
+
+		if typeof(characterName) ~= "string" then
+			return nil, nil
+		end
+
+		return characterName, {
+			SkinName = payload.SkinName,
+			MorphEnabled = payload.MorphEnabled == true,
+		}
+	end
+
+	return nil, nil
+end
+
+characterRemote.OnServerEvent:Connect(function(player, action, payload)
 	if action == "SelectCharacter" then
-		CharacterService:SetCharacter(player, characterName)
+		local characterName, options = parseCharacterRequest(action, payload)
+		if characterName then
+			CharacterService:SetCharacter(player, characterName, options)
+		end
+	elseif action == "PlayAsCharacter" then
+		local characterName, options = parseCharacterRequest(action, payload)
+		if characterName then
+			CharacterService:SetCharacter(player, characterName, options)
+		end
 	elseif action == "BuyCharacter" then
+		local characterName = payload
 		local ok = ProgressionService:PurchaseCharacter(player, characterName)
 
 		if ok then
@@ -138,6 +174,7 @@ end)
 -- Startup
 StateService:StartCharacterSetup()
 ProgressionService:Start()
+CharacterMorphService:Start()
 CharacterService:Start()
 CinematicService:Start()
 LoreCinematicService:Start()

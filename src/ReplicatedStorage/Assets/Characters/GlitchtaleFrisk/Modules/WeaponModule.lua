@@ -1,3 +1,5 @@
+local SkinModule = require(script.Parent:WaitForChild("SkinModule"))
+
 local GTFriskWeapon = {}
 GTFriskWeapon.__index = GTFriskWeapon
 
@@ -130,6 +132,7 @@ function GTFriskWeapon:EquipSingleWeapon(options)
 	weapon.Name = equippedName
 	weapon:SetAttribute("CharacterWeapon", true)
 	weapon:SetAttribute("CharacterWeaponOwner", "GlitchtaleFrisk")
+	weapon:SetAttribute("SelectedSkin", options.SkinName or SkinModule.DefaultSkin)
 	weapon:SetAttribute("OriginalWeaponName", weaponName)
 	weapon.Parent = character
 
@@ -159,6 +162,18 @@ function GTFriskWeapon:EquipSingleWeapon(options)
 	motor.Parent = limb
 end
 
+function GTFriskWeapon:GetSkinWeaponData(character)
+	local skinName = character:GetAttribute("SelectedSkin")
+		or character:GetAttribute("EquippedSkin_GlitchtaleFrisk")
+		or SkinModule.DefaultSkin
+
+	if typeof(skinName) ~= "string" or not SkinModule.Skins[skinName] then
+		skinName = SkinModule.DefaultSkin
+	end
+
+	return skinName, SkinModule.Skins[skinName] or SkinModule.Skins[SkinModule.DefaultSkin]
+end
+
 function GTFriskWeapon:Equip(character)
 	if not character or not character.Parent then
 		return
@@ -172,14 +187,34 @@ function GTFriskWeapon:Equip(character)
 		return
 	end
 
+	local skinName, skinData = self:GetSkinWeaponData(character)
+	local weapons = skinData and skinData.Weapons
+
+	if typeof(weapons) ~= "table" then
+		weapons = {
+			{
+				WeaponName = "GT Frisk Sword",
+				MotorTemplateName = "GT Frisk SwordMotorTemplate",
+			},
+			{
+				WeaponName = "GT Frisk Shield",
+				MotorTemplateName = "GT Frisk ShieldMotorTemplate",
+			},
+		}
+	end
+
+	local swordData = weapons[1] or {}
+	local shieldData = weapons[2] or {}
+
 	self:EquipSingleWeapon({
 		Character = character,
 		WeaponsFolder = weaponsFolder,
 		LimbName = "Right Arm",
-		WeaponName = "GT Frisk Sword",
-		MotorTemplateName = "GT Frisk SwordMotorTemplate",
+		WeaponName = swordData.WeaponName or "GT Frisk Sword",
+		MotorTemplateName = swordData.MotorTemplateName or "GT Frisk SwordMotorTemplate",
 		EquippedName = "EquippedSword",
 		MotorName = "GTFriskSword",
+		SkinName = skinName,
 		HandleNames = {
 			"Handle",
 			"HandleSword",
@@ -192,10 +227,11 @@ function GTFriskWeapon:Equip(character)
 		Character = character,
 		WeaponsFolder = weaponsFolder,
 		LimbName = "Left Arm",
-		WeaponName = "GT Frisk Shield",
-		MotorTemplateName = "GT Frisk ShieldMotorTemplate",
+		WeaponName = shieldData.WeaponName or "GT Frisk Shield",
+		MotorTemplateName = shieldData.MotorTemplateName or "GT Frisk ShieldMotorTemplate",
 		EquippedName = "EquippedShield",
 		MotorName = "GTFriskShield",
+		SkinName = skinName,
 		HandleNames = {
 			"Handle",
 			"HandleShield",

@@ -28,7 +28,12 @@ local currentGui = nil
 local dustIcon = nil
 
 local selectedCharacter = "Chara"
+local selectedCustomizeCharacter = "Chara"
+local selectedCustomizeSkin = "Default"
 local selectedCustomizeCategory = "Characters"
+local morphEnabled = false
+local pendingPurchaseCharacter = nil
+local pendingPurchaseSkin = nil
 
 local shopPreviewController = ShopPreviewController.new(player, ReplicatedStorage)
 shopPreviewController:Start()
@@ -117,6 +122,129 @@ local function getCharacterData(characterName)
 	end
 
 	return nil
+end
+
+local function getSortedCharacters(ownedOnly)
+	local characters = {}
+
+	for _, characterName in ipairs(getCharacterOrder()) do
+		local data = getCharacterData(characterName)
+
+		if data and (not ownedOnly or isOwned(characterName)) then
+			table.insert(characters, characterName)
+		end
+	end
+
+	table.sort(characters, function(a, b)
+		local dataA = getCharacterData(a) or {}
+		local dataB = getCharacterData(b) or {}
+		local costA = dataA.Cost or 0
+		local costB = dataB.Cost or 0
+
+		if costA == costB then
+			return (dataA.DisplayName or a) < (dataB.DisplayName or b)
+		end
+
+		return costA < costB
+	end)
+
+	return characters
+end
+
+local function getSkinConfig(characterName)
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	local characters = assets and assets:FindFirstChild("Characters")
+	local characterFolder = characters and characters:FindFirstChild(characterName)
+	local modulesFolder = characterFolder and characterFolder:FindFirstChild("Modules")
+	local skinModule = modulesFolder and modulesFolder:FindFirstChild("SkinModule")
+
+	if not skinModule or not skinModule:IsA("ModuleScript") then
+		return nil
+	end
+
+	local success, result = pcall(require, skinModule)
+
+	if success and typeof(result) == "table" then
+		return result
+	end
+
+	warn("[TopbarUI] Failed to load SkinModule for", characterName)
+	return nil
+end
+
+local function getSkinData(characterName, skinName)
+	local skinConfig = getSkinConfig(characterName)
+	if not skinConfig then
+		return nil, "Default"
+	end
+
+	local defaultSkinName = skinConfig.DefaultSkin or "Default"
+	local resolvedSkinName = skinName or defaultSkinName
+	local skinData = skinConfig.Skins and skinConfig.Skins[resolvedSkinName]
+
+	if not skinData then
+		resolvedSkinName = defaultSkinName
+		skinData = skinConfig.Skins and skinConfig.Skins[resolvedSkinName]
+	end
+
+	return skinData, resolvedSkinName
+end
+
+local function getSkinOrder(characterName)
+	local skinConfig = getSkinConfig(characterName)
+	local skins = skinConfig and skinConfig.Skins
+	local order = {}
+
+	if typeof(skins) ~= "table" then
+		return order, skins
+	end
+
+	for skinName in pairs(skins) do
+		table.insert(order, skinName)
+	end
+
+	table.sort(order, function(a, b)
+		if a == (skinConfig.DefaultSkin or "Default") then
+			return true
+		end
+
+		if b == (skinConfig.DefaultSkin or "Default") then
+			return false
+		end
+
+		local skinA = skins[a] or {}
+		local skinB = skins[b] or {}
+
+		return (skinA.DisplayName or a) < (skinB.DisplayName or b)
+	end)
+
+	return order, skins
+end
+
+local function isSkinOwned(characterName, skinName, skinData)
+	if skinData and (skinData.Free == true or (skinData.Cost or 0) <= 0) then
+		return true
+	end
+
+	if profile and profile.OwnedSkins and profile.OwnedSkins[characterName] then
+		return profile.OwnedSkins[characterName][skinName] == true
+	end
+
+	return false
+end
+
+local function getEquippedSkin(characterName)
+	if profile and profile.EquippedSkins and typeof(profile.EquippedSkins[characterName]) == "string" then
+		return profile.EquippedSkins[characterName]
+	end
+
+	local attributeSkin = player:GetAttribute("EquippedSkin_" .. characterName)
+	if typeof(attributeSkin) == "string" then
+		return attributeSkin
+	end
+
+	local _, defaultSkinName = getSkinData(characterName, nil)
+	return defaultSkinName or "Default"
 end
 
 local function hideCombatUI()
@@ -253,13 +381,12 @@ local function requestSnapshot()
 	})
 end
 
-local function selectOrBuyCharacter(characterName)
+local function requestPlayAs(characterName, skinName)
 	if isOwned(characterName) then
-		characterRemote:FireServer("SelectCharacter", characterName)
-	else
-		progressionRemote:FireServer({
-			Action = "BuyCharacter",
+		characterRemote:FireServer("PlayAsCharacter", {
 			CharacterName = characterName,
+			SkinName = skinName or getEquippedSkin(characterName),
+			MorphEnabled = morphEnabled,
 		})
 	end
 end
@@ -365,7 +492,8 @@ local function showCustomize()
 	end
 
 	local root = makePanelRoot("Customize")
-	shopPreviewController:Enter(selectedCharacter)
+	selectedCustomizeCharacter = selectedCustomizeCharacter or selectedCharacter
+	shopPreviewController:Enter(selectedCustomizeCharacter, selectedCustomizeSkin)
 	hideCombatUI()
 
 	local leftPanel = makeFloatingPanel(
@@ -438,10 +566,60 @@ local function showCustomize()
 		"Description",
 		"",
 		UDim2.fromOffset(16, 68),
-		UDim2.new(1, -32, 0, 52),
+		UDim2.new(1, -260, 0, 52),
 		14,
 		false
 	)
+
+	local playAsButton = makeButton(
+		bottomPanel,
+		"PlayAsButton",
+		"Play As",
+		UDim2.new(1, -228, 0, 18),
+		UDim2.fromOffset(96, 34),
+		Color3.fromRGB(42, 56, 80)
+	)
+
+	local morphButton = makeButton(
+		bottomPanel,
+		"MorphToggle",
+		morphEnabled and "Morph: On" or "Morph: Off",
+		UDim2.new(1, -120, 0, 18),
+		UDim2.fromOffset(104, 34),
+		morphEnabled and Color3.fromRGB(48, 76, 54) or Color3.fromRGB(42, 42, 50)
+	)
+
+	local purchaseLabel = makeText(
+		bottomPanel,
+		"PurchaseLabel",
+		"",
+		UDim2.new(1, -228, 0, 58),
+		UDim2.fromOffset(212, 24),
+		12,
+		false,
+		Color3.fromRGB(235, 210, 175)
+	)
+
+	local confirmButton = makeButton(
+		bottomPanel,
+		"ConfirmBuyButton",
+		"Confirm",
+		UDim2.new(1, -228, 0, 88),
+		UDim2.fromOffset(96, 30),
+		Color3.fromRGB(90, 50, 36)
+	)
+
+	local cancelButton = makeButton(
+		bottomPanel,
+		"CancelBuyButton",
+		"Cancel",
+		UDim2.new(1, -120, 0, 88),
+		UDim2.fromOffset(104, 30),
+		Color3.fromRGB(42, 42, 50)
+	)
+
+	confirmButton.Visible = false
+	cancelButton.Visible = false
 
 	local itemList = Instance.new("ScrollingFrame")
 	itemList.Name = "ItemList"
@@ -474,14 +652,91 @@ local function showCustomize()
 			return
 		end
 
-		selectedCharacter = characterName
+		selectedCustomizeCharacter = characterName
+
+		selectedCustomizeSkin = getEquippedSkin(characterName)
 
 		characterNameLabel.Text = data.DisplayName or characterName
 		roleLabel.Text = data.Role or ""
 		descriptionLabel.Text = data.Description or "No description yet."
 
-		shopPreviewController:Enter(characterName)
+		local owned = isOwned(characterName)
+		playAsButton.Text = owned and "Play As" or "Locked"
+		playAsButton.Active = owned
+		playAsButton.AutoButtonColor = owned
+		playAsButton.BackgroundColor3 = owned
+			and Color3.fromRGB(42, 56, 80)
+			or Color3.fromRGB(45, 36, 36)
+
+		shopPreviewController:Enter(characterName, selectedCustomizeSkin)
 	end
+
+	local function clearPurchaseConfirm()
+		pendingPurchaseCharacter = nil
+		pendingPurchaseSkin = nil
+		purchaseLabel.Text = ""
+		confirmButton.Visible = false
+		cancelButton.Visible = false
+	end
+
+	local function showPurchaseConfirm(characterName)
+		local data = getCharacterData(characterName)
+		if not data then return end
+
+		pendingPurchaseCharacter = characterName
+		purchaseLabel.Text = "Buy " .. (data.DisplayName or characterName) .. " for " .. tostring(data.Cost or 0) .. " Dust?"
+		confirmButton.Visible = true
+		cancelButton.Visible = true
+	end
+
+	local function showSkinPurchaseConfirm(characterName, skinName, skinData)
+		pendingPurchaseCharacter = characterName
+		pendingPurchaseSkin = skinName
+		purchaseLabel.Text = "Buy " .. (skinData.DisplayName or skinName) .. " for " .. tostring(skinData.Cost or 0) .. " Dust?"
+		confirmButton.Visible = true
+		cancelButton.Visible = true
+	end
+
+	playAsButton.MouseButton1Click:Connect(function()
+		if not isOwned(selectedCustomizeCharacter) then
+			return
+		end
+
+		requestPlayAs(selectedCustomizeCharacter, selectedCustomizeSkin)
+	end)
+
+	morphButton.MouseButton1Click:Connect(function()
+		morphEnabled = not morphEnabled
+		morphButton.Text = morphEnabled and "Morph: On" or "Morph: Off"
+		morphButton.BackgroundColor3 = morphEnabled
+			and Color3.fromRGB(48, 76, 54)
+			or Color3.fromRGB(42, 42, 50)
+	end)
+
+	confirmButton.MouseButton1Click:Connect(function()
+		if not pendingPurchaseCharacter then
+			return
+		end
+
+		if pendingPurchaseSkin then
+			progressionRemote:FireServer({
+				Action = "BuySkin",
+				CharacterName = pendingPurchaseCharacter,
+				SkinName = pendingPurchaseSkin,
+			})
+		else
+			progressionRemote:FireServer({
+				Action = "BuyCharacter",
+				CharacterName = pendingPurchaseCharacter,
+			})
+		end
+
+		purchaseLabel.Text = "Purchase request sent."
+		confirmButton.Visible = false
+		cancelButton.Visible = false
+	end)
+
+	cancelButton.MouseButton1Click:Connect(clearPurchaseConfirm)
 
 	local function addItemButton(text, callback, owned)
 		local safeName = text:gsub("%W+", "")
@@ -512,7 +767,7 @@ local function showCustomize()
 		clearItems()
 
 		if category == "Characters" then
-			for _, characterName in ipairs(getCharacterOrder()) do
+			for _, characterName in ipairs(getSortedCharacters(false)) do
 				local data = getCharacterData(characterName)
 
 				if data then
@@ -524,15 +779,11 @@ local function showCustomize()
 					end
 
 					addItemButton(text, function()
+						clearPurchaseConfirm()
 						setBottomInfo(characterName)
 
-						if owned then
-							characterRemote:FireServer("SelectCharacter", characterName)
-						else
-							progressionRemote:FireServer({
-								Action = "BuyCharacter",
-								CharacterName = characterName,
-							})
+						if not owned then
+							showPurchaseConfirm(characterName)
 						end
 					end, owned)
 				end
@@ -549,8 +800,40 @@ local function showCustomize()
 				end
 			end
 		elseif category == "Skins" then
-			addItemButton("Default Skin", function() end, true)
-			addItemButton("Future Skin Slot", function() end, false)
+			local skinOrder, skins = getSkinOrder(selectedCustomizeCharacter)
+
+			if #skinOrder == 0 then
+				addItemButton("Default Skin", function()
+					selectedCustomizeSkin = "Default"
+					shopPreviewController:Enter(selectedCustomizeCharacter, selectedCustomizeSkin)
+				end, true)
+			else
+				for _, skinName in ipairs(skinOrder) do
+					local skin = skins[skinName] or {}
+					local owned = isSkinOwned(selectedCustomizeCharacter, skinName, skin)
+					local text = skin.DisplayName or skinName
+
+					if not owned then
+						text ..= "  -  " .. tostring(skin.Cost or 0) .. " Dust"
+					end
+
+					addItemButton(text, function()
+						clearPurchaseConfirm()
+						selectedCustomizeSkin = skinName
+						shopPreviewController:Enter(selectedCustomizeCharacter, selectedCustomizeSkin)
+
+						if owned then
+							progressionRemote:FireServer({
+								Action = "EquipSkin",
+								CharacterName = selectedCustomizeCharacter,
+								SkinName = skinName,
+							})
+						else
+							showSkinPurchaseConfirm(selectedCustomizeCharacter, skinName, skin)
+						end
+					end, owned)
+				end
+			end
 		elseif category == "Auras" then
 			addItemButton("No Aura", function() end, true)
 			addItemButton("Future Aura Slot", function() end, false)
@@ -585,7 +868,7 @@ local function showCustomize()
 		end)
 	end
 
-	setBottomInfo(selectedCharacter)
+	setBottomInfo(selectedCustomizeCharacter)
 	showCategory(selectedCustomizeCategory or "Characters")
 end
 
@@ -617,21 +900,19 @@ local function rebuildCharacterDropdown()
 
 	dropdownIcons = {}
 
-	for _, characterName in ipairs(getCharacterOrder()) do
+	for _, characterName in ipairs(getSortedCharacters(true)) do
 		local data = getCharacterData(characterName)
 
 		if data then
-			local owned = isOwned(characterName)
 			local displayName = data.DisplayName or characterName
-			local label = owned and displayName or (displayName .. " [" .. tostring(data.Cost or 0) .. "]")
 
 			local itemIcon = Icon.new()
 				:setName("Character_" .. characterName)
-				:setLabel(label)
+				:setLabel(displayName)
 				:oneClick(true)
 
 			itemIcon:bindEvent("selected", function()
-				selectOrBuyCharacter(characterName)
+				requestPlayAs(characterName)
 			end)
 
 			table.insert(dropdownIcons, itemIcon)
@@ -676,12 +957,14 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 
 		if currentPanelName == "Customize" then
 			local oldCategory = selectedCustomizeCategory
-			local oldCharacter = selectedCharacter
+			local oldCharacter = selectedCustomizeCharacter
+			local oldSkin = selectedCustomizeSkin
 
 			clearCurrentGui()
 
 			selectedCustomizeCategory = oldCategory
-			selectedCharacter = oldCharacter
+			selectedCustomizeCharacter = oldCharacter
+			selectedCustomizeSkin = oldSkin
 
 			showCustomize()
 		end

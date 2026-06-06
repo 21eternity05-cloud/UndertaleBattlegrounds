@@ -1,3 +1,7 @@
+local Players = game:GetService("Players")
+
+local SkinModule = require(script.Parent:WaitForChild("SkinModule"))
+
 local CharaWeapon = {}
 CharaWeapon.__index = CharaWeapon
 
@@ -43,6 +47,28 @@ function CharaWeapon:WeldWeaponPartsToHandle(weaponModel, handle)
 	end
 end
 
+function CharaWeapon:GetSelectedSkinName(character)
+	local player = Players:GetPlayerFromCharacter(character)
+	local skinName = character:GetAttribute("SelectedSkin")
+		or character:GetAttribute("CharaSkin")
+		or (player and player:GetAttribute("CharaSkin"))
+		or (player and player:GetAttribute("SelectedSkin"))
+		or SkinModule.DefaultSkin
+
+	if typeof(skinName) ~= "string" or not SkinModule.Skins[skinName] then
+		return SkinModule.DefaultSkin
+	end
+
+	return skinName
+end
+
+function CharaWeapon:GetSkinWeaponData(character)
+	local skinName = self:GetSelectedSkinName(character)
+	local skinData = SkinModule.Skins[skinName] or SkinModule.Skins[SkinModule.DefaultSkin]
+
+	return skinName, skinData
+end
+
 function CharaWeapon:Equip(character)
 	if not character or not character.Parent then return end
 
@@ -52,14 +78,21 @@ function CharaWeapon:Equip(character)
 	local weaponsFolder = self.CharacterFolder:FindFirstChild("Weapons")
 	if not weaponsFolder then return end
 
-	local knifeTemplate = weaponsFolder:FindFirstChild("RealKnife")
-	local motorTemplate = weaponsFolder:FindFirstChild("KnifeMotorTemplate")
+	local skinName, skinData = self:GetSkinWeaponData(character)
+	local weaponName = skinData and skinData.WeaponName or "RealKnife"
+	local motorTemplateName = skinData and skinData.MotorTemplateName or "KnifeMotorTemplate"
+	local knifeTemplate = weaponsFolder:FindFirstChild(weaponName) or weaponsFolder:FindFirstChild("RealKnife")
+	local motorTemplate = weaponsFolder:FindFirstChild(motorTemplateName) or weaponsFolder:FindFirstChild("KnifeMotorTemplate")
 
 	if not knifeTemplate then return end
 	if not motorTemplate or not motorTemplate:IsA("Motor6D") then return end
 
 	local knife = knifeTemplate:Clone()
 	knife.Name = "EquippedWeapon"
+	knife:SetAttribute("CharacterWeapon", true)
+	knife:SetAttribute("CharacterWeaponOwner", "Chara")
+	knife:SetAttribute("SelectedSkin", skinName)
+	knife:SetAttribute("OriginalWeaponName", weaponName)
 	knife.Parent = character
 
 	local handle = knife:FindFirstChild("HandleKnife", true)

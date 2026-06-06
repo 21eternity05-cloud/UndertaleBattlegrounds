@@ -6,6 +6,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CharacterData = require(Shared:WaitForChild("CharacterData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
 local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
+local Assets = ReplicatedStorage:WaitForChild("Assets")
+local CharactersFolder = Assets:WaitForChild("Characters")
 
 local ProgressionService = {}
 ProgressionService.__index = ProgressionService
@@ -60,6 +62,58 @@ function ProgressionService:GetDataKey(player)
 	return "Player_" .. tostring(player.UserId)
 end
 
+function ProgressionService:GetSkinConfig(characterName)
+	local characterFolder = CharactersFolder:FindFirstChild(characterName)
+	local modulesFolder = characterFolder and characterFolder:FindFirstChild("Modules")
+	local skinModule = modulesFolder and modulesFolder:FindFirstChild("SkinModule")
+
+	if not skinModule or not skinModule:IsA("ModuleScript") then
+		return nil
+	end
+
+	local success, skinConfig = pcall(require, skinModule)
+
+	if success and typeof(skinConfig) == "table" then
+		return skinConfig
+	end
+
+	warn("[ProgressionService] Failed to load SkinModule for", tostring(characterName))
+	return nil
+end
+
+function ProgressionService:GetDefaultSkinName(characterName)
+	local skinConfig = self:GetSkinConfig(characterName)
+
+	return skinConfig and skinConfig.DefaultSkin or "Default"
+end
+
+function ProgressionService:MakeDefaultSkinTables()
+	local ownedSkins = {}
+	local equippedSkins = {}
+
+	for characterName, data in pairs(CharacterData) do
+		if typeof(data) == "table" then
+			local skinConfig = self:GetSkinConfig(characterName)
+			local defaultSkinName = skinConfig and skinConfig.DefaultSkin or "Default"
+
+			ownedSkins[characterName] = {}
+			equippedSkins[characterName] = defaultSkinName
+
+			if skinConfig and typeof(skinConfig.Skins) == "table" then
+				for skinName, skinData in pairs(skinConfig.Skins) do
+					if typeof(skinData) == "table" and (skinData.Free == true or (skinData.Cost or 0) <= 0) then
+						ownedSkins[characterName][skinName] = true
+					end
+				end
+			else
+				ownedSkins[characterName][defaultSkinName] = true
+			end
+		end
+	end
+
+	return ownedSkins, equippedSkins
+end
+
 function ProgressionService:MakeDefaultProfile()
 	local ownedCharacters = {}
 
@@ -77,12 +131,16 @@ function ProgressionService:MakeDefaultProfile()
 		end
 	end
 
+	local ownedSkins, equippedSkins = self:MakeDefaultSkinTables()
+
 	return {
 		Dust = self.Config.StartingDust or 0,
 		Kills = 0,
 
 		OwnedCharacters = ownedCharacters,
 		OwnedTitles = ownedTitles,
+		OwnedSkins = ownedSkins,
+		EquippedSkins = equippedSkins,
 
 		EquippedTitle = CustomizationData.DefaultEquipped.Title,
 		Equipped = table.clone(CustomizationData.DefaultEquipped),
@@ -117,6 +175,28 @@ function ProgressionService:MergeProfile(savedProfile)
 		end
 	end
 
+	if typeof(savedProfile.OwnedSkins) == "table" then
+		for characterName, skins in pairs(savedProfile.OwnedSkins) do
+			if typeof(skins) == "table" then
+				defaultProfile.OwnedSkins[characterName] = defaultProfile.OwnedSkins[characterName] or {}
+
+				for skinName, owned in pairs(skins) do
+					if owned == true then
+						defaultProfile.OwnedSkins[characterName][skinName] = true
+					end
+				end
+			end
+		end
+	end
+
+	if typeof(savedProfile.EquippedSkins) == "table" then
+		for characterName, skinName in pairs(savedProfile.EquippedSkins) do
+			if typeof(skinName) == "string" then
+				defaultProfile.EquippedSkins[characterName] = skinName
+			end
+		end
+	end
+
 	if typeof(savedProfile.EquippedTitle) == "string" then
 		defaultProfile.EquippedTitle = savedProfile.EquippedTitle
 	end
@@ -145,6 +225,8 @@ function ProgressionService:GetSavePayload(profile)
 
 		OwnedCharacters = profile.OwnedCharacters or {},
 		OwnedTitles = profile.OwnedTitles or {},
+		OwnedSkins = profile.OwnedSkins or {},
+		EquippedSkins = profile.EquippedSkins or {},
 
 		EquippedTitle = profile.EquippedTitle,
 		Equipped = profile.Equipped or {},
@@ -255,6 +337,12 @@ function ProgressionService:SyncPlayerAttributes(player)
 
 	player:SetAttribute("Dust", profile.Dust or 0)
 	player:SetAttribute("EquippedTitle", profile.EquippedTitle)
+
+	for characterName, skinName in pairs(profile.EquippedSkins or {}) do
+		if typeof(skinName) == "string" then
+			player:SetAttribute("EquippedSkin_" .. characterName, skinName)
+		end
+	end
 end
 
 function ProgressionService:SetDust(player, amount)
@@ -436,6 +524,92 @@ function ProgressionService:PurchaseCharacter(player, characterName)
 	return true, "Purchased"
 end
 
+function ProgressionService:IsSkinOwned(player, characterName, skinName)
+	local skinConfig = self:GetSkinConfig(characterName)
+	local skinData = skinConfig and skinConfig.Skins and skinConfig.Skins[skinName]
+
+	if not skinData then
+		return false
+	end
+
+	if skinData.Free == true or (skinData.Cost or 0) <= 0 then
+		return true
+	end
+
+	local profile = self:GetProfile(player)
+
+	return profile
+		and profile.OwnedSkins
+		and profile.OwnedSkins[characterName]
+		and profile.OwnedSkins[characterName][skinName] == true
+end
+
+function ProgressionService:GetEquippedSkin(player, characterName)
+	local profile = self:GetProfile(player)
+	local defaultSkinName = self:GetDefaultSkinName(characterName)
+	local equippedSkin = profile and profile.EquippedSkins and profile.EquippedSkins[characterName]
+
+	if typeof(equippedSkin) == "string" and self:IsSkinOwned(player, characterName, equippedSkin) then
+		return equippedSkin
+	end
+
+	return defaultSkinName
+end
+
+function ProgressionService:EquipSkin(player, characterName, skinName)
+	if not self:IsSkinOwned(player, characterName, skinName) then
+		return false, "LockedSkin"
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	profile.EquippedSkins[characterName] = skinName
+	player:SetAttribute("EquippedSkin_" .. characterName, skinName)
+
+	self:SendSnapshot(player)
+
+	return true, "Equipped"
+end
+
+function ProgressionService:PurchaseSkin(player, characterName, skinName)
+	local skinConfig = self:GetSkinConfig(characterName)
+	local skinData = skinConfig and skinConfig.Skins and skinConfig.Skins[skinName]
+
+	if not skinData then
+		return false, "UnknownSkin"
+	end
+
+	if self:IsSkinOwned(player, characterName, skinName) then
+		self:EquipSkin(player, characterName, skinName)
+		return true, "AlreadyOwned"
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	local cost = skinData.Cost or 0
+
+	if (profile.Dust or 0) < cost then
+		return false, "NotEnoughDust"
+	end
+
+	profile.Dust -= cost
+	profile.OwnedSkins[characterName] = profile.OwnedSkins[characterName] or {}
+	profile.OwnedSkins[characterName][skinName] = true
+	profile.EquippedSkins[characterName] = skinName
+
+	self:SyncPlayerAttributes(player)
+	self:EnsureLeaderstats(player)
+	self:SendSnapshot(player)
+
+	return true, "Purchased"
+end
+
 function ProgressionService:EquipTitle(player, titleId)
 	local profile = self:GetProfile(player)
 
@@ -495,6 +669,8 @@ function ProgressionService:BuildSnapshot(player)
 
 		OwnedCharacters = table.clone(profile.OwnedCharacters),
 		OwnedTitles = table.clone(profile.OwnedTitles),
+		OwnedSkins = table.clone(profile.OwnedSkins),
+		EquippedSkins = table.clone(profile.EquippedSkins),
 
 		EquippedTitle = profile.EquippedTitle,
 		Equipped = table.clone(profile.Equipped),
@@ -541,6 +717,34 @@ function ProgressionService:HandleRemote(player, payload)
 		self:GetRemote():FireClient(player, {
 			Action = "EquipTitleResult",
 			TitleId = payload.TitleId,
+			Success = ok,
+			Reason = reason,
+			Profile = self:BuildSnapshot(player),
+		})
+	elseif payload.Action == "BuySkin"
+		and typeof(payload.CharacterName) == "string"
+		and typeof(payload.SkinName) == "string"
+	then
+		local ok, reason = self:PurchaseSkin(player, payload.CharacterName, payload.SkinName)
+
+		self:GetRemote():FireClient(player, {
+			Action = "PurchaseSkinResult",
+			CharacterName = payload.CharacterName,
+			SkinName = payload.SkinName,
+			Success = ok,
+			Reason = reason,
+			Profile = self:BuildSnapshot(player),
+		})
+	elseif payload.Action == "EquipSkin"
+		and typeof(payload.CharacterName) == "string"
+		and typeof(payload.SkinName) == "string"
+	then
+		local ok, reason = self:EquipSkin(player, payload.CharacterName, payload.SkinName)
+
+		self:GetRemote():FireClient(player, {
+			Action = "EquipSkinResult",
+			CharacterName = payload.CharacterName,
+			SkinName = payload.SkinName,
 			Success = ok,
 			Reason = reason,
 			Profile = self:BuildSnapshot(player),

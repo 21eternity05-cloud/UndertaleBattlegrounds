@@ -1,3 +1,5 @@
+local SkinModule = require(script.Parent:WaitForChild("SkinModule"))
+
 local PapyrusWeapon = {}
 PapyrusWeapon.__index = PapyrusWeapon
 
@@ -60,6 +62,18 @@ function PapyrusWeapon:Remove(character)
 	end
 end
 
+function PapyrusWeapon:GetSkinWeaponData(character)
+	local skinName = character:GetAttribute("SelectedSkin")
+		or character:GetAttribute("EquippedSkin_DisbeliefPapyrus")
+		or SkinModule.DefaultSkin
+
+	if typeof(skinName) ~= "string" or not SkinModule.Skins[skinName] then
+		skinName = SkinModule.DefaultSkin
+	end
+
+	return skinName, SkinModule.Skins[skinName] or SkinModule.Skins[SkinModule.DefaultSkin]
+end
+
 function PapyrusWeapon:Equip(character)
 	if not character or not character.Parent then return end
 
@@ -71,14 +85,21 @@ function PapyrusWeapon:Equip(character)
 	local weaponsFolder = self.CharacterFolder:FindFirstChild("Weapons")
 	if not weaponsFolder then return end
 
-	local staffTemplate = weaponsFolder:FindFirstChild("BoneStaff")
-	local motorTemplate = weaponsFolder:FindFirstChild("BoneStaffMotorTemplate")
+	local skinName, skinData = self:GetSkinWeaponData(character)
+	local weaponName = skinData and skinData.WeaponName or "BoneStaff"
+	local motorTemplateName = skinData and skinData.MotorTemplateName or "BoneStaffMotorTemplate"
+	local staffTemplate = weaponsFolder:FindFirstChild(weaponName) or weaponsFolder:FindFirstChild("BoneStaff")
+	local motorTemplate = weaponsFolder:FindFirstChild(motorTemplateName) or weaponsFolder:FindFirstChild("BoneStaffMotorTemplate")
 
 	if not staffTemplate then return end
 	if not motorTemplate or not motorTemplate:IsA("Motor6D") then return end
 
 	local staff = staffTemplate:Clone()
 	staff.Name = "EquippedWeapon"
+	staff:SetAttribute("CharacterWeapon", true)
+	staff:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
+	staff:SetAttribute("SelectedSkin", skinName)
+	staff:SetAttribute("OriginalWeaponName", weaponName)
 	staff.Parent = character
 
 	local handle = staff:FindFirstChild("Handle", true)
@@ -108,6 +129,8 @@ function PapyrusWeapon:Equip(character)
 	motor.Part0 = rightArm
 	motor.Part1 = handle
 	motor:SetAttribute("CharacterWeaponMotor", true)
+	motor:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
+	motor:SetAttribute("OriginalWeaponName", weaponName)
 	motor.Parent = rightArm
 end
 

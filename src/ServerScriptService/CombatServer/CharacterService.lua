@@ -6,12 +6,13 @@ local CharacterData = require(ReplicatedStorage:WaitForChild("Shared"):WaitForCh
 local CharacterService = {}
 CharacterService.__index = CharacterService
 
-function CharacterService.new(config, weaponService, progressionService)
+function CharacterService.new(config, weaponService, progressionService, characterMorphService)
 	local self = setmetatable({}, CharacterService)
 
 	self.Config = config
 	self.WeaponService = weaponService
 	self.ProgressionService = progressionService
+	self.CharacterMorphService = characterMorphService
 
 	return self
 end
@@ -47,7 +48,119 @@ function CharacterService:GetCharacterName(player)
 	return self.Config.DefaultCharacterName or "Chara"
 end
 
-function CharacterService:SetCharacter(player, characterName)
+function CharacterService:GetDefaultSkin(characterName)
+	local skinConfig = self:GetSkinConfig(characterName)
+
+	if skinConfig and skinConfig.DefaultSkin then
+		return skinConfig.DefaultSkin
+	end
+
+	return "Default"
+end
+
+function CharacterService:GetSkinConfig(characterName)
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	local characters = assets and assets:FindFirstChild("Characters")
+	local characterFolder = characters and characters:FindFirstChild(characterName)
+	local modulesFolder = characterFolder and characterFolder:FindFirstChild("Modules")
+	local skinModule = modulesFolder and modulesFolder:FindFirstChild("SkinModule")
+
+	if not skinModule then
+		return nil
+	end
+
+	local success, skinConfig = pcall(require, skinModule)
+	if not success or typeof(skinConfig) ~= "table" then
+		warn("[CharacterService] Failed to load SkinModule:", tostring(characterName))
+		return nil
+	end
+
+	return skinConfig
+end
+
+function CharacterService:GetValidSkinName(player, characterName, skinName)
+	local skinConfig = self:GetSkinConfig(characterName)
+	local defaultSkinName = (skinConfig and skinConfig.DefaultSkin) or "Default"
+
+	if typeof(skinName) == "string" and skinConfig and skinConfig.Skins and skinConfig.Skins[skinName] then
+		if not self.ProgressionService or not self.ProgressionService.IsSkinOwned then
+			local skinData = skinConfig.Skins[skinName]
+			if skinData.Free == true or (skinData.Cost or 0) <= 0 then
+				return skinName
+			end
+		elseif self.ProgressionService:IsSkinOwned(player, characterName, skinName) then
+			return skinName
+		end
+	end
+
+	return defaultSkinName
+end
+
+function CharacterService:NormalizeCharacterOptions(player, characterName, options)
+	if typeof(options) ~= "table" then
+		options = {}
+	end
+
+	local skinName = options.SkinName
+
+	if typeof(skinName) ~= "string" or skinName == "" then
+		if self.ProgressionService and self.ProgressionService.GetEquippedSkin then
+			skinName = self.ProgressionService:GetEquippedSkin(player, characterName)
+		else
+			skinName = self:GetDefaultSkin(characterName)
+		end
+	end
+
+	skinName = self:GetValidSkinName(player, characterName, skinName)
+
+	return {
+		SkinName = skinName,
+		MorphEnabled = options.MorphEnabled == true,
+	}
+end
+
+function CharacterService:ApplyCharacterAttributes(player, character, characterName, options)
+	player:SetAttribute("CharacterName", characterName)
+	player:SetAttribute("MorphEnabled", options.MorphEnabled == true)
+
+	if options.SkinName then
+		player:SetAttribute("SelectedSkin", options.SkinName)
+		player:SetAttribute("EquippedSkin_" .. characterName, options.SkinName)
+	end
+
+	if characterName == "Chara" then
+		player:SetAttribute("CharaSkin", options.SkinName or "Default")
+	end
+
+	if character then
+		character:SetAttribute("CharacterName", characterName)
+		character:SetAttribute("MorphEnabled", options.MorphEnabled == true)
+
+		if options.SkinName then
+			character:SetAttribute("SelectedSkin", options.SkinName)
+			character:SetAttribute("EquippedSkin_" .. characterName, options.SkinName)
+		end
+
+		if characterName == "Chara" then
+			character:SetAttribute("CharaSkin", options.SkinName or "Default")
+		end
+	end
+end
+
+function CharacterService:GetCurrentOptions(player, characterName)
+	local skinName = player:GetAttribute("EquippedSkin_" .. characterName)
+
+	if not skinName and self.ProgressionService and self.ProgressionService.GetEquippedSkin then
+		skinName = self.ProgressionService:GetEquippedSkin(player, characterName)
+	end
+
+	return self:NormalizeCharacterOptions(player, characterName, {
+		SkinName = skinName,
+		MorphEnabled = player:GetAttribute("MorphEnabled") == true,
+	})
+end
+
+function CharacterService:SetCharacter(player, characterName, options)
 	if typeof(characterName) ~= "string" then return end
 	if not self:IsValidCharacter(characterName) then
 		warn("Invalid character:", characterName)
@@ -64,11 +177,29 @@ function CharacterService:SetCharacter(player, characterName)
 		return
 	end
 
-	player:SetAttribute("CharacterName", characterName)
+	if options == nil then
+		options = self:GetCurrentOptions(player, characterName)
+	else
+		options = self:NormalizeCharacterOptions(player, characterName, options)
+
+		if self.ProgressionService and self.ProgressionService.EquipSkin then
+			self.ProgressionService:EquipSkin(player, characterName, options.SkinName)
+		end
+	end
 
 	local character = player.Character
+	self:ApplyCharacterAttributes(player, character, characterName, options)
+
 	if character then
-		character:SetAttribute("CharacterName", characterName)
+		if self.CharacterMorphService then
+			self.CharacterMorphService:ApplyCharacterMorph(
+				player,
+				character,
+				characterName,
+				options.SkinName,
+				options.MorphEnabled
+			)
+		end
 
 		if self.WeaponService then
 			self.WeaponService:EquipWeapon(character, characterName)
@@ -84,10 +215,34 @@ function CharacterService:SetupPlayer(player)
 	end
 
 	player.CharacterAdded:Connect(function(character)
+		character:WaitForChild("Humanoid", 5)
 		task.wait(0.25)
 
 		local characterName = self:GetCharacterName(player)
-		character:SetAttribute("CharacterName", characterName)
+		local options = self:GetCurrentOptions(player, characterName)
+
+		self:ApplyCharacterAttributes(player, character, characterName, options)
+
+		if self.CharacterMorphService then
+			if options.MorphEnabled then
+				self.CharacterMorphService:ApplyCharacterMorph(
+					player,
+					character,
+					characterName,
+					options.SkinName,
+					options.MorphEnabled
+				)
+			elseif self.CharacterMorphService.ClearMorphItemsOnly then
+				self.CharacterMorphService:ClearMorphItemsOnly(character)
+
+				if self.CharacterMorphService.NeedsAvatarRestore
+					and self.CharacterMorphService:NeedsAvatarRestore(character)
+					and self.CharacterMorphService.RestoreOriginalAppearance
+				then
+					self.CharacterMorphService:RestoreOriginalAppearance(player, character)
+				end
+			end
+		end
 
 		if self.WeaponService then
 			self.WeaponService:EquipWeapon(character, characterName)
@@ -105,7 +260,30 @@ function CharacterService:Start()
 
 		if player.Character then
 			local characterName = self:GetCharacterName(player)
-			player.Character:SetAttribute("CharacterName", characterName)
+			local options = self:GetCurrentOptions(player, characterName)
+
+			self:ApplyCharacterAttributes(player, player.Character, characterName, options)
+
+			if self.CharacterMorphService then
+				if options.MorphEnabled then
+					self.CharacterMorphService:ApplyCharacterMorph(
+						player,
+						player.Character,
+						characterName,
+						options.SkinName,
+						options.MorphEnabled
+					)
+				elseif self.CharacterMorphService.ClearMorphItemsOnly then
+					self.CharacterMorphService:ClearMorphItemsOnly(player.Character)
+
+					if self.CharacterMorphService.NeedsAvatarRestore
+						and self.CharacterMorphService:NeedsAvatarRestore(player.Character)
+						and self.CharacterMorphService.RestoreOriginalAppearance
+					then
+						self.CharacterMorphService:RestoreOriginalAppearance(player, player.Character)
+					end
+				end
+			end
 
 			if self.WeaponService then
 				self.WeaponService:EquipWeapon(player.Character, characterName)
