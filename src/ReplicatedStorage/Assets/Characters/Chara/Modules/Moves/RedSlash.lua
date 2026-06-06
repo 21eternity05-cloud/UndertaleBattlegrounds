@@ -7,7 +7,7 @@ local RedSlash = {
 	LockTime = 1.45,
 	MaxLockTime = 1.7,
 
-	Damage = 12,
+	Damage = 14,
 	Stun = 1,
 
 	Radius = 5,

@@ -49,23 +49,68 @@ function WeaponService:GetWeaponModule(characterName)
 	return module
 end
 
+function WeaponService:IsWeaponContainer(instance)
+	if not instance then
+		return false
+	end
+
+	if instance:GetAttribute("CharacterWeapon") == true then
+		return true
+	end
+
+	if instance.Name == "EquippedWeapon"
+		or instance.Name == "EquippedSword"
+		or instance.Name == "EquippedShield"
+		or instance.Name == "EquippedStaff"
+	then
+		return true
+	end
+
+	return false
+end
+
+function WeaponService:IsWeaponMotor(instance)
+	if not instance or not instance:IsA("Motor6D") then
+		return false
+	end
+
+	if instance:GetAttribute("CharacterWeaponMotor") == true then
+		return true
+	end
+
+	if instance.Name == "WeaponMotor"
+		or instance.Name == "HandleKnife"
+		or instance.Name == "BoneStaff"
+		or instance.Name == "GTFriskSword"
+		or instance.Name == "GTFriskShield"
+	then
+		return true
+	end
+
+	return false
+end
+
 function WeaponService:RemoveCurrentWeapon(character)
 	if not character or not character.Parent then return end
 
-	local existingWeapon = character:FindFirstChild("EquippedWeapon")
-	if existingWeapon then
-		existingWeapon:Destroy()
+	-- Destroy direct weapon containers first.
+	-- This removes the whole model, not just a handle/primary part.
+	for _, child in ipairs(character:GetChildren()) do
+		if self:IsWeaponContainer(child) then
+			child:Destroy()
+		end
 	end
 
-	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("Motor6D") then
-			if descendant:GetAttribute("CharacterWeaponMotor") == true then
-				descendant:Destroy()
-			end
+	-- Safety cleanup: remove old equipped weapon folders too, if any older modules used them.
+	local equippedWeaponsFolder = character:FindFirstChild("EquippedWeapons")
+	if equippedWeaponsFolder then
+		equippedWeaponsFolder:Destroy()
+	end
 
-			if descendant.Name == "WeaponMotor" or descendant.Name == "HandleKnife" then
-				descendant:Destroy()
-			end
+	-- Remove all character weapon motors.
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if self:IsWeaponMotor(descendant) then
+			descendant:Destroy()
 		end
 	end
 end

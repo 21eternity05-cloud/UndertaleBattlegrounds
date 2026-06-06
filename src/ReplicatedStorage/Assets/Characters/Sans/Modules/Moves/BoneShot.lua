@@ -17,7 +17,7 @@ local BoneShot = {
 	ProjectileSpeed = 165,
 	ProjectileLifetime = 3,
 
-	Damage = 3.5,
+	Damage = 1.5,
 	Stun = 0.75,
 
 	HitRadius = 2.5,

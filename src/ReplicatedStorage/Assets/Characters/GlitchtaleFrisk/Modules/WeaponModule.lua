@@ -1,99 +1,23 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GTFriskWeapon = {}
+GTFriskWeapon.__index = GTFriskWeapon
 
-local WeaponModule = {}
-
-local CHARACTER_NAME = "GlitchtaleFrisk"
-
-local SWORD_NAME = "GT Frisk Sword"
-local SWORD_MOTOR_TEMPLATE_NAME = "GT Frisk SwordMotorTemplate"
-
-local SHIELD_NAME = "GT Frisk Sheild"
-local SHIELD_MOTOR_TEMPLATE_NAME = "GT Frisk SheildMotorTemplate"
-
-local EQUIPPED_FOLDER_NAME = "EquippedWeapons"
-
-function WeaponModule.new(config)
-	local self = {
-		Config = config,
-	}
-
-	self.Equip = function(a, b)
-		local character = b or a
-		return WeaponModule.Equip(character)
-	end
-
-	self.Remove = function(a, b)
-		local character = b or a
-		return WeaponModule.Remove(character)
-	end
-
+function GTFriskWeapon.new(config, characterFolder)
+	local self = setmetatable({}, GTFriskWeapon)
+	self.Config = config
+	self.CharacterFolder = characterFolder
 	return self
 end
 
-local function getCharacterAssetsFolder()
-	local assets = ReplicatedStorage:WaitForChild("Assets")
-	local characters = assets:WaitForChild("Characters")
-	return characters:WaitForChild(CHARACTER_NAME)
-end
-
-local function getWeaponsFolder()
-	local characterFolder = getCharacterAssetsFolder()
-	return characterFolder:WaitForChild("Weapons")
-end
-
-local function findLimb(character, preferredNames)
-	for _, name in ipairs(preferredNames) do
-		local limb = character:FindFirstChild(name)
-		if limb and limb:IsA("BasePart") then
-			return limb
-		end
+function GTFriskWeapon:PrepareWeaponModel(model)
+	if model:IsA("BasePart") then
+		model.Anchored = false
+		model.CanCollide = false
+		model.CanTouch = false
+		model.CanQuery = false
+		model.Massless = true
 	end
 
-	return nil
-end
-
-local function getWeaponPart(weapon)
-	if weapon:IsA("BasePart") then
-		return weapon
-	end
-
-	if weapon:IsA("Model") then
-		if weapon.PrimaryPart then
-			return weapon.PrimaryPart
-		end
-
-		local primary = weapon:FindFirstChild("PrimaryPart", true)
-		if primary and primary:IsA("BasePart") then
-			weapon.PrimaryPart = primary
-			return primary
-		end
-
-		local handle = weapon:FindFirstChild("Handle", true)
-		if handle and handle:IsA("BasePart") then
-			weapon.PrimaryPart = handle
-			return handle
-		end
-
-		local firstPart = weapon:FindFirstChildWhichIsA("BasePart", true)
-		if firstPart then
-			weapon.PrimaryPart = firstPart
-			return firstPart
-		end
-	end
-
-	return nil
-end
-
-local function setupWeaponPhysics(weapon)
-	if weapon:IsA("BasePart") then
-		weapon.Anchored = false
-		weapon.CanCollide = false
-		weapon.CanTouch = false
-		weapon.CanQuery = false
-		weapon.Massless = true
-	end
-
-	for _, descendant in ipairs(weapon:GetDescendants()) do
+	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = false
 			descendant.CanCollide = false
@@ -104,28 +28,90 @@ local function setupWeaponPhysics(weapon)
 	end
 end
 
-local function getOrCreateEquippedFolder(character)
-	local folder = character:FindFirstChild(EQUIPPED_FOLDER_NAME)
+function GTFriskWeapon:WeldWeaponPartsToHandle(weaponModel, handle)
+	for _, part in ipairs(weaponModel:GetDescendants()) do
+		if part:IsA("BasePart") and part ~= handle then
+			local alreadyConnected = false
 
-	if not folder then
-		folder = Instance.new("Folder")
-		folder.Name = EQUIPPED_FOLDER_NAME
-		folder.Parent = character
+			for _, child in ipairs(part:GetChildren()) do
+				if child:IsA("WeldConstraint") or child:IsA("Weld") or child:IsA("Motor6D") then
+					alreadyConnected = true
+					break
+				end
+			end
+
+			if not alreadyConnected then
+				local weld = Instance.new("WeldConstraint")
+				weld.Name = "AutoWeaponWeld"
+				weld.Part0 = handle
+				weld.Part1 = part
+				weld.Parent = handle
+			end
+		end
 	end
-
-	return folder
 end
 
-local function removeByName(character, name)
-	local found = character:FindFirstChild(name, true)
+function GTFriskWeapon:FindHandle(weaponModel, preferredNames)
+	for _, name in ipairs(preferredNames) do
+		local handle = weaponModel:FindFirstChild(name, true)
 
-	if found then
-		found:Destroy()
+		if handle and handle:IsA("BasePart") then
+			return handle
+		end
+	end
+
+	if weaponModel:IsA("BasePart") then
+		return weaponModel
+	end
+
+	return weaponModel:FindFirstChildWhichIsA("BasePart", true)
+end
+
+function GTFriskWeapon:Remove(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if child:GetAttribute("CharacterWeapon") == true
+			or child.Name == "EquippedSword"
+			or child.Name == "EquippedShield"
+		then
+			child:Destroy()
+		end
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Motor6D")
+			and (
+				descendant:GetAttribute("CharacterWeaponMotor") == true
+				or descendant.Name == "GTFriskSword"
+				or descendant.Name == "GTFriskShield"
+			)
+		then
+			descendant:Destroy()
+		end
 	end
 end
 
-local function equipWeapon(character, equippedFolder, weaponName, motorTemplateName, limbNames)
-	local weaponsFolder = getWeaponsFolder()
+function GTFriskWeapon:EquipSingleWeapon(options)
+	local character = options.Character
+	local weaponsFolder = options.WeaponsFolder
+	local limbName = options.LimbName
+	local weaponName = options.WeaponName
+	local motorTemplateName = options.MotorTemplateName
+	local equippedName = options.EquippedName
+	local motorName = options.MotorName
+	local handleNames = options.HandleNames or { "Handle" }
+
+	if not character or not character.Parent then return end
+	if not weaponsFolder then return end
+
+	local limb = character:FindFirstChild(limbName)
+	if not limb or not limb:IsA("BasePart") then
+		warn("[GlitchtaleFrisk WeaponModule] Missing limb:", limbName)
+		return
+	end
 
 	local weaponTemplate = weaponsFolder:FindFirstChild(weaponName)
 	local motorTemplate = weaponsFolder:FindFirstChild(motorTemplateName)
@@ -135,78 +121,88 @@ local function equipWeapon(character, equippedFolder, weaponName, motorTemplateN
 		return
 	end
 
-	if not motorTemplate then
-		warn("[GlitchtaleFrisk WeaponModule] Missing motor template:", motorTemplateName)
-		return
-	end
-
-	local limb = findLimb(character, limbNames)
-
-	if not limb then
-		warn("[GlitchtaleFrisk WeaponModule] Missing limb for:", weaponName)
+	if not motorTemplate or not motorTemplate:IsA("Motor6D") then
+		warn("[GlitchtaleFrisk WeaponModule] Missing Motor6D template:", motorTemplateName)
 		return
 	end
 
 	local weapon = weaponTemplate:Clone()
-	weapon.Name = weaponName
-	weapon.Parent = equippedFolder
+	weapon.Name = equippedName
+	weapon:SetAttribute("CharacterWeapon", true)
+	weapon:SetAttribute("CharacterWeaponOwner", "GlitchtaleFrisk")
+	weapon:SetAttribute("OriginalWeaponName", weaponName)
+	weapon.Parent = character
 
-	setupWeaponPhysics(weapon)
+	local handle = self:FindHandle(weapon, handleNames)
 
-	local weaponPart = getWeaponPart(weapon)
-
-	if not weaponPart then
-		warn("[GlitchtaleFrisk WeaponModule] Weapon has no BasePart:", weaponName)
+	if not handle or not handle:IsA("BasePart") then
 		weapon:Destroy()
+		warn("[GlitchtaleFrisk WeaponModule] Weapon has no handle/basepart:", weaponName)
 		return
+	end
+
+	self:PrepareWeaponModel(weapon)
+	self:WeldWeaponPartsToHandle(weapon, handle)
+
+	local oldMotor = limb:FindFirstChild(motorName)
+	if oldMotor then
+		oldMotor:Destroy()
 	end
 
 	local motor = motorTemplate:Clone()
-	motor.Name = motorTemplateName
+	motor.Name = motorName
 	motor.Part0 = limb
-	motor.Part1 = weaponPart
+	motor.Part1 = handle
+	motor:SetAttribute("CharacterWeaponMotor", true)
+	motor:SetAttribute("CharacterWeaponOwner", "GlitchtaleFrisk")
+	motor:SetAttribute("OriginalWeaponName", weaponName)
 	motor.Parent = limb
 end
 
-function WeaponModule.Remove(character)
-	if not character then
+function GTFriskWeapon:Equip(character)
+	if not character or not character.Parent then
 		return
 	end
 
-	local folder = character:FindFirstChild(EQUIPPED_FOLDER_NAME)
-	if folder then
-		folder:Destroy()
-	end
+	self:Remove(character)
 
-	removeByName(character, SWORD_NAME)
-	removeByName(character, SWORD_MOTOR_TEMPLATE_NAME)
-
-	removeByName(character, SHIELD_NAME)
-	removeByName(character, SHIELD_MOTOR_TEMPLATE_NAME)
-end
-
-function WeaponModule.Equip(character)
-	if not character then
+	local weaponsFolder = self.CharacterFolder:FindFirstChild("Weapons")
+	if not weaponsFolder then
+		warn("[GlitchtaleFrisk WeaponModule] Missing Weapons folder")
 		return
 	end
 
-	WeaponModule.Remove(character)
-
-	local equippedFolder = getOrCreateEquippedFolder(character)
-
-	equipWeapon(character, equippedFolder, SWORD_NAME, SWORD_MOTOR_TEMPLATE_NAME, {
-		"Right Arm",
-		"RightHand",
-		"RightLowerArm",
-		"RightUpperArm",
+	self:EquipSingleWeapon({
+		Character = character,
+		WeaponsFolder = weaponsFolder,
+		LimbName = "Right Arm",
+		WeaponName = "GT Frisk Sword",
+		MotorTemplateName = "GT Frisk SwordMotorTemplate",
+		EquippedName = "EquippedSword",
+		MotorName = "GTFriskSword",
+		HandleNames = {
+			"Handle",
+			"HandleSword",
+			"SwordHandle",
+			"GT Frisk SwordHandle",
+		},
 	})
 
-	equipWeapon(character, equippedFolder, SHIELD_NAME, SHIELD_MOTOR_TEMPLATE_NAME, {
-		"Left Arm",
-		"LeftHand",
-		"LeftLowerArm",
-		"LeftUpperArm",
+	self:EquipSingleWeapon({
+		Character = character,
+		WeaponsFolder = weaponsFolder,
+		LimbName = "Left Arm",
+		WeaponName = "GT Frisk Shield",
+		MotorTemplateName = "GT Frisk ShieldMotorTemplate",
+		EquippedName = "EquippedShield",
+		MotorName = "GTFriskShield",
+		HandleNames = {
+			"Handle",
+			"HandleShield",
+			"ShieldHandle",
+			"GT Frisk ShieldHandle",
+		},
 	})
 end
 
-return WeaponModule
+return GTFriskWeapon

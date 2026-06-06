@@ -4,6 +4,22 @@ local Debris = game:GetService("Debris")
 local DamageNumberService = {}
 DamageNumberService.__index = DamageNumberService
 
+local function formatDamage(damage)
+	damage = tonumber(damage) or 0
+
+	local rounded = math.floor((damage * 100) + 0.5) / 100
+
+	if rounded % 1 == 0 then
+		return tostring(math.floor(rounded))
+	end
+
+	if (rounded * 10) % 1 == 0 then
+		return string.format("%.1f", rounded)
+	end
+
+	return string.format("%.2f", rounded)
+end
+
 function DamageNumberService.new(config)
 	local self = setmetatable({}, DamageNumberService)
 
@@ -74,7 +90,7 @@ function DamageNumberService:ShowDamage(targetRoot, amount, options)
 	text.TextColor3 = options.Color or Color3.fromRGB(255, 65, 65)
 	text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	text.TextStrokeTransparency = 0
-	text.Text = tostring(math.floor(amount + 0.5))
+	text.Text = formatDamage(amount)
 	text.Parent = billboard
 
 	TweenService:Create(

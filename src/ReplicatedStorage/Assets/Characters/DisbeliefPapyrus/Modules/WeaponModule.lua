@@ -1,95 +1,15 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PapyrusWeapon = {}
+PapyrusWeapon.__index = PapyrusWeapon
 
-local WeaponModule = {}
-
-local CHARACTER_NAME = "DisbeliefPapyrus"
-local WEAPON_NAME = "BoneStaff"
-local MOTOR_TEMPLATE_NAME = "BoneStaffMotorTemplate"
-
-local EQUIPPED_FOLDER_NAME = "EquippedWeapons"
-
-function WeaponModule.new(config)
-	local self = {
-		Config = config,
-	}
-
-	self.Equip = function(a, b)
-		local character = b or a
-		return WeaponModule.Equip(character)
-	end
-
-	self.Remove = function(a, b)
-		local character = b or a
-		return WeaponModule.Remove(character)
-	end
-
+function PapyrusWeapon.new(config, characterFolder)
+	local self = setmetatable({}, PapyrusWeapon)
+	self.Config = config
+	self.CharacterFolder = characterFolder
 	return self
 end
 
-local function getCharacterAssetsFolder()
-	local assets = ReplicatedStorage:WaitForChild("Assets")
-	local characters = assets:WaitForChild("Characters")
-	return characters:WaitForChild(CHARACTER_NAME)
-end
-
-local function getWeaponsFolder()
-	local characterFolder = getCharacterAssetsFolder()
-	return characterFolder:WaitForChild("Weapons")
-end
-
-local function findLimb(character, preferredNames)
-	for _, name in ipairs(preferredNames) do
-		local limb = character:FindFirstChild(name)
-		if limb and limb:IsA("BasePart") then
-			return limb
-		end
-	end
-
-	return nil
-end
-
-local function getWeaponPart(weapon)
-	if weapon:IsA("BasePart") then
-		return weapon
-	end
-
-	if weapon:IsA("Model") then
-		if weapon.PrimaryPart then
-			return weapon.PrimaryPart
-		end
-
-		local primary = weapon:FindFirstChild("PrimaryPart", true)
-		if primary and primary:IsA("BasePart") then
-			weapon.PrimaryPart = primary
-			return primary
-		end
-
-		local handle = weapon:FindFirstChild("Handle", true)
-		if handle and handle:IsA("BasePart") then
-			weapon.PrimaryPart = handle
-			return handle
-		end
-
-		local firstPart = weapon:FindFirstChildWhichIsA("BasePart", true)
-		if firstPart then
-			weapon.PrimaryPart = firstPart
-			return firstPart
-		end
-	end
-
-	return nil
-end
-
-local function setupWeaponPhysics(weapon)
-	if weapon:IsA("BasePart") then
-		weapon.Anchored = false
-		weapon.CanCollide = false
-		weapon.CanTouch = false
-		weapon.CanQuery = false
-		weapon.Massless = true
-	end
-
-	for _, descendant in ipairs(weapon:GetDescendants()) do
+function PapyrusWeapon:PrepareWeaponModel(model)
+	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = false
 			descendant.CanCollide = false
@@ -100,95 +20,95 @@ local function setupWeaponPhysics(weapon)
 	end
 end
 
-local function getOrCreateEquippedFolder(character)
-	local folder = character:FindFirstChild(EQUIPPED_FOLDER_NAME)
+function PapyrusWeapon:WeldWeaponPartsToHandle(weaponModel, handle)
+	for _, part in ipairs(weaponModel:GetDescendants()) do
+		if part:IsA("BasePart") and part ~= handle then
+			local alreadyConnected = false
 
-	if not folder then
-		folder = Instance.new("Folder")
-		folder.Name = EQUIPPED_FOLDER_NAME
-		folder.Parent = character
+			for _, child in ipairs(part:GetChildren()) do
+				if child:IsA("WeldConstraint") or child:IsA("Weld") or child:IsA("Motor6D") then
+					alreadyConnected = true
+					break
+				end
+			end
+
+			if not alreadyConnected then
+				local weld = Instance.new("WeldConstraint")
+				weld.Name = "AutoWeaponWeld"
+				weld.Part0 = handle
+				weld.Part1 = part
+				weld.Parent = handle
+			end
+		end
 	end
-
-	return folder
 end
 
-local function removeByName(character, name)
-	local found = character:FindFirstChild(name, true)
+function PapyrusWeapon:Remove(character)
+	if not character or not character.Parent then return end
 
-	if found then
-		found:Destroy()
+	local oldWeapon = character:FindFirstChild("EquippedWeapon")
+	if oldWeapon then
+		oldWeapon:Destroy()
+	end
+
+	local rightArm = character:FindFirstChild("Right Arm")
+	if rightArm then
+		local oldMotor = rightArm:FindFirstChild("BoneStaff")
+		if oldMotor then
+			oldMotor:Destroy()
+		end
 	end
 end
 
-function WeaponModule.Remove(character)
-	if not character then
+function PapyrusWeapon:Equip(character)
+	if not character or not character.Parent then return end
+
+	self:Remove(character)
+
+	local rightArm = character:FindFirstChild("Right Arm")
+	if not rightArm then return end
+
+	local weaponsFolder = self.CharacterFolder:FindFirstChild("Weapons")
+	if not weaponsFolder then return end
+
+	local staffTemplate = weaponsFolder:FindFirstChild("BoneStaff")
+	local motorTemplate = weaponsFolder:FindFirstChild("BoneStaffMotorTemplate")
+
+	if not staffTemplate then return end
+	if not motorTemplate or not motorTemplate:IsA("Motor6D") then return end
+
+	local staff = staffTemplate:Clone()
+	staff.Name = "EquippedWeapon"
+	staff.Parent = character
+
+	local handle = staff:FindFirstChild("Handle", true)
+		or staff:FindFirstChild("HandleStaff", true)
+		or staff:FindFirstChild("BoneStaffHandle", true)
+
+	if not handle or not handle:IsA("BasePart") then
+		handle = staff:FindFirstChildWhichIsA("BasePart", true)
+	end
+
+	if not handle or not handle:IsA("BasePart") then
+		staff:Destroy()
+		warn("[DisbeliefPapyrus WeaponModule] BoneStaff has no handle/basepart")
 		return
 	end
 
-	local folder = character:FindFirstChild(EQUIPPED_FOLDER_NAME)
-	if folder then
-		folder:Destroy()
-	end
+	self:PrepareWeaponModel(staff)
+	self:WeldWeaponPartsToHandle(staff, handle)
 
-	removeByName(character, WEAPON_NAME)
-	removeByName(character, MOTOR_TEMPLATE_NAME)
-end
-
-function WeaponModule.Equip(character)
-	if not character then
-		return
-	end
-
-	WeaponModule.Remove(character)
-
-	local weaponsFolder = getWeaponsFolder()
-
-	local weaponTemplate = weaponsFolder:FindFirstChild(WEAPON_NAME)
-	local motorTemplate = weaponsFolder:FindFirstChild(MOTOR_TEMPLATE_NAME)
-
-	if not weaponTemplate then
-		warn("[DisbeliefPapyrus WeaponModule] Missing weapon:", WEAPON_NAME)
-		return
-	end
-
-	if not motorTemplate then
-		warn("[DisbeliefPapyrus WeaponModule] Missing motor template:", MOTOR_TEMPLATE_NAME)
-		return
-	end
-
-	local rightArm = findLimb(character, {
-		"Right Arm",
-		"RightHand",
-		"RightLowerArm",
-		"RightUpperArm",
-	})
-
-	if not rightArm then
-		warn("[DisbeliefPapyrus WeaponModule] Missing right arm/hand")
-		return
-	end
-
-	local equippedFolder = getOrCreateEquippedFolder(character)
-
-	local weapon = weaponTemplate:Clone()
-	weapon.Name = WEAPON_NAME
-	weapon.Parent = equippedFolder
-
-	setupWeaponPhysics(weapon)
-
-	local weaponPart = getWeaponPart(weapon)
-
-	if not weaponPart then
-		warn("[DisbeliefPapyrus WeaponModule] Weapon has no BasePart:", WEAPON_NAME)
-		weapon:Destroy()
-		return
+	local oldMotor = rightArm:FindFirstChild("BoneStaff")
+	if oldMotor then
+		oldMotor:Destroy()
 	end
 
 	local motor = motorTemplate:Clone()
-	motor.Name = MOTOR_TEMPLATE_NAME
+	motor.Name = "BoneStaff"
 	motor.Part0 = rightArm
-	motor.Part1 = weaponPart
+	motor.Part1 = handle
+	motor:SetAttribute("CharacterWeaponMotor", true)
 	motor.Parent = rightArm
 end
 
-return WeaponModule
+return PapyrusWeapon
