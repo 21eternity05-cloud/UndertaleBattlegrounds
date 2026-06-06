@@ -78,6 +78,22 @@
             "Modules": {
               "$path": "src/ReplicatedStorage/Assets/Characters/Toriel/Modules"
             }
+          },
+
+          "DisbeliefPapyrus": {
+            "$className": "Folder",
+
+            "Modules": {
+              "$path": "src/ReplicatedStorage/Assets/Characters/DisbeliefPapyrus/Modules"
+            }
+          },
+
+          "GlitchtaleFrisk": {
+            "$className": "Folder",
+
+            "Modules": {
+              "$path": "src/ReplicatedStorage/Assets/Characters/GlitchtaleFrisk/Modules"
+            }
           }
         }
       }

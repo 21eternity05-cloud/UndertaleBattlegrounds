@@ -55,6 +55,20 @@ local CharacterData = {
 			"Royal Pyre",
 		},
 	},
+
+	DisbeliefPapyrus = {
+		Id = "DisbeliefPapyrus",
+		DisplayName = "Disbelief Papyrus",
+		Cost = 3500,
+		Free = false,
+	},
+
+	GlitchtaleFrisk = {
+		Id = "GlitchtaleFrisk",
+		DisplayName = "Glitchtale Frisk",
+		Cost = 4000,
+		Free = false,
+	},
 }
 
 return CharacterData

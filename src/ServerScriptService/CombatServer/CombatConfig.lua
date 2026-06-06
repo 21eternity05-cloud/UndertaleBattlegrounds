@@ -66,6 +66,8 @@ CombatConfig.ValidCharacters = {
 	Chara = true,
 	Sans = true,
 	Toriel = true,
+	DisbeliefPapyrus = true,
+	GlitchtaleFrisk = true,
 }
 
 CombatConfig.AssetsFolderName = "Assets"
