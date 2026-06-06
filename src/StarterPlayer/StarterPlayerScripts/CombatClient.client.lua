@@ -28,6 +28,8 @@ local CLIENT_JUMP_LOCK_TIME = 0.5
 
 local BLOCK_KEY = Enum.KeyCode.F
 local blocking = false
+local blockBuffered = false
+local BLOCK_BUFFER_TIME = 0.18
 
 local currentUlt = 0
 local currentUltMax = 100
@@ -284,11 +286,60 @@ local function canRequestMove()
 	return true
 end
 
+local function canRequestBlock()
+	local character = getCharacter()
+	if not character then return false end
+
+	if character:GetAttribute("Stunned") then return false end
+	if character:GetAttribute("Blocking") then return false end
+	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Attacking") then return false end
+	if character:GetAttribute("UsingMove") then return false end
+	if character:GetAttribute("Grabbed") then return false end
+	if character:GetAttribute("CinematicLocked") then return false end
+
+	return true
+end
+
 local function bufferUptilt()
 	uptiltBuffered = true
 
 	task.delay(UPTILT_BUFFER_TIME, function()
 		uptiltBuffered = false
+	end)
+end
+
+local function requestBlockStart()
+	if blocking then return true end
+	if not canRequestBlock() then return false end
+
+	blockBuffered = false
+	blocking = true
+	combatRemote:FireServer("BlockStart")
+
+	return true
+end
+
+local function bufferBlock()
+	blockBuffered = true
+
+	task.delay(BLOCK_BUFFER_TIME, function()
+		blockBuffered = false
+	end)
+
+	task.spawn(function()
+		while blockBuffered do
+			if not UserInputService:IsKeyDown(BLOCK_KEY) then
+				blockBuffered = false
+				return
+			end
+
+			if requestBlockStart() then
+				return
+			end
+
+			task.wait()
+		end
 	end)
 end
 
@@ -633,16 +684,14 @@ local function holdM1Loop()
 end
 
 local function startBlocking()
-	if blocking then return end
+	if requestBlockStart() then return end
 
-	local character = getCharacter()
-	if not character then return end
-
-	blocking = true
-	combatRemote:FireServer("BlockStart")
+	bufferBlock()
 end
 
 local function stopBlocking()
+	blockBuffered = false
+
 	if not blocking then return end
 
 	blocking = false
