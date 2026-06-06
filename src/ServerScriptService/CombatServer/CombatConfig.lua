@@ -137,7 +137,7 @@ CombatConfig.M1Data = {
 		Damage = 5,
 		Stun = 0.6,
 		Cooldown = 0.32,
-		HitDelay = 0.09,
+		HitDelay = 0.08,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.5),
@@ -153,7 +153,7 @@ CombatConfig.M1Data = {
 		Damage = 5,
 		Stun = 0.6,
 		Cooldown = 0.32,
-		HitDelay = 0.09,
+		HitDelay = 0.08,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.5),
@@ -203,7 +203,7 @@ CombatConfig.M1Data = {
 		Radius = 7.5,
 		Offset = CFrame.new(0, 1.5, -6.4),
 
-		RawRadius = 5.25,
+		RawRadius = 4.25,
 		RawOffset = CFrame.new(0, 1, -4.8),
 
 		ComboRadius = 7.5,
