@@ -132,6 +132,34 @@ local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
 	ctx.VFXService:PlayCharacterMoveVFX(ctx.Character, moveName, targetCharacter, targetRoot)
 end
 
+local function setReservedVictim(character, victimCharacter)
+	if not character then return nil end
+
+	local value = character:FindFirstChild("ReservedVictim")
+
+	if not value then
+		value = Instance.new("ObjectValue")
+		value.Name = "ReservedVictim"
+		value.Parent = character
+	end
+
+	value.Value = victimCharacter
+	return value
+end
+
+local function clearReservedVictim(character, expectedVictim)
+	if not character then return end
+
+	local value = character:FindFirstChild("ReservedVictim")
+	if not value then return end
+
+	if expectedVictim and value.Value ~= expectedVictim then
+		return
+	end
+
+	value.Value = nil
+end
+
 local function setupWorldObject(object)
 	if not object then
 		return
@@ -1402,6 +1430,7 @@ function BadTime.Execute(ctx)
 	local finished = false
 	local eyeGlowAttachment = nil
 	local sansLockState = nil
+	local confirmedVictim = nil
 	local cinematicService = ctx.CinematicService
 
 	local function cleanup()
@@ -1427,6 +1456,8 @@ function BadTime.Execute(ctx)
 		if ctx.CombatStatusService and ctx.CombatStatusService.ClearDamageLock then
 			ctx.CombatStatusService:ClearDamageLock(targetCharacter, character)
 		end
+
+		clearReservedVictim(character, confirmedVictim)
 
 		if cinematicService then
 			cinematicService:ResetCamera(character)
@@ -1508,6 +1539,8 @@ function BadTime.Execute(ctx)
 	end
 
 	print("[BadTime] Confirmed:", targetCharacter.Name)
+	confirmedVictim = targetCharacter
+	setReservedVictim(character, confirmedVictim)
 
 	-- DamageLock only prevents other players from damaging/stealing this victim.
 	-- It does NOT stun, grab, movement-lock, dash-lock, or block-lock the victim.

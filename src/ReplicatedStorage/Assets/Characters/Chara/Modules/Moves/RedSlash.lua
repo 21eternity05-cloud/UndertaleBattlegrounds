@@ -7,7 +7,7 @@ local RedSlash = {
 	LockTime = 1.45,
 	MaxLockTime = 1.7,
 
-	Damage = 14,
+	Damage = 16,
 	Stun = 1,
 
 	Radius = 5,
@@ -56,7 +56,7 @@ local RedSlash = {
 
 local ANIMATION_NAME = "RedSlash"
 
-local WINDUP_TIME = 1
+local WINDUP_TIME = .75
 local HITBOX_ACTIVE_TIME = 0.16
 local HITBOX_TICK_RATE = 0.04
 local ENDLAG_TIME = 0.35

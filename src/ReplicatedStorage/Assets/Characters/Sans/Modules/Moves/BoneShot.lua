@@ -2,12 +2,12 @@ local BoneShot = {
 	DisplayName = "Bone Shot",
 	AnimationName = "BoneShot",
 
-	Cooldown = 5.5,
+	Cooldown = 8.5,
 	MaxLockTime = 0.45,
 
 	RequiresTarget = true,
 
-	Startup = 0.18,
+	Startup = 0.25,
 	Shots = 5,
 
 	FormationTime = 0.18,
@@ -18,7 +18,7 @@ local BoneShot = {
 	ProjectileLifetime = 3,
 
 	Damage = 1.5,
-	Stun = 0.75,
+	Stun = 0.65,
 
 	HitRadius = 2.5,
 
@@ -114,6 +114,20 @@ local function playSansSFX(ctx, soundName, parentPart, lifetime)
 	if not parentPart or not parentPart.Parent then return end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+end
+
+local function isMoveInterrupted(ctx)
+	local character = ctx.Character
+
+	if not ctx:IsActive() then
+		return true
+	end
+
+	if ctx.CombatStatusService and ctx.CombatStatusService.CanAttackContinue then
+		return not ctx.CombatStatusService:CanAttackContinue(character, ctx.MoveData)
+	end
+
+	return character:GetAttribute("Stunned") == true or character:GetAttribute("Guardbroken") == true
 end
 
 local function getSpawnCFrame(root, data)
@@ -321,7 +335,10 @@ function BoneShot.Execute(ctx)
 
 	task.wait(data.Startup or 0.18)
 
-	if not ctx:IsActive() then return end
+	if isMoveInterrupted(ctx) then
+		ctx:FinishMove(0)
+		return
+	end
 
 	local boneTemplate = getBoneTemplate(ctx)
 	local bones = {}
@@ -329,6 +346,17 @@ function BoneShot.Execute(ctx)
 	local spawnCFrame = getSpawnCFrame(root, data)
 
 	for i = 1, data.Shots or 5 do
+		if isMoveInterrupted(ctx) then
+			for _, boneData in ipairs(bones) do
+				if boneData.Bone and boneData.Bone.Parent then
+					ctx.ProjectileService:FadeOutProjectile(boneData.Bone, 0.2)
+				end
+			end
+
+			ctx:FinishMove(0)
+			return
+		end
+
 		local bone = boneTemplate:Clone()
 		bone.Name = "SansBoneShotProjectile"
 
@@ -358,6 +386,10 @@ function BoneShot.Execute(ctx)
 		local formationCFrame = getFormationCFrame(root, i, data.Shots or 5, data)
 
 		task.delay((i - 1) * (data.FormationDelay or 0.025), function()
+			if isMoveInterrupted(ctx) then
+				return
+			end
+
 			if bone and bone.Parent then
 				tweenBoneIntoFormation(bone, spawnCFrame, formationCFrame, data)
 			end
@@ -373,9 +405,27 @@ function BoneShot.Execute(ctx)
 
 	task.wait((data.FormationTime or 0.18) + ((data.Shots or 5) * (data.FormationDelay or 0.025)))
 
-	ctx:FinishMove(0)
+	if isMoveInterrupted(ctx) then
+		for _, boneData in ipairs(bones) do
+			if boneData.Bone and boneData.Bone.Parent then
+				ctx.ProjectileService:FadeOutProjectile(boneData.Bone, 0.2)
+			end
+		end
+
+		ctx:FinishMove(0)
+		return
+	end
 
 	for _, boneData in ipairs(bones) do
+		if isMoveInterrupted(ctx) then
+			if boneData.Bone and boneData.Bone.Parent then
+				ctx.ProjectileService:FadeOutProjectile(boneData.Bone, 0.2)
+			end
+
+			ctx:FinishMove(0)
+			return
+		end
+
 		local bone = boneData.Bone
 
 		if not bone or not bone.Parent then
@@ -437,6 +487,8 @@ function BoneShot.Execute(ctx)
 
 		task.wait(data.ShotInterval or 0.12)
 	end
+
+	ctx:FinishMove(0)
 end
 
 return BoneShot

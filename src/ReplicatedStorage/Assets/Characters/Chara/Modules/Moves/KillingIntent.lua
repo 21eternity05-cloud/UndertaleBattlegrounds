@@ -11,7 +11,7 @@ local KillingIntent = {
 	MaxLockTime = 1.6,
 
 	Damage = 14,
-	Stun = 0.9,
+	Stun = 2.25,
 
 	Radius = 12,
 	Offset = CFrame.new(0, 0, -4),

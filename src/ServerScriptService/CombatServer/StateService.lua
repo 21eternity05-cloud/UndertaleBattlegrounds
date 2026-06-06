@@ -26,7 +26,9 @@ function StateService:SetupCharacter(character)
 
 	character:SetAttribute("AirComboReady", false)
 	character:SetAttribute("UsedUptiltInCombo", false)
+	character:SetAttribute("SuccessfulM1InCombo", false)
 	character:SetAttribute("UptiltCooldownUntil", 0)
+	character:SetAttribute("BlockBufferedUntil", 0)
 
 	character:SetAttribute("JumpLockedUntil", 0)
 	character:SetAttribute("StunId", 0)
@@ -112,6 +114,7 @@ function StateService:ResetCombo(character)
 	character:SetAttribute("LastM1Time", 0)
 	character:SetAttribute("AirComboReady", false)
 	character:SetAttribute("UsedUptiltInCombo", false)
+	character:SetAttribute("SuccessfulM1InCombo", false)
 end
 
 function StateService:RefreshComboTimeout(character)
@@ -193,6 +196,7 @@ function StateService:StunCharacter(character, duration, animationKey)
 	local stunId = (character:GetAttribute("StunId") or 0) + 1
 	character:SetAttribute("StunId", stunId)
 
+	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("Stunned", true)
 	self:StopBlockingVisuals(character)
 	self:StopCurrentStunAnimations(character)
@@ -255,6 +259,7 @@ function StateService:GuardbreakCharacter(character, duration)
 	self:StopBlockingVisuals(character)
 	self:StopCurrentStunAnimations(character)
 
+	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("Guardbroken", true)
 	character:SetAttribute("Stunned", true)
 

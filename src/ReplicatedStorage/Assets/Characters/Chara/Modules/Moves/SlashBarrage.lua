@@ -5,7 +5,7 @@ local SlashBarrage = {
 
 	AnimationName = nil,
 
-	Cooldown = 8,
+	Cooldown = 10,
 	Duration = 1.65,
 	LockTime = 1.65,
 	MaxLockTime = 2,
@@ -14,8 +14,14 @@ local SlashBarrage = {
 
 	Damage = 2,
 	Stun = 0.35,
-	Knockback = 7,
+	KnockbackPreset = nil,
+	Knockback = 0,
 	UpwardKnockback = 0,
+
+	CarryDuration = 0.08,
+	VictimPushSpeed = 4,
+	AttackerChaseSpeed = 6,
+	YHoldDuration = 0.05,
 
 	Radius = 5,
 	Offset = CFrame.new(0, 0, -4),

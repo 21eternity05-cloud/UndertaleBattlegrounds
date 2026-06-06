@@ -164,6 +164,29 @@ function M1Service:TryHitCancelTarget(targetCharacter, attackData)
 	return false
 end
 
+function M1Service:CanAttackContinue(character, attackData)
+	if self.CombatStatusService and self.CombatStatusService.CanAttackContinue then
+		return self.CombatStatusService:CanAttackContinue(character, attackData)
+	end
+
+	if not character or not character.Parent then
+		return false
+	end
+	if character:GetAttribute("Guardbroken") then
+		return false
+	end
+	if character:GetAttribute("Stunned")
+		and character:GetAttribute("IFrameActive") ~= true
+		and character:GetAttribute("ArmorActive") ~= true
+		and not (attackData and attackData.CancelableByHit == false)
+		and not (attackData and attackData.ArmorPreventsHitCancel == true)
+	then
+		return false
+	end
+
+	return true
+end
+
 function M1Service:CheckStandardHitStart(
 	attackerCharacter,
 	attackerRoot,
@@ -216,7 +239,7 @@ function M1Service:CheckStandardHitStart(
 	local canBlock = self:CanAttackBeBlocked(attackData)
 
 	if canBlock and options.BlockMode == "Normal" then
-		if self.BlockService:CanBlockHit(targetCharacter, attackerRoot) then
+		if self.BlockService:CanBlockHit(targetCharacter, attackerRoot, attackData) then
 			self.BlockService:PlayBlockVFX(targetRoot)
 			return "Blocked"
 		end
@@ -496,22 +519,19 @@ function M1Service:DoUptilt(player)
 	end
 
 	local rawData = self.M1Data.Uptilt
-	local comboAtStart = character:GetAttribute("ComboCount") or 0
-	local hasM1Starter = comboAtStart > 0
-		and (os.clock() - (character:GetAttribute("LastM1Time") or 0)) <= self.Config.M1ResetTime
-	local isRawUptilt = comboAtStart == 0 or not hasM1Starter
+	local hasSuccessfulM1 = character:GetAttribute("SuccessfulM1InCombo") == true
 	local hitboxData = {}
 
 	for key, value in pairs(rawData) do
 		hitboxData[key] = value
 	end
 
-	if isRawUptilt then
-		hitboxData.Radius = rawData.RawRadius or rawData.Radius
-		hitboxData.Offset = rawData.RawOffset or rawData.Offset
-	else
+	if hasSuccessfulM1 then
 		hitboxData.Radius = rawData.ComboRadius or rawData.Radius
 		hitboxData.Offset = rawData.ComboOffset or rawData.Offset
+	else
+		hitboxData.Radius = rawData.RawRadius or rawData.Radius
+		hitboxData.Offset = rawData.RawOffset or rawData.Offset
 	end
 
 	local attackData = self:BuildAttackData(hitboxData, {
@@ -536,7 +556,7 @@ function M1Service:DoUptilt(player)
 
 	self.StateService:LockJump(character, self.Config.JumpLockAfterM1)
 
-	print(player.Name .. " used UPTILT", isRawUptilt and "RAW" or "COMBO")
+	print(player.Name .. " used UPTILT", hasSuccessfulM1 and "COMBO" or "RAW")
 
 	task.delay(rawData.HitDelay, function()
 		if not character.Parent then
@@ -546,6 +566,10 @@ function M1Service:DoUptilt(player)
 			return
 		end
 		if character:GetAttribute("UsingMove") then
+			return
+		end
+		if not self:CanAttackContinue(character, attackData) then
+			character:SetAttribute("Attacking", false)
 			return
 		end
 
@@ -682,6 +706,10 @@ function M1Service:DoDownslam(player)
 		if character:GetAttribute("UsingMove") then
 			return
 		end
+		if not self:CanAttackContinue(character, attackData) then
+			character:SetAttribute("Attacking", false)
+			return
+		end
 
 		self.HitboxService:PerformSphereHitbox(
 			character,
@@ -802,6 +830,10 @@ function M1Service:DoNormalM1(player)
 		if character:GetAttribute("UsingMove") then
 			return
 		end
+		if not self:CanAttackContinue(character, attackData) then
+			character:SetAttribute("Attacking", false)
+			return
+		end
 
 		local hitSomething = false
 
@@ -863,6 +895,7 @@ function M1Service:DoNormalM1(player)
 				end
 
 				hitSomething = true
+				character:SetAttribute("SuccessfulM1InCombo", true)
 
 				self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
 

@@ -2,7 +2,7 @@ local KnifeDash = {
 	DisplayName = "Knife Dash",
 	AnimationName = "KnifeDash",
 
-	Cooldown = 6,
+	Cooldown = 7,
 	MaxLockTime = 1.6,
 
 	Windup = 0.32,

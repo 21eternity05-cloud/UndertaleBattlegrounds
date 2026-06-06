@@ -191,6 +191,7 @@ function CinematicService:LockCharacter(character, options)
 	}
 
 	character:SetAttribute("CinematicLocked", true)
+	character:SetAttribute("BlockBufferedUntil", 0)
 
 	if options.IsGrabber then
 		character:SetAttribute("Grabbing", true)
@@ -198,6 +199,7 @@ function CinematicService:LockCharacter(character, options)
 
 	if options.IsVictim then
 		character:SetAttribute("Grabbed", true)
+		character:SetAttribute("BlockBufferedUntil", 0)
 	end
 
 	character:SetAttribute("Blocking", false)

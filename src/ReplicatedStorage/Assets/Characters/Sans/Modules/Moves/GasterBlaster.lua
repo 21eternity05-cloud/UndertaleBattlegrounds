@@ -26,7 +26,7 @@ local GasterBlaster = {
 	Damage = 3,
 	FinalDamage = 6,
 	Stun = 0.25,
-	FinalStun = 0.8,
+	FinalStun = 0.35,
 
 	Knockback = 18,
 	FinalKnockback = 95,
@@ -491,6 +491,8 @@ function GasterBlaster.Execute(ctx)
 		OwnerCharacter = character,
 		BeamStartPosition = beamStart,
 		Direction = direction,
+		BeamDirection = direction,
+		KnockbackDirection = direction,
 
 		AttackData = data,
 		AttackName = ctx.MoveId or "GasterBlaster",

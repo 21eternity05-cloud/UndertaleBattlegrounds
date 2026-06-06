@@ -7,7 +7,7 @@ local BoneZone = {
 	AnimationName = "BoneZone",
 
 	Cooldown = 11,
-	MaxLockTime = 0.35,
+	MaxLockTime = 1,
 
 	RequiresTarget = true,
 
@@ -22,8 +22,10 @@ local BoneZone = {
 
 	Knockback = 120,
 	UpwardKnockback = 85,
+	UseAttackerAsKnockbackSource = true,
 
 	CanBeBlocked = true,
+	IgnoreBlockDirection = true,
 	Unblockable = false,
 	Guardbreak = false,
 	CanBeCountered = true,
@@ -59,6 +61,20 @@ local function playSansSFX(ctx, soundName, parentPart, lifetime)
 	if not parentPart or not parentPart.Parent then return end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+end
+
+local function isMoveInterrupted(ctx)
+	local character = ctx.Character
+
+	if not ctx:IsActive() then
+		return true
+	end
+
+	if ctx.CombatStatusService and ctx.CombatStatusService.CanAttackContinue then
+		return not ctx.CombatStatusService:CanAttackContinue(character, ctx.MoveData)
+	end
+
+	return not ctx:IsActive()
 end
 
 local function setupVFXParts(model)
@@ -305,7 +321,7 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 		Position = hitPosition,
 	}
 
-	if canBlock and ctx.BlockService:CanBlockHit(targetCharacter, projectileBlockSource) then
+	if canBlock and ctx.BlockService:CanBlockHit(targetCharacter, projectileBlockSource, attackData) then
 		if attackData.Guardbreak then
 			ctx.StateService:GuardbreakCharacter(targetCharacter, attackData.GuardbreakStun or 1.25)
 			ctx.BlockService:PlayBlockBreakVFX(targetRoot)
@@ -355,7 +371,13 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 	end
 
 	if not armorInfo.Active or not armorInfo.PreventsKnockback then
-		local direction = targetRoot.Position - hitPosition
+		local knockbackSourcePosition = hitPosition
+
+		if attackData.UseAttackerAsKnockbackSource == true and ctx.Root then
+			knockbackSourcePosition = ctx.Root.Position
+		end
+
+		local direction = targetRoot.Position - knockbackSourcePosition
 		direction = Vector3.new(direction.X, 0, direction.Z)
 
 		if direction.Magnitude < 0.05 then
@@ -412,7 +434,7 @@ function BoneZone.Execute(ctx)
 	local data = ctx.MoveData
 
 	local targetCharacter, targetHumanoid, targetRoot = ctx:GetValidTarget()
-	if not targetCharacter then
+	if not targetCharacter or isMoveInterrupted(ctx) then
 		ctx:FinishMove(0)
 		return
 	end
@@ -462,13 +484,22 @@ function BoneZone.Execute(ctx)
 
 	Debris:AddItem(zoneModel, data.ZoneLifetime or 1.4)
 
-	task.delay(data.EarlyUnlockTime or 0.2, function()
-		ctx:FinishMove(0)
-	end)
-
 	task.wait(data.WarningTime or 0.5)
 
-	if not zoneModel or not zoneModel.Parent then return end
+	if isMoveInterrupted(ctx) then
+		if zoneModel and zoneModel.Parent then
+			fadeOutModel(zoneModel, data.BonesFadeTime or 0.18)
+			Debris:AddItem(zoneModel, (data.BonesFadeTime or 0.18) + 0.1)
+		end
+
+		ctx:FinishMove(0)
+		return
+	end
+
+	if not zoneModel or not zoneModel.Parent then
+		ctx:FinishMove(0)
+		return
+	end
 
 	playSansSFX(ctx, "BoneUp", zonePart, 2)
 
@@ -477,7 +508,19 @@ function BoneZone.Execute(ctx)
 
 	tweenBonesUp(zoneModel, bonesModel, bonesStartCFrame, bonesEndCFrame, data)
 
+	if isMoveInterrupted(ctx) then
+		if zoneModel and zoneModel.Parent then
+			fadeOutModel(zoneModel, data.BonesFadeTime or 0.18)
+			Debris:AddItem(zoneModel, (data.BonesFadeTime or 0.18) + 0.1)
+		end
+
+		ctx:FinishMove(0)
+		return
+	end
+
 	doBoneZoneHitbox(ctx, hitPosition, data)
+
+	ctx:FinishMove(0.4)
 
 	task.delay((data.BonesTweenTime or 0.28) + (data.BonesHoldTime or 0.22), function()
 		if zoneModel and zoneModel.Parent then

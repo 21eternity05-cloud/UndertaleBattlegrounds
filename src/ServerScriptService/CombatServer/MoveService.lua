@@ -162,10 +162,6 @@ function MoveService:CancelM1IntoMove(character)
 	end
 
 	character:SetAttribute("Attacking", false)
-	character:SetAttribute("ComboCount", 0)
-	character:SetAttribute("LastM1Time", 0)
-	character:SetAttribute("AirComboReady", false)
-	character:SetAttribute("UsedUptiltInCombo", false)
 
 	if self.StateService.AnimationService then
 		self.StateService.AnimationService:StopCharacterAnimationByName(character, "M1", 0.04)
@@ -296,6 +292,29 @@ function MoveService:BuildAttackData(baseData, extraData)
 	return data
 end
 
+function MoveService:CanAttackContinue(character, moveData)
+	if self.CombatStatusService and self.CombatStatusService.CanAttackContinue then
+		return self.CombatStatusService:CanAttackContinue(character, moveData)
+	end
+
+	if not character or not character.Parent then
+		return false
+	end
+	if character:GetAttribute("Guardbroken") then
+		return false
+	end
+	if character:GetAttribute("Stunned")
+		and character:GetAttribute("IFrameActive") ~= true
+		and character:GetAttribute("ArmorActive") ~= true
+		and not (moveData and moveData.CancelableByHit == false)
+		and not (moveData and moveData.ArmorPreventsHitCancel == true)
+	then
+		return false
+	end
+
+	return true
+end
+
 function MoveService:ApplyStandardHit(
 	attackerCharacter,
 	attackerRoot,
@@ -359,7 +378,7 @@ function MoveService:ApplyStandardHit(
 		canBlock = data.Blockable ~= false and data.CanBeBlocked ~= false and data.Unblockable ~= true
 	end
 
-	if canBlock and self.BlockService:CanBlockHit(targetCharacter, attackerRoot) then
+	if canBlock and self.BlockService:CanBlockHit(targetCharacter, attackerRoot, data) then
 		if data.Guardbreak == true then
 			self.StateService:GuardbreakCharacter(targetCharacter, data.GuardbreakStun or 1.25)
 			self.BlockService:PlayBlockBreakVFX(targetRoot)
@@ -578,6 +597,10 @@ function MoveService:BuildContext(
 	end
 
 	function context:DefaultApplyHit(targetCharacter2, targetHumanoid2, targetRoot2)
+		if not moveService:CanAttackContinue(character, moveData) then
+			return "Canceled"
+		end
+
 		return moveService:ApplyStandardHit(
 			character,
 			root,
@@ -596,6 +619,10 @@ function MoveService:BuildContext(
 		customAttackData,
 		customAttackName
 	)
+		if not moveService:CanAttackContinue(character, customAttackData or moveData) then
+			return "Canceled"
+		end
+
 		return moveService:ApplyStandardHit(
 			character,
 			root,
@@ -618,6 +645,10 @@ function MoveService:PerformDefaultMove(context)
 
 	task.delay(moveData.HitDelay or 0.1, function()
 		if not context:IsActive() then
+			return
+		end
+		if not self:CanAttackContinue(character, attackData) then
+			context:FinishMove(0)
 			return
 		end
 

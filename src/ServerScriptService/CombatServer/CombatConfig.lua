@@ -114,7 +114,7 @@ CombatConfig.M1Data = {
 		VictimPushSpeed = 20,
 		AttackerChaseSpeed = 22,
 
-		YHoldDuration = 0.38,
+		YHoldDuration = 0.5,
 	},
 
 	[2] = {
@@ -130,7 +130,7 @@ CombatConfig.M1Data = {
 		VictimPushSpeed = 20,
 		AttackerChaseSpeed = 22,
 
-		YHoldDuration = 0.38,
+		YHoldDuration = 0.5,
 	},
 
 	[3] = {
@@ -146,7 +146,7 @@ CombatConfig.M1Data = {
 		VictimPushSpeed = 20,
 		AttackerChaseSpeed = 22,
 
-		YHoldDuration = 0.4,
+		YHoldDuration = 0.5,
 	},
 
 	[4] = {
@@ -162,7 +162,7 @@ CombatConfig.M1Data = {
 		VictimPushSpeed = 20,
 		AttackerChaseSpeed = 22,
 
-		YHoldDuration = 0.4,
+		YHoldDuration = 0.5,
 	},
 
 	[5] = {
@@ -195,7 +195,7 @@ CombatConfig.M1Data = {
 
 	Uptilt = {
 		Damage = 1,
-		Stun = 1.65,
+		Stun = 1,
 		Cooldown = 0.42,
 		MoveCooldown = 0.8,
 		HitDelay = 0.1,
@@ -210,7 +210,7 @@ CombatConfig.M1Data = {
 		ComboOffset = CFrame.new(0, 1.5, -6.4),
 
 		LiftHeight = 20,
-		LiftDuration = 0.8,
+		LiftDuration = 0.5,
 
 		MinHorizontalSpacing = 4,
 
@@ -218,7 +218,7 @@ CombatConfig.M1Data = {
 		UptiltMaxForce = 100000,
 		UptiltMaxVelocity = 55,
 
-		PostLiftYHold = 0.45,
+		PostLiftYHold = 0.4,
 	},
 
 	Downslam = {

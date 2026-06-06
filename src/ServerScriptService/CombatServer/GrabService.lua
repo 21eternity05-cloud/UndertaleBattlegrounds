@@ -46,6 +46,7 @@ function GrabService:LockCharacter(character, options)
 
 	character:SetAttribute("Grabbed", true)
 	character:SetAttribute("CinematicLocked", true)
+	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("Stunned", true)
 	character:SetAttribute("Blocking", false)
 	character:SetAttribute("Attacking", false)

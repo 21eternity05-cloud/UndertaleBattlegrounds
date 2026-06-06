@@ -638,8 +638,6 @@ local function startBlocking()
 	local character = getCharacter()
 	if not character then return end
 
-	if character:GetAttribute("UsingMove") then return end
-
 	blocking = true
 	combatRemote:FireServer("BlockStart")
 end

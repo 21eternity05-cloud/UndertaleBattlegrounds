@@ -135,6 +135,38 @@ function CombatStatusService:CanAttackHitCancel(attackData)
 	return data.HitCancelsTarget ~= false
 end
 
+function CombatStatusService:CanAttackContinue(character, moveData)
+	if not character or not character.Parent then
+		return false
+	end
+
+	if character:GetAttribute("Guardbroken") then
+		return false
+	end
+
+	if not character:GetAttribute("Stunned") then
+		return true
+	end
+
+	if character:GetAttribute("IFrameActive") == true then
+		return true
+	end
+	if character:GetAttribute("ArmorActive") == true then
+		return true
+	end
+
+	local data = self:NormalizeAttackData(moveData)
+
+	if data.CancelableByHit == false then
+		return true
+	end
+	if data.ArmorPreventsHitCancel == true then
+		return true
+	end
+
+	return false
+end
+
 function CombatStatusService:ClearCombatWindows(character)
 	if not character or not character.Parent then return end
 

@@ -24,7 +24,7 @@ function BlockService:IsAttackInFrontOfBlocker(blockerRoot, attackerRoot)
 	return dot > 0.15
 end
 
-function BlockService:CanBlockHit(targetCharacter, attackerRoot)
+function BlockService:CanBlockHit(targetCharacter, attackerRoot, attackData)
 	if not targetCharacter:GetAttribute("Blocking") then
 		return false
 	end
@@ -35,6 +35,13 @@ function BlockService:CanBlockHit(targetCharacter, attackerRoot)
 
 	local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
 	if not targetRoot then return false end
+
+	if attackData and attackData.IgnoreBlockDirection == true then
+		return true
+	end
+	if attackData and attackData.AllRoundBlock == true then
+		return true
+	end
 
 	return self:IsAttackInFrontOfBlocker(targetRoot, attackerRoot)
 end
@@ -47,29 +54,82 @@ function BlockService:PlayBlockBreakVFX(targetRoot)
 	self.VFXService:PlayBlockBreak(targetRoot)
 end
 
+function BlockService:CanStartBlocking(character)
+	if not character or not character.Parent then
+		return false
+	end
+
+	if character:GetAttribute("Stunned") then return false end
+	if character:GetAttribute("Attacking") then return false end
+	if character:GetAttribute("UsingMove") then return false end
+	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Grabbed") then return false end
+	if character:GetAttribute("CinematicLocked") then return false end
+
+	return true
+end
+
+function BlockService:StartBlockingNow(character, humanoid)
+	character:SetAttribute("BlockBufferedUntil", 0)
+	character:SetAttribute("Blocking", true)
+
+	humanoid.WalkSpeed = 8
+	humanoid.Jump = false
+	humanoid.JumpPower = 0
+	humanoid.JumpHeight = 0
+
+	if self.StateService.AnimationService then
+		self.StateService.AnimationService:PlayBlockAnimation(character)
+	end
+
+	self.VFXService:StartBlockVFX(character)
+end
+
+function BlockService:BufferBlockStart(player, character)
+	local bufferUntil = os.clock() + (self.Config.BlockBufferTime or 0.18)
+	character:SetAttribute("BlockBufferedUntil", bufferUntil)
+
+	task.spawn(function()
+		while character and character.Parent do
+			if character:GetAttribute("BlockBufferedUntil") ~= bufferUntil then
+				return
+			end
+			if os.clock() >= bufferUntil then
+				character:SetAttribute("BlockBufferedUntil", 0)
+				return
+			end
+
+			local currentCharacter, currentHumanoid = self.StateService:GetCharacterInfo(player)
+			if currentCharacter ~= character or not currentHumanoid then
+				return
+			end
+
+			if self:CanStartBlocking(character) then
+				self:StartBlockingNow(character, currentHumanoid)
+				return
+			end
+
+			task.wait()
+		end
+	end)
+end
+
 function BlockService:SetBlocking(player, isBlocking)
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
 	if not character then return end
 
 	if isBlocking then
-		if character:GetAttribute("Stunned") then return end
-		if character:GetAttribute("Attacking") then return end
-		if character:GetAttribute("UsingMove") then return end
-		if character:GetAttribute("Guardbroken") then return end
-
-		character:SetAttribute("Blocking", true)
-
-		humanoid.WalkSpeed = 8
-		humanoid.Jump = false
-		humanoid.JumpPower = 0
-		humanoid.JumpHeight = 0
-
-		if self.StateService.AnimationService then
-			self.StateService.AnimationService:PlayBlockAnimation(character)
+		if self:CanStartBlocking(character) then
+			self:StartBlockingNow(character, humanoid)
+		elseif not character:GetAttribute("Stunned")
+			and not character:GetAttribute("Guardbroken")
+			and not character:GetAttribute("Grabbed")
+			and not character:GetAttribute("CinematicLocked")
+		then
+			self:BufferBlockStart(player, character)
 		end
-
-		self.VFXService:StartBlockVFX(character)
 	else
+		character:SetAttribute("BlockBufferedUntil", 0)
 		character:SetAttribute("Blocking", false)
 
 		if self.StateService.AnimationService then

@@ -389,7 +389,7 @@ function ProjectileService:ApplyProjectileHit(info)
 		Position = projectilePosition,
 	}
 
-	if canBlock and self.BlockService and self.BlockService:CanBlockHit(targetCharacter, projectileBlockSource) then
+	if canBlock and self.BlockService and self.BlockService:CanBlockHit(targetCharacter, projectileBlockSource, attackData) then
 		if attackData.Guardbreak then
 			self.StateService:GuardbreakCharacter(targetCharacter, attackData.GuardbreakStun or 1.25)
 			self.BlockService:PlayBlockBreakVFX(targetRoot)
@@ -447,6 +447,33 @@ function ProjectileService:ApplyProjectileHit(info)
 
 	if attackData.Knockback and attackData.Knockback > 0 then
 		if not armorInfo.Active or not armorInfo.PreventsKnockback then
+			local explicitDirection = info.KnockbackDirection or info.BeamDirection
+
+			if explicitDirection
+				and typeof(explicitDirection) == "Vector3"
+				and explicitDirection.Magnitude > 0.05
+				and self.MovementService
+				and self.MovementService.ApplyForceKnockback
+			then
+				local direction = explicitDirection.Unit
+				local velocity = (direction * attackData.Knockback)
+					+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
+
+				self.MovementService:ApplyForceKnockback(
+					targetRoot,
+					velocity,
+					attackData.KnockbackDuration,
+					attackData.KnockbackMaxForce,
+					attackName
+				)
+
+				if armorInfo.Active then
+					return "ArmoredHit"
+				end
+
+				return "Hit"
+			end
+
 			local direction = targetRoot.Position - projectilePosition
 			direction = Vector3.new(direction.X, 0, direction.Z)
 
@@ -540,6 +567,8 @@ function ProjectileService:PerformBeamTick(info)
 					TargetRoot = targetRoot,
 					AttackData = attackData,
 					AttackName = attackName,
+					BeamDirection = direction,
+					KnockbackDirection = info.KnockbackDirection or info.BeamDirection or direction,
 					HitSoundCharacter = info.HitSoundCharacter,
 					HitSoundName = info.HitSoundName,
 				})
@@ -582,6 +611,8 @@ function ProjectileService:RunBeam(info)
 			BeamStep = info.BeamStep,
 			BeamRadius = info.BeamRadius,
 			IsFinalTick = isFinalTick,
+			BeamDirection = info.BeamDirection or info.Direction,
+			KnockbackDirection = info.KnockbackDirection or info.BeamDirection or info.Direction,
 			HitSoundCharacter = info.HitSoundCharacter,
 			HitSoundName = info.HitSoundName,
 			OnBeamHit = info.OnBeamHit,
