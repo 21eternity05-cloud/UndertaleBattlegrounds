@@ -6,18 +6,18 @@ local BadTime = {
 	DisplayName = "Bad Time",
 	AnimationName = "BadTime",
 
-	Cooldown = 1, -- TESTING. Set back to 35 later.
-	Duration = 14,
-	LockTime = 14,
+	Cooldown = 1, 
+	Duration =  18,
+	LockTime = 18,
 	MaxLockTime = 14.5,
 
 	RequiresTarget = true,
 	RequiresAim = false,
 
-	WarningTime = 1,
+	WarningTime = .9,
 	ConfirmRange = 80,
 
-	SequenceTime = 11.5,
+	SequenceTime = 18,
 
 	Blockable = true,
 	CanBeBlocked = true,
@@ -29,11 +29,11 @@ local BadTime = {
 
 	HasIFrames = true,
 	IFrameStart = 0,
-	IFrameEnd = 16,
+	IFrameEnd = 18,
 
 	HasArmor = true,
 	ArmorStart = 0,
-	ArmorEnd = 16,
+	ArmorEnd = 18,
 	ArmorDamageReduction = 1,
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,

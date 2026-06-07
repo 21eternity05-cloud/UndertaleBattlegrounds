@@ -1,4 +1,5 @@
 local Debris = game:GetService("Debris")
+local RunService = game:GetService("RunService")
 
 local CharaVFX = {}
 CharaVFX.__index = CharaVFX
@@ -17,10 +18,14 @@ function CharaVFX:GetCharaVFXFolder()
 end
 
 function CharaVFX:GetEquippedKnife(character)
-	if not character then return nil end
+	if not character then
+		return nil
+	end
 
 	local weapon = character:FindFirstChild("EquippedWeapon")
-	if not weapon then return nil end
+	if not weapon then
+		return nil
+	end
 
 	return weapon
 end
@@ -35,7 +40,9 @@ function CharaVFX:GetKnifePrimaryPart(character)
 		end
 	end
 
-	if not knife then return nil end
+	if not knife then
+		return nil
+	end
 
 	if knife:IsA("Model") then
 		if knife.PrimaryPart then
@@ -65,12 +72,16 @@ function CharaVFX:GetKnifePrimaryPart(character)
 end
 
 function CharaVFX:GetRoot(character)
-	if not character then return nil end
+	if not character then
+		return nil
+	end
 	return character:FindFirstChild("HumanoidRootPart")
 end
 
 function CharaVFX:EmitAttachment(attachment)
-	if not attachment then return end
+	if not attachment then
+		return
+	end
 
 	for _, descendant in ipairs(attachment:GetDescendants()) do
 		if descendant:IsA("ParticleEmitter") then
@@ -96,8 +107,26 @@ function CharaVFX:EmitAttachment(attachment)
 	end
 end
 
+function CharaVFX:SetAttachmentEmittersEnabled(attachment, enabled)
+	if not attachment then
+		return
+	end
+
+	for _, descendant in ipairs(attachment:GetDescendants()) do
+		if descendant:IsA("ParticleEmitter") then
+			descendant.Enabled = enabled
+		elseif descendant:IsA("Trail") then
+			descendant.Enabled = enabled
+		elseif descendant:IsA("Beam") then
+			descendant.Enabled = enabled
+		end
+	end
+end
+
 function CharaVFX:EmitAllParticles(instance)
-	if not instance then return end
+	if not instance then
+		return
+	end
 
 	for _, descendant in ipairs(instance:GetDescendants()) do
 		if descendant:IsA("ParticleEmitter") then
@@ -119,12 +148,18 @@ function CharaVFX:EmitAllParticles(instance)
 			else
 				descendant:Emit(emitCount)
 			end
+		elseif descendant:IsA("Trail") then
+			descendant.Enabled = true
+		elseif descendant:IsA("Beam") then
+			descendant.Enabled = true
 		end
 	end
 end
 
 function CharaVFX:PrepareVFXInstance(instance)
-	if not instance then return end
+	if not instance then
+		return
+	end
 
 	for _, descendant in ipairs(instance:GetDescendants()) do
 		if descendant:IsA("BasePart") then
@@ -146,9 +181,28 @@ function CharaVFX:PrepareVFXInstance(instance)
 end
 
 function CharaVFX:PivotVFX(instance, cframe)
-	if not instance then return end
+	if not instance then
+		return
+	end
 
 	if instance:IsA("Model") then
+		if not instance.PrimaryPart then
+			local primary = instance:FindFirstChild("PrimaryPart", true)
+
+			if primary and primary:IsA("BasePart") then
+				instance.PrimaryPart = primary
+			else
+				primary = instance:FindFirstChildWhichIsA("BasePart", true)
+
+				if primary then
+					instance.PrimaryPart = primary
+				else
+					warn("[CharaVFX] Model has no PrimaryPart/BasePart:", instance.Name)
+					return
+				end
+			end
+		end
+
 		instance:PivotTo(cframe)
 	elseif instance:IsA("BasePart") then
 		instance.CFrame = cframe
@@ -159,7 +213,9 @@ end
 
 function CharaVFX:CloneWorldVFX(vfxName, cframe, lifetime)
 	local vfxFolder = self:GetCharaVFXFolder()
-	if not vfxFolder then return nil end
+	if not vfxFolder then
+		return nil
+	end
 
 	local template = vfxFolder:FindFirstChild(vfxName)
 	if not template then
@@ -212,10 +268,14 @@ end
 
 function CharaVFX:PlayKnifeDashStart(character)
 	local vfxFolder = self:GetCharaVFXFolder()
-	if not vfxFolder then return end
+	if not vfxFolder then
+		return
+	end
 
 	local knifePart = self:GetKnifePrimaryPart(character)
-	if not knifePart then return end
+	if not knifePart then
+		return
+	end
 
 	local template = vfxFolder:FindFirstChild("KnifeShine")
 	if not template or not template:IsA("Attachment") then
@@ -234,10 +294,14 @@ end
 
 function CharaVFX:PlayKnifeDashTrailStart(character)
 	local vfxFolder = self:GetCharaVFXFolder()
-	if not vfxFolder then return end
+	if not vfxFolder then
+		return
+	end
 
 	local knifePart = self:GetKnifePrimaryPart(character)
-	if not knifePart then return end
+	if not knifePart then
+		return
+	end
 
 	if knifePart:FindFirstChild("ActiveKnifeTrail") then
 		return
@@ -282,7 +346,9 @@ end
 
 function CharaVFX:PlayKnifeDashTrailStop(character)
 	local knifePart = self:GetKnifePrimaryPart(character)
-	if not knifePart then return end
+	if not knifePart then
+		return
+	end
 
 	for _, child in ipairs(knifePart:GetChildren()) do
 		if child:GetAttribute("KnifeDashTrailObject") == true then
@@ -296,19 +362,172 @@ function CharaVFX:PlayKnifeDashTrailStop(character)
 	end
 end
 
-function CharaVFX:PlayRedSlash(character, targetCharacter, targetRoot)
-	local cframe = self:GetForwardVFXCFrame(character, 5, 0)
-	self:CloneWorldVFX("RedSlash", cframe, 2)
+function CharaVFX:PlayRedSlashStart(character)
+	self:PlayKnifeDashStart(character)
+end
+
+function CharaVFX:PlayRedSlashTrailStart(character)
+	self:PlayKnifeDashTrailStart(character)
+end
+
+function CharaVFX:PlayRedSlashTrailStop(character)
+	self:PlayKnifeDashTrailStop(character)
+end
+
+function CharaVFX:PlayDarkAura(character)
+	local root = self:GetRoot(character)
+	if not root then
+		return
+	end
+
+	local vfxFolder = self:GetCharaVFXFolder()
+	if not vfxFolder then
+		return
+	end
+
+	if root:FindFirstChild("ActiveKillingIntentDarkAura") then
+		return
+	end
+
+	local darkAuraTemplate = vfxFolder:FindFirstChild("DarkAura")
+
+	if not darkAuraTemplate then
+		warn("[CharaVFX] Missing VFX: DarkAura")
+		return
+	end
+
+	if darkAuraTemplate:IsA("Attachment") then
+		local aura = darkAuraTemplate:Clone()
+		aura.Name = "ActiveKillingIntentDarkAura"
+		aura.Parent = root
+
+		self:SetAttachmentEmittersEnabled(aura, true)
+		self:EmitAttachment(aura)
+
+		return
+	end
+
+	local aura = self:CloneWorldVFX("DarkAura", root.CFrame, 6)
+
+	if aura then
+		aura.Name = "ActiveKillingIntentDarkAura"
+
+		local connection
+		connection = RunService.Heartbeat:Connect(function()
+			if not aura or not aura.Parent then
+				if connection then
+					connection:Disconnect()
+				end
+				return
+			end
+
+			if not root or not root.Parent then
+				if connection then
+					connection:Disconnect()
+				end
+				return
+			end
+
+			self:PivotVFX(aura, root.CFrame)
+		end)
+
+		aura.Destroying:Connect(function()
+			if connection then
+				connection:Disconnect()
+			end
+		end)
+	end
+end
+
+function CharaVFX:StopDarkAura(character)
+	local root = self:GetRoot(character)
+	if not root then
+		return
+	end
+
+	local aura = root:FindFirstChild("ActiveKillingIntentDarkAura")
+
+	if aura then
+		self:SetAttachmentEmittersEnabled(aura, false)
+		Debris:AddItem(aura, 0.75)
+	end
+
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child.Name == "ActiveKillingIntentDarkAura" then
+			if child:IsA("Model") or child:IsA("BasePart") then
+				child:Destroy()
+			end
+		end
+	end
+end
+
+function CharaVFX:PlayCharaRingOnCounterUser(character)
+	local root = self:GetRoot(character)
+
+	if not root then
+		warn("[CharaVFX] Cannot play CharaRing because counter user's root is missing")
+		return
+	end
+
+	local vfxFolder = self:GetCharaVFXFolder()
+	if not vfxFolder then
+		return
+	end
+
+	local ringTemplate = vfxFolder:FindFirstChild("CharaRing")
+
+	if not ringTemplate then
+		warn("[CharaVFX] Missing VFX: CharaRing")
+		return
+	end
+
+	if not ringTemplate:IsA("Attachment") then
+		warn("[CharaVFX] CharaRing must be an Attachment")
+		return
+	end
+
+	local ring = ringTemplate:Clone()
+	ring.Name = "ActiveKillingIntentCharaRing"
+	ring.Parent = root
+
+	self:EmitAttachment(ring)
+
+	Debris:AddItem(ring, 1.5)
+end
+
+function CharaVFX:PlayKillingIntentCounterStart(character)
+	-- Counter start now only plays DarkAura.
+	-- CharaRing now waits until the counter actually triggers.
+	self:PlayDarkAura(character)
+end
+
+function CharaVFX:PlayKillingIntentCounterEnd(character)
+	self:StopDarkAura(character)
+end
+
+function CharaVFX:PlayKillingIntentHit(character, targetCharacter, targetRoot)
+	-- Counter trigger plays CharaRing, knife shine, and knife trail.
+	self:PlayCharaRingOnCounterUser(character)
+	self:PlayKnifeDashStart(character)
+	self:PlayKnifeDashTrailStart(character)
+
+	task.delay(0.65, function()
+		self:PlayKnifeDashTrailStop(character)
+	end)
 end
 
 function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 	local TweenService = game:GetService("TweenService")
 
 	local root = self:GetRoot(character)
-	if not root then return end
+	if not root then
+		return
+	end
 
 	local vfxFolder = self:GetCharaVFXFolder()
-	if not vfxFolder then return end
+	if not vfxFolder then
+		return
+	end
 
 	local template = vfxFolder:FindFirstChild("SlashBarrage")
 	if not template then
@@ -322,13 +541,8 @@ function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 	local randomPitch = math.rad(math.random(-18, 18))
 	local randomYaw = math.rad(math.random(-20, 20))
 
-	local startCFrame =
-		baseCFrame
-		* CFrame.new(
-			math.random(-12, 12) / 10,
-			math.random(-4, 8) / 10,
-			math.random(-10, 10) / 10
-		)
+	local startCFrame = baseCFrame
+		* CFrame.new(math.random(-12, 12) / 10, math.random(-4, 8) / 10, math.random(-10, 10) / 10)
 		* CFrame.Angles(randomPitch, randomYaw, randomRoll)
 
 	local forwardDistance = 3.5
@@ -403,23 +617,11 @@ function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 	forcePrimaryInvisible()
 	self:EmitAllParticles(clone)
 
-	local fadeInInfo = TweenInfo.new(
-		0.06,
-		Enum.EasingStyle.Quad,
-		Enum.EasingDirection.Out
-	)
+	local fadeInInfo = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-	local slashInfo = TweenInfo.new(
-		0.13,
-		Enum.EasingStyle.Quad,
-		Enum.EasingDirection.Out
-	)
+	local slashInfo = TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-	local fadeOutInfo = TweenInfo.new(
-		0.11,
-		Enum.EasingStyle.Quad,
-		Enum.EasingDirection.Out
-	)
+	local fadeOutInfo = TweenInfo.new(0.11, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 	local cframeValue = Instance.new("CFrameValue")
 	cframeValue.Value = startCFrame
@@ -434,42 +636,28 @@ function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 
 	for part, _ in pairs(originalSizes) do
 		if part and part.Parent then
-			TweenService:Create(
-				part,
-				fadeInInfo,
-				{
-					Transparency = 0,
-				}
-			):Play()
+			TweenService:Create(part, fadeInInfo, {
+				Transparency = 0,
+			}):Play()
 		end
 	end
 
 	forcePrimaryInvisible()
 
 	task.delay(0.04, function()
-		if not clone or not clone.Parent then return end
+		if not clone or not clone.Parent then
+			return
+		end
 
-		TweenService:Create(
-			cframeValue,
-			slashInfo,
-			{
-				Value = endCFrame,
-			}
-		):Play()
+		TweenService:Create(cframeValue, slashInfo, {
+			Value = endCFrame,
+		}):Play()
 
 		for part, originalSize in pairs(originalSizes) do
 			if part and part.Parent then
-				TweenService:Create(
-					part,
-					slashInfo,
-					{
-						Size = Vector3.new(
-							originalSize.X * 1.15,
-							originalSize.Y * 1.15,
-							originalSize.Z * 1.65
-						),
-					}
-				):Play()
+				TweenService:Create(part, slashInfo, {
+					Size = Vector3.new(originalSize.X * 1.15, originalSize.Y * 1.15, originalSize.Z * 1.65),
+				}):Play()
 			end
 		end
 
@@ -477,18 +665,16 @@ function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 	end)
 
 	task.delay(0.16, function()
-		if not clone or not clone.Parent then return end
+		if not clone or not clone.Parent then
+			return
+		end
 
 		for part, originalSize in pairs(originalSizes) do
 			if part and part.Parent then
-				TweenService:Create(
-					part,
-					fadeOutInfo,
-					{
-						Transparency = 1,
-						Size = originalSize,
-					}
-				):Play()
+				TweenService:Create(part, fadeOutInfo, {
+					Transparency = 1,
+					Size = originalSize,
+				}):Play()
 			end
 		end
 
@@ -511,14 +697,15 @@ function CharaVFX:PlaySlashBarrageSlash(character, targetCharacter, targetRoot)
 end
 
 function CharaVFX:PlaySpecialHellStart(character)
-	-- Placeholder startup VFX.
-	-- Special Hell's main red warning/beam VFX is created inside SpecialHell.lua.
-	-- Add knife glitch, red aura, or floor crack particles here later.
 	local knifePart = self:GetKnifePrimaryPart(character)
-	if not knifePart then return end
+	if not knifePart then
+		return
+	end
 
 	local vfxFolder = self:GetCharaVFXFolder()
-	if not vfxFolder then return end
+	if not vfxFolder then
+		return
+	end
 
 	local template = vfxFolder:FindFirstChild("KnifeShine")
 	if template and template:IsA("Attachment") then
@@ -548,13 +735,41 @@ function CharaVFX:PlayMove(character, moveName, targetCharacter, targetRoot)
 		return
 	end
 
+	if moveName == "RedSlashStart" then
+		self:PlayRedSlashStart(character)
+		return
+	end
+
+	if moveName == "RedSlashTrailStart" then
+		self:PlayRedSlashTrailStart(character)
+		return
+	end
+
+	if moveName == "RedSlashTrailStop" then
+		self:PlayRedSlashTrailStop(character)
+		return
+	end
+
+	if moveName == "KillingIntentCounterStart" then
+		self:PlayKillingIntentCounterStart(character)
+		return
+	end
+
+	if moveName == "KillingIntentCounterEnd" then
+		self:PlayKillingIntentCounterEnd(character)
+		return
+	end
+
+	if moveName == "KillingIntentHit" then
+		self:PlayKillingIntentHit(character, targetCharacter, targetRoot)
+		return
+	end
+
 	if moveName == "KnifeDash" then
-		-- Optional Knife Dash hit VFX later.
 		return
 	end
 
 	if moveName == "RedSlash" then
-		self:PlayRedSlash(character, targetCharacter, targetRoot)
 		return
 	end
 
@@ -564,8 +779,6 @@ function CharaVFX:PlayMove(character, moveName, targetCharacter, targetRoot)
 	end
 
 	if moveName == "SpecialHell" then
-		-- Special Hell's main VFX is handled inside SpecialHell.lua.
-		-- This prevents harmless unknown-VFX warnings from MoveService.
 		return
 	end
 

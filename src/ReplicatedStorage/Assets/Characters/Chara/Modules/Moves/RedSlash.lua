@@ -2,7 +2,7 @@ local RedSlash = {
 	DisplayName = "Red Slash",
 	AnimationName = nil,
 
-	Cooldown = 11,
+	Cooldown = 13,
 	Duration = 1.45,
 	LockTime = 1.45,
 	MaxLockTime = 1.7,
@@ -10,7 +10,7 @@ local RedSlash = {
 	Damage = 16,
 	Stun = 1,
 
-	Radius = 7,
+	Radius = 9,
 	Offset = CFrame.new(0, 0, -6.4),
 
 	-- Red Slash should feel like M5 knockback,
@@ -55,8 +55,9 @@ local RedSlash = {
 }
 
 local ANIMATION_NAME = "RedSlash"
+local CHARGE_MARKER = "charge"
 
-local WINDUP_TIME = .75
+local WINDUP_TIME = 0.9
 local HITBOX_ACTIVE_TIME = 0.16
 local HITBOX_TICK_RATE = 0.04
 local ENDLAG_TIME = 0.35
@@ -163,9 +164,9 @@ function RedSlash.Execute(context)
 		end
 	end
 
-	local function playRedSlashVFX()
+	local function playMoveVFX(vfxName, targetCharacter, targetRoot)
 		if context.VFXService and context.VFXService.PlayCharacterMoveVFX then
-			context.VFXService:PlayCharacterMoveVFX(character, "RedSlash")
+			context.VFXService:PlayCharacterMoveVFX(character, vfxName, targetCharacter, targetRoot)
 		end
 	end
 
@@ -184,13 +185,96 @@ function RedSlash.Execute(context)
 		return
 	end
 
-	playCharaSFX("KnifeSwing", root, 2)
+	local finished = false
+	local chargeTriggered = false
+	local trailStarted = false
+
+	local chargeConnection
+	local stoppedConnection
+	local endedConnection
+
+	local function stopTrail()
+		if trailStarted then
+			trailStarted = false
+			playMoveVFX("RedSlashTrailStop")
+		end
+	end
+
+	local function disconnect()
+		if chargeConnection then
+			chargeConnection:Disconnect()
+			chargeConnection = nil
+		end
+
+		if stoppedConnection then
+			stoppedConnection:Disconnect()
+			stoppedConnection = nil
+		end
+
+		if endedConnection then
+			endedConnection:Disconnect()
+			endedConnection = nil
+		end
+	end
+
+	local function finishMove(delayTime)
+		if finished then return end
+		finished = true
+
+		disconnect()
+		stopTrail()
+
+		context:FinishMove(delayTime or 0)
+	end
+
+	local function startChargeVFX()
+		if chargeTriggered then return end
+		chargeTriggered = true
+
+		if not context:IsActive() then
+			finishMove(0)
+			return
+		end
+
+		print("[RedSlash] Charge marker reached")
+
+		-- Uses the simple Knife Dash style VFX from Chara VFXModule.
+		playMoveVFX("RedSlashStart")
+		playMoveVFX("RedSlashTrailStart")
+
+		-- Put this Sound inside:
+		-- ReplicatedStorage > Assets > Characters > Chara > SFX > RedSlashCharge
+		playCharaSFX("RedSlashCharge", root, 2)
+
+		trailStarted = true
+	end
+
+	chargeConnection = track:GetMarkerReachedSignal(CHARGE_MARKER):Connect(function()
+		startChargeVFX()
+	end)
+
+	stoppedConnection = track.Stopped:Connect(function()
+		finishMove(0)
+	end)
+
+	endedConnection = track.Ended:Connect(function()
+		finishMove(0)
+	end)
+
+	-- Fallback in case marker is missing/wrong name.
+	task.delay(WINDUP_TIME * 0.35, function()
+		if finished then return end
+		if chargeTriggered then return end
+
+		warn("[RedSlash] charge marker was not reached yet. Starting charge VFX fallback.")
+		startChargeVFX()
+	end)
 
 	local windupStart = os.clock()
 
 	while os.clock() - windupStart < WINDUP_TIME do
 		if not character.Parent or humanoid.Health <= 0 then
-			context:FinishMove(0)
+			finishMove(0)
 			return
 		end
 
@@ -200,24 +284,26 @@ function RedSlash.Execute(context)
 				track:Stop(0.05)
 			end
 
-			context:FinishMove(0)
+			finishMove(0)
 			return
 		end
 
 		if not context:IsActive() then
-			context:FinishMove(0)
+			finishMove(0)
 			return
 		end
 
 		task.wait()
 	end
 
-	if not context:IsActive() then
-		context:FinishMove(0)
+	if finished then
 		return
 	end
 
-	playRedSlashVFX()
+	if not context:IsActive() then
+		finishMove(0)
+		return
+	end
 
 	local alreadyHit = {}
 	local startTime = os.clock()
@@ -254,7 +340,9 @@ function RedSlash.Execute(context)
 					or result == "Guardbreak"
 					or result == "Blocked"
 				then
-					playCharaSFX("M1", targetRoot, 2)
+					-- Put this Sound inside:
+					-- ReplicatedStorage > Assets > Characters > Chara > SFX > RedSlashHit
+					playCharaSFX("RedSlashHit", targetRoot, 2)
 				end
 
 				if shouldApplyKnockback(result)
@@ -276,8 +364,14 @@ function RedSlash.Execute(context)
 		task.wait(HITBOX_TICK_RATE)
 	end
 
+	-- Do NOT stop trail here.
+	-- Trail stops when the animation ends/stops, or when finishMove runs.
+
 	task.wait(ENDLAG_TIME)
-	context:FinishMove(0)
+
+	if not finished then
+		finishMove(0)
+	end
 end
 
 return RedSlash

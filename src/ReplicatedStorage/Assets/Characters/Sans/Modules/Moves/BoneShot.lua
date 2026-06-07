@@ -2,7 +2,7 @@ local BoneShot = {
 	DisplayName = "Bone Shot",
 	AnimationName = "BoneShot",
 
-	Cooldown = 8.8,
+	Cooldown = 9.2,
 	MaxLockTime = 0.45,
 
 	RequiresTarget = true,

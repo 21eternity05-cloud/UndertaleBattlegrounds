@@ -67,6 +67,15 @@ local VICTIM_ANIMATIONS = { "SpecialHellVictim", "UltGrabVictim" }
 local GRAB_MARKER = "Grab"
 local HELL_MARKER = "Hell"
 
+local function setUltimateDashLock(character, enabled)
+	if not character or not character.Parent then
+		return
+	end
+
+	character:SetAttribute("DashLocked", enabled == true)
+	character:SetAttribute("UltimateLocked", enabled == true)
+end
+
 local function reportDamage(ctx, targetCharacter, targetRoot, damage)
 	if not ctx or not targetCharacter then
 		return
@@ -402,6 +411,7 @@ local function lockGrabAttacker(character, humanoid, root, duration)
 	character:SetAttribute("CinematicLocked", true)
 	character:SetAttribute("MovementLocked", true)
 	character:SetAttribute("DashLocked", true)
+	character:SetAttribute("UltimateLocked", true)
 	character:SetAttribute("Attacking", true)
 	character:SetAttribute("UsingMove", true)
 	character:SetAttribute("JumpLockedUntil", os.clock() + (duration or 8.5))
@@ -432,6 +442,7 @@ local function unlockGrabAttacker(character, humanoid, root, oldState)
 		character:SetAttribute("CinematicLocked", false)
 		character:SetAttribute("MovementLocked", false)
 		character:SetAttribute("DashLocked", false)
+		character:SetAttribute("UltimateLocked", false)
 		character:SetAttribute("Attacking", false)
 		character:SetAttribute("UsingMove", false)
 	end
@@ -593,6 +604,9 @@ function SpecialHell.Execute(ctx)
 		return
 	end
 
+	-- Dash lock starts immediately, even before the grab confirms.
+	setUltimateDashLock(character, true)
+
 	forceKnifeCollisionOffForAWhile(character, 0.5)
 
 	if ctx.VFXService and ctx.VFXService.PlayCharacterSFXAtPart then
@@ -669,6 +683,9 @@ function SpecialHell.Execute(ctx)
 		if attackerGrabState then
 			unlockGrabAttacker(character, humanoid, root, attackerGrabState)
 			attackerGrabState = nil
+		else
+			-- If the grab never confirmed, unlock the startup dash lock here.
+			setUltimateDashLock(character, false)
 		end
 
 		if character and character.Parent then
@@ -885,6 +902,7 @@ function SpecialHell.Execute(ctx)
 	if not startupTrack then
 		warn("[SpecialHell] Missing startup animation")
 		clearTempStatus(character)
+		setUltimateDashLock(character, false)
 		ctx:FinishMove(0)
 		return
 	end

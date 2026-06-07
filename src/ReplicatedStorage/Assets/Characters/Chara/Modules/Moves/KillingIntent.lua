@@ -16,18 +16,16 @@ local KillingIntent = {
 	Radius = 20,
 	Offset = CFrame.new(0, 0, -4),
 
-	-- Killing Intent counter hit now uses downslam-style movement.
 	KnockbackPreset = "Downslam",
 	DownForwardSpeed = 10,
 	DownSpeed = -95,
 	DownLaunchMaxForce = 90000,
 	AirStunMax = 1.15,
-	GroundSplatStun = 0.55,
+	GroundSplatStun = 2,
 	PostSplatM1Immunity = 0,
 	SplatPartLifetime = 0.35,
 	SplatPartSize = Vector3.new(8, 0.25, 8),
 
-	-- Backward compatibility.
 	Knockback = 20,
 	UpwardKnockback = 0,
 	KnockbackDuration = 0.25,
@@ -61,6 +59,8 @@ local COUNTER_WINDOW = 1.35
 local WHIFF_ENDLAG = 1
 
 local HIT_FREEZE_TIME = 1.4
+local DOWNSLAM_IMPACT_DELAY = 0
+
 local HIT_FINISH_DELAY = 0.35
 local ATTACKER_COUNTER_STUN = 1.65
 
@@ -88,6 +88,7 @@ local function safeSetCounterInvincible(character, enabled)
 	if not character or not character.Parent then
 		return
 	end
+
 	character:SetAttribute("Countering", enabled == true)
 end
 
@@ -123,6 +124,7 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
+
 	if not targetRoot or not targetRoot.Parent then
 		return
 	end
@@ -134,8 +136,7 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 		context.StateService:StunCharacter(targetCharacter, maxTime)
 	end
 
-	if
-		context.StateService
+	if context.StateService
 		and context.StateService.AnimationService
 		and context.StateService.AnimationService.PlayUniversalAnimation
 	then
@@ -150,6 +151,7 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 			if linearVelocity then
 				linearVelocity:Destroy()
 			end
+
 			if attachment then
 				attachment:Destroy()
 			end
@@ -163,6 +165,7 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 			if linearVelocity then
 				linearVelocity:Destroy()
 			end
+
 			if attachment then
 				attachment:Destroy()
 			end
@@ -178,6 +181,7 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 			if linearVelocity then
 				linearVelocity:Destroy()
 			end
+
 			if attachment then
 				attachment:Destroy()
 			end
@@ -189,8 +193,7 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 				context.StateService:StunCharacter(targetCharacter, moveData.GroundSplatStun or 0.65)
 			end
 
-			if
-				context.StateService
+			if context.StateService
 				and context.StateService.AnimationService
 				and context.StateService.AnimationService.PlayUniversalAnimation
 			then
@@ -313,9 +316,11 @@ function KillingIntent.Execute(context)
 			if not character or not character.Parent then
 				return
 			end
+
 			if not humanoid or not humanoid.Parent then
 				return
 			end
+
 			if not root or not root.Parent then
 				return
 			end
@@ -358,6 +363,12 @@ function KillingIntent.Execute(context)
 		end
 	end
 
+	local function playMoveVFX(vfxName, targetCharacter, targetRoot)
+		if context.VFXService and context.VFXService.PlayCharacterMoveVFX then
+			context.VFXService:PlayCharacterMoveVFX(character, vfxName, targetCharacter, targetRoot)
+		end
+	end
+
 	local function stunAttacker(targetCharacter, duration)
 		if not targetCharacter or not targetCharacter.Parent then
 			return
@@ -382,12 +393,14 @@ function KillingIntent.Execute(context)
 		return
 	end
 
-	playCharaSFX("KnifeSwing", root, 2)
+	playMoveVFX("KillingIntentCounterStart")
+	playCharaSFX("KillingIntentCharge", root, 2)
 
 	local startupStart = os.clock()
 
 	while os.clock() - startupStart < STARTUP_TIME do
 		if not character.Parent or humanoid.Health <= 0 then
+			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
 			context:FinishMove(0)
@@ -410,6 +423,7 @@ function KillingIntent.Execute(context)
 
 			clearCounterAttacker(character)
 			removeActiveFrameHighlight()
+			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			context:FinishMove(0)
 
@@ -417,6 +431,7 @@ function KillingIntent.Execute(context)
 		end
 
 		if not context:IsActive() then
+			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
 			context:FinishMove(0)
@@ -480,6 +495,7 @@ function KillingIntent.Execute(context)
 				character:SetAttribute("MovementLocked", false)
 			end
 
+			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
 			context:FinishMove(0)
@@ -539,6 +555,9 @@ function KillingIntent.Execute(context)
 			warn("[KillingIntent] Could not play animation:", HIT_ANIMATION)
 		end
 
+		playMoveVFX("KillingIntentHit", targetCharacter, targetRoot)
+		playCharaSFX("KillingIntentTrigger", root, 2)
+
 		if targetCharacter and targetHumanoid and targetRoot and targetHumanoid.Health > 0 then
 			stunAttacker(targetCharacter, ATTACKER_COUNTER_STUN)
 			zeroHorizontalVelocity(targetRoot)
@@ -546,8 +565,13 @@ function KillingIntent.Execute(context)
 
 		task.wait(HIT_FREEZE_TIME)
 
+		if DOWNSLAM_IMPACT_DELAY > 0 then
+			task.wait(DOWNSLAM_IMPACT_DELAY)
+		end
+
 		if targetCharacter and targetHumanoid and targetRoot and targetHumanoid.Health > 0 then
-			playCharaSFX("M1", targetRoot, 2)
+			-- KillingIntentHit SFX now plays exactly when the downslam comes out.
+			playCharaSFX("KillingIntentHit", targetRoot, 2)
 
 			local counterHitData = {}
 
