@@ -2,7 +2,7 @@ local KnifeDash = {
 	DisplayName = "Knife Dash",
 	AnimationName = "KnifeDash",
 
-	Cooldown = 9,
+	Cooldown = 10,
 	MaxLockTime = 1.6,
 
 	Windup = 0.32,
@@ -11,7 +11,7 @@ local KnifeDash = {
 	DashSpeed = 115,
 	CheckInterval = 0.05,
 
-	Damage = 7,
+	Damage = 5,
 	Stun = 0.95,
 
 	WhiffEndlag = 0.42,
@@ -32,7 +32,7 @@ local KnifeDash = {
 	HasArmor = false,
 
 	Hitbox = {
-		Radius = 8.5,
+		Radius =  6.5,
 		StartOffset = -7.5,
 		EndOffset = -22,
 	},

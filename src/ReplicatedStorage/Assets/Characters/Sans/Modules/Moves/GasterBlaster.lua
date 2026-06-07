@@ -23,8 +23,8 @@ local GasterBlaster = {
 	BeamStep = 6,
 	BeamTickRate = 0.08,
 
-	Damage = 3,
-	FinalDamage = 6,
+	Damage = 1,
+	FinalDamage = 5,
 	Stun = 0.25,
 	FinalStun = 0.35,
 

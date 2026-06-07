@@ -10,7 +10,7 @@ local KillingIntent = {
 	LockTime = 1.35,
 	MaxLockTime = 1.6,
 
-	Damage = 14,
+	Damage = 10,
 	Stun = 2.25,
 
 	Radius = 20,
@@ -21,7 +21,7 @@ local KillingIntent = {
 	DownSpeed = -95,
 	DownLaunchMaxForce = 90000,
 	AirStunMax = 1.15,
-	GroundSplatStun = 10,
+	GroundSplatStun = 2.5,
 	PostSplatM1Immunity = 0,
 	SplatPartLifetime = 0.35,
 	SplatPartSize = Vector3.new(8, 0.25, 8),
@@ -136,7 +136,8 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 		context.StateService:StunCharacter(targetCharacter, maxTime)
 	end
 
-	if context.StateService
+	if
+		context.StateService
 		and context.StateService.AnimationService
 		and context.StateService.AnimationService.PlayUniversalAnimation
 	then
@@ -193,7 +194,8 @@ local function monitorDownslamGroundSplat(context, targetCharacter, targetRoot, 
 				context.StateService:StunCharacter(targetCharacter, moveData.GroundSplatStun or 0.65)
 			end
 
-			if context.StateService
+			if
+				context.StateService
 				and context.StateService.AnimationService
 				and context.StateService.AnimationService.PlayUniversalAnimation
 			then

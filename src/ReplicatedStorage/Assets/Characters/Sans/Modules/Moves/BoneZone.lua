@@ -17,7 +17,7 @@ local BoneZone = {
 
 	Radius = 9,
 
-	Damage = 11,
+	Damage = 8,
 	Stun = 0.75,
 
 	Knockback = 120,

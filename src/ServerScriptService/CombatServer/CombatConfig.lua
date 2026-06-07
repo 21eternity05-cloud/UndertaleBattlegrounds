@@ -51,10 +51,10 @@ CombatConfig.AllowDummyUltGain = true
 
 -- Universal SOUL BURST evasive meter
 CombatConfig.SoulBurstMax = 300
-CombatConfig.SoulBurstHitGain = 18
-CombatConfig.SoulBurstDamageGainMultiplier = 0.8
-CombatConfig.SoulBurstStunGainMultiplier = 12
-CombatConfig.SoulBurstComboExtenderBonus = 10
+CombatConfig.SoulBurstHitGain = 8
+CombatConfig.SoulBurstDamageGainMultiplier = 0.5
+CombatConfig.SoulBurstStunGainMultiplier = 5
+CombatConfig.SoulBurstComboExtenderBonus = 5
 
 CombatConfig.SoulBurstCost = 300
 CombatConfig.SoulBurstIFrameDuration = 2
@@ -123,7 +123,7 @@ CombatConfig.BlockAnimation = "Block"
 
 CombatConfig.M1Data = {
 	[1] = {
-		Damage = 4,
+		Damage = 2,
 		Stun = 0.6,
 		Cooldown = 0.30,
 		HitDelay = 0.08,
@@ -139,7 +139,7 @@ CombatConfig.M1Data = {
 	},
 
 	[2] = {
-		Damage = 4,
+		Damage = 2,
 		Stun = 0.6,
 		Cooldown = 0.30,
 		HitDelay = 0.08,
@@ -155,7 +155,7 @@ CombatConfig.M1Data = {
 	},
 
 	[3] = {
-		Damage = 5,
+		Damage = 2,
 		Stun = 0.6,
 		Cooldown = 0.32,
 		HitDelay = 0.08,
@@ -171,7 +171,7 @@ CombatConfig.M1Data = {
 	},
 
 	[4] = {
-		Damage = 5,
+		Damage = 2,
 		Stun = 0.6,
 		Cooldown = 0.32,
 		HitDelay = 0.08,
@@ -187,7 +187,7 @@ CombatConfig.M1Data = {
 	},
 
 	[5] = {
-		Damage = 9,
+		Damage = 8,
 		Stun = 1.05,
 		Cooldown = 0.56,
 		HitDelay = 0.12,
@@ -243,7 +243,7 @@ CombatConfig.M1Data = {
 	},
 
 	Downslam = {
-		Damage = 6,
+		Damage = 2,
 		Cooldown = 0.62,
 		HitDelay = 0.12,
 
