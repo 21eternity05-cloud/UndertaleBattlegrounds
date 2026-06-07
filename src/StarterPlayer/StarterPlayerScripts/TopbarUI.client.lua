@@ -7,6 +7,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local characterRemote = remotes:WaitForChild("CharacterRemote")
 local progressionRemote = remotes:WaitForChild("ProgressionRemote")
+local notificationRemote = remotes:WaitForChild("NotificationRemote", 10)
 
 local Packages = ReplicatedStorage:WaitForChild("Packages")
 local Icon = require(Packages:WaitForChild("TopBarPlus"))
@@ -50,6 +51,80 @@ gui.Name = "TopBarPlusMenus"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = playerGui
+
+local activeNotification = nil
+local activeNotificationTween = nil
+local notificationToken = 0
+
+local function showBottomRightNotification(text, duration)
+	notificationToken += 1
+	local token = notificationToken
+
+	if activeNotificationTween then
+		activeNotificationTween:Cancel()
+		activeNotificationTween = nil
+	end
+
+	if not activeNotification or not activeNotification.Parent then
+		activeNotification = Instance.new("TextLabel")
+		activeNotification.Name = "BottomRightNotification"
+		activeNotification.AnchorPoint = Vector2.new(1, 1)
+		activeNotification.Position = UDim2.new(1, -24, 1, -120)
+		activeNotification.Size = UDim2.fromOffset(330, 42)
+		activeNotification.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+		activeNotification.BackgroundTransparency = 0.08
+		activeNotification.BorderSizePixel = 0
+		activeNotification.Font = Enum.Font.GothamSemibold
+		activeNotification.TextSize = 14
+		activeNotification.TextColor3 = Color3.fromRGB(245, 245, 245)
+		activeNotification.TextWrapped = true
+		activeNotification.Parent = gui
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 7)
+		corner.Parent = activeNotification
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(90, 90, 105)
+		stroke.Thickness = 1
+		stroke.Parent = activeNotification
+	end
+
+	activeNotification.Text = text or ""
+	activeNotification.TextTransparency = 0
+	activeNotification.BackgroundTransparency = 0.08
+	activeNotification.Visible = true
+
+	task.delay(duration or 2.5, function()
+		if token ~= notificationToken or not activeNotification then
+			return
+		end
+
+		activeNotificationTween = game:GetService("TweenService"):Create(
+			activeNotification,
+			TweenInfo.new(0.25),
+			{
+				TextTransparency = 1,
+				BackgroundTransparency = 1,
+			}
+		)
+
+		activeNotificationTween:Play()
+		activeNotificationTween.Completed:Once(function()
+			if token == notificationToken and activeNotification then
+				activeNotification.Visible = false
+			end
+		end)
+	end)
+end
+
+if notificationRemote then
+	notificationRemote.OnClientEvent:Connect(function(payload)
+		if typeof(payload) == "table" and payload.Action == "Show" then
+			showBottomRightNotification(payload.Text, payload.Duration)
+		end
+	end)
+end
 
 local function getCharacterOrder()
 	if typeof(CharacterData.Order) == "table" then

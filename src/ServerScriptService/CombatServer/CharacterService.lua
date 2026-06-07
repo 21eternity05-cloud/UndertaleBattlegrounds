@@ -42,6 +42,39 @@ function CharacterService:IsPlayerRequestInCombat(player)
 		or character:GetAttribute("CinematicLocked") == true
 end
 
+function CharacterService:GetNotificationRemote()
+	if self.NotificationRemote then
+		return self.NotificationRemote
+	end
+
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "Remotes"
+		remotes.Parent = ReplicatedStorage
+	end
+
+	local remote = remotes:FindFirstChild("NotificationRemote")
+	if not remote then
+		remote = Instance.new("RemoteEvent")
+		remote.Name = "NotificationRemote"
+		remote.Parent = remotes
+	end
+
+	self.NotificationRemote = remote
+	return remote
+end
+
+function CharacterService:NotifyPlayer(player, message)
+	local remote = self:GetNotificationRemote()
+
+	remote:FireClient(player, {
+		Action = "Show",
+		Text = message,
+		Duration = 2.5,
+	})
+end
+
 function CharacterService:IsValidCharacter(characterName)
 	if CharacterData[characterName] then
 		return true
@@ -204,6 +237,7 @@ function CharacterService:SetCharacter(player, characterName, options)
 
 	if self:IsPlayerRequestInCombat(player) then
 		warn("[CharacterService] Character switch rejected while in combat:", player.Name, characterName)
+		self:NotifyPlayer(player, "Combat tagged: cannot switch characters.")
 		return false
 	end
 
@@ -282,6 +316,8 @@ function CharacterService:SetupPlayer(player)
 end
 
 function CharacterService:Start()
+	self:GetNotificationRemote()
+
 	Players.PlayerAdded:Connect(function(player)
 		self:SetupPlayer(player)
 	end)

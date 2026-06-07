@@ -56,6 +56,19 @@ SkinModule.Skins = {
 		-- SFXSet = nil,
 		-- AuraName = nil,
 	},
+		StoryFell = {
+		DisplayName = "StoryFell Chara",
+		Free = true,
+		Cost = 167,
+		CharacterModelName = "shiftfell chara",
+		WeaponName = "RealKnife",
+		MotorTemplateName = "KnifeMotorTemplate",
+
+		-- Future cosmetic hooks:
+		-- VFXColor = Color3.fromRGB(...),
+		-- SFXSet = nil,
+		-- AuraName = nil,
+	},
 }
 
 return SkinModule

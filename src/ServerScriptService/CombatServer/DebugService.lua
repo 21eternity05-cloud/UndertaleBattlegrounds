@@ -8,6 +8,7 @@ function DebugService.new(config)
 
 	self.Config = config
 	self.Enabled = false
+	self.CooldownsEnabled = false
 	self.TouchDebounce = {}
 
 	return self
@@ -39,6 +40,19 @@ function DebugService:SetEnabled(enabled)
 	print("[DebugService] DebugDamageNumbers:", self.Config.DebugDamageNumbers)
 end
 
+function DebugService:SetCooldownDebugEnabled(enabled)
+	self.CooldownsEnabled = enabled == true
+
+	workspace:SetAttribute("DebugCooldownsEnabled", self.CooldownsEnabled)
+	workspace:SetAttribute("DebugCooldownOverride", self.CooldownsEnabled and 1 or nil)
+
+	print("[DebugService] Debug cooldowns enabled:", self.CooldownsEnabled)
+end
+
+function DebugService:ToggleCooldowns()
+	self:SetCooldownDebugEnabled(not self.CooldownsEnabled)
+end
+
 function DebugService:Toggle()
 	self:SetEnabled(not self.Enabled)
 end
@@ -53,6 +67,22 @@ function DebugService:IsDebugButton(instance)
 	end
 
 	if instance:GetAttribute("DebugButton") == true then
+		return true
+	end
+
+	return false
+end
+
+function DebugService:IsCooldownButton(instance)
+	if not instance then
+		return false
+	end
+
+	if instance.Name == "COOLDOWN_BUTTON" then
+		return true
+	end
+
+	if instance:GetAttribute("CooldownButton") == true then
 		return true
 	end
 
@@ -112,8 +142,31 @@ function DebugService:HookDebugButton(button)
 	print("[DebugService] Hooked debug button:", button:GetFullName())
 end
 
+function DebugService:HookCooldownButton(button)
+	if not button or not button:IsA("BasePart") then
+		return
+	end
+
+	button.Touched:Connect(function(hit)
+		local player = self:GetPlayerFromHit(hit)
+
+		if not player then
+			return
+		end
+
+		if not self:CanTouch(player) then
+			return
+		end
+
+		self:ToggleCooldowns()
+	end)
+
+	print("[DebugService] Hooked cooldown button:", button:GetFullName())
+end
+
 function DebugService:Start()
 	self:SetEnabled(false)
+	self:SetCooldownDebugEnabled(false)
 
 	local button = workspace:FindFirstChild("DEBUG_BUTTON")
 
@@ -123,9 +176,19 @@ function DebugService:Start()
 		warn("[DebugService] Missing workspace.DEBUG_BUTTON")
 	end
 
+	local cooldownButton = workspace:FindFirstChild("COOLDOWN_BUTTON")
+
+	if cooldownButton and cooldownButton:IsA("BasePart") then
+		self:HookCooldownButton(cooldownButton)
+	else
+		warn("[DebugService] Missing workspace.COOLDOWN_BUTTON")
+	end
+
 	workspace.DescendantAdded:Connect(function(descendant)
 		if self:IsDebugButton(descendant) and descendant:IsA("BasePart") then
 			self:HookDebugButton(descendant)
+		elseif self:IsCooldownButton(descendant) and descendant:IsA("BasePart") then
+			self:HookCooldownButton(descendant)
 		end
 	end)
 end

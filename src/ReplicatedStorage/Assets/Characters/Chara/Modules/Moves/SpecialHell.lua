@@ -23,7 +23,7 @@ local SpecialHell = {
 	GrabTickRate = 0.03,
 	WhiffEndlag = 0.22,
 
-	ForwardDriftSpeed = 8,
+	ForwardDriftSpeed = 0,
 	ForwardDriftMaxForce = 65000,
 
 	CinematicDistance = 4.926,

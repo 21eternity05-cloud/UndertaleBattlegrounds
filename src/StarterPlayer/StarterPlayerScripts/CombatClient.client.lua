@@ -162,6 +162,7 @@ local function buildMoveDisplayFromModule(characterName)
 			Key = data.Key,
 			Name = data.Name,
 			Cooldown = data.Cooldown,
+			LockTime = data.LockTime or 0,
 		}
 	end
 
@@ -179,6 +180,7 @@ local function buildMoveDisplayFromModule(characterName)
 			display[slot].Key = DEFAULT_MOVE_DISPLAY[slot] and DEFAULT_MOVE_DISPLAY[slot].Key or "?"
 			display[slot].Name = moveData.DisplayName or moveId
 			display[slot].Cooldown = moveData.Cooldown or 1
+			display[slot].LockTime = typeof(moveData.LockTime) == "number" and math.max(0, moveData.LockTime) or 0
 			display[slot].MoveId = moveId
 
 			display[slot].RequiresTarget = moveData.RequiresTarget == true
@@ -365,6 +367,11 @@ end
 
 local function getCooldownForSlot(moveSlot)
 	local data = currentMoveDisplay[moveSlot]
+
+	if workspace:GetAttribute("DebugCooldownsEnabled") == true then
+		return workspace:GetAttribute("DebugCooldownOverride") or 1
+	end
+
 	if data and typeof(data.Cooldown) == "number" then
 		return data.Cooldown
 	end
@@ -372,44 +379,61 @@ local function getCooldownForSlot(moveSlot)
 	return DEFAULT_MOVE_DISPLAY[moveSlot] and DEFAULT_MOVE_DISPLAY[moveSlot].Cooldown or 1
 end
 
+local function getLockTimeForSlot(moveSlot)
+	local data = currentMoveDisplay[moveSlot]
+
+	if data and typeof(data.LockTime) == "number" then
+		return math.max(0, data.LockTime)
+	end
+
+	return 0
+end
+
 local function startLocalCooldown(moveSlot)
 	local cooldown = getCooldownForSlot(moveSlot)
+	local lockTime = getLockTimeForSlot(moveSlot)
 
 	local overlay = cooldownOverlays[moveSlot]
 	local cooldownText = cooldownTexts[moveSlot]
 
 	if not overlay then return end
 
-	overlay.Visible = true
-	overlay.Size = UDim2.fromScale(1, 1)
-
-	if cooldownText then
-		cooldownText.Visible = true
-	end
-
-	local startTime = os.clock()
-
-	task.spawn(function()
-		while os.clock() - startTime < cooldown do
-			local elapsed = os.clock() - startTime
-			local remaining = math.max(cooldown - elapsed, 0)
-			local alpha = math.clamp(elapsed / cooldown, 0, 1)
-
-			overlay.Size = UDim2.fromScale(1, 1 - alpha)
-
-			if cooldownText then
-				cooldownText.Text = string.format("%.1f", remaining)
-			end
-
-			task.wait()
+	task.delay(lockTime, function()
+		if not localMoveCooldowns[moveSlot] then
+			return
 		end
 
-		overlay.Visible = false
+		overlay.Visible = true
 		overlay.Size = UDim2.fromScale(1, 1)
 
 		if cooldownText then
-			cooldownText.Visible = false
+			cooldownText.Visible = true
 		end
+
+		local startTime = os.clock()
+
+		task.spawn(function()
+			while os.clock() - startTime < cooldown do
+				local elapsed = os.clock() - startTime
+				local remaining = math.max(cooldown - elapsed, 0)
+				local alpha = math.clamp(elapsed / cooldown, 0, 1)
+
+				overlay.Size = UDim2.fromScale(1, 1 - alpha)
+
+				if cooldownText then
+					cooldownText.Text = string.format("%.1f", remaining)
+				end
+
+				task.wait()
+			end
+
+			overlay.Visible = false
+			overlay.Size = UDim2.fromScale(1, 1)
+
+			if cooldownText then
+				cooldownText.Visible = false
+			end
+		end)
 	end)
 end
 
@@ -486,7 +510,7 @@ local function requestMove(moveSlot)
 		return
 	end
 
-	local cooldown = getCooldownForSlot(moveSlot)
+	local cooldown = getLockTimeForSlot(moveSlot) + getCooldownForSlot(moveSlot)
 
 	localMoveCooldowns[moveSlot] = true
 	lockLocalJump(0.5)

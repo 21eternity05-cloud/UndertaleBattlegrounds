@@ -7,7 +7,7 @@ SkinModule.Skins = {
 		DisplayName = "Default",
 		Free = true,
 		Cost = 0,
-		CharacterModelName = "Default",
+		CharacterModelName = "Disbeilef Pap",
 
 		WeaponName = "BoneStaff",
 		MotorTemplateName = "BoneStaffMotorTemplate",

@@ -119,10 +119,32 @@ function MoveService:IsOnCooldown(player, moveId)
 	return os.clock() < readyTime
 end
 
-function MoveService:SetCooldown(player, moveId, cooldown)
+function MoveService:GetMoveLockTime(moveData)
+	if moveData and typeof(moveData.LockTime) == "number" then
+		return math.max(0, moveData.LockTime)
+	end
+
+	return 0
+end
+
+function MoveService:GetMoveCooldown(moveData)
+	local cooldown = moveData and moveData.Cooldown or 1
+
+	if workspace:GetAttribute("DebugCooldownsEnabled") == true then
+		cooldown = workspace:GetAttribute("DebugCooldownOverride") or 1
+	end
+
+	return math.max(0, cooldown or 1)
+end
+
+function MoveService:SetCooldown(player, moveId, moveData)
 	local userId = player.UserId
 	self.Cooldowns[userId] = self.Cooldowns[userId] or {}
-	self.Cooldowns[userId][moveId] = os.clock() + (cooldown or 1)
+
+	local lockTime = self:GetMoveLockTime(moveData)
+	local cooldown = self:GetMoveCooldown(moveData)
+
+	self.Cooldowns[userId][moveId] = os.clock() + lockTime + cooldown
 end
 
 function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
@@ -746,7 +768,7 @@ function MoveService:PerformMove(player, moveRequest)
 		self.UltService:SpendUlt(player)
 	end
 
-	self:SetCooldown(player, moveId, moveData.Cooldown or 1)
+	self:SetCooldown(player, moveId, moveData)
 
 	local moveToken = (character:GetAttribute("MoveToken") or 0) + 1
 	character:SetAttribute("MoveToken", moveToken)
@@ -812,6 +834,10 @@ function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damag
 
 	if not targetRoot then
 		targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+	end
+
+	if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+		self.CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter)
 	end
 
 	-- Debug damage numbers should be shown for every reported damage event,
