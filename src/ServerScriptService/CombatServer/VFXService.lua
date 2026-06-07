@@ -191,6 +191,63 @@ function VFXService:EmitAttachmentOnPart(attachmentName, parentPart, lifetime)
 	Debris:AddItem(attachment, lifetime or 2)
 end
 
+function VFXService:GetSoulBurstAttachmentTemplate(characterName)
+	local characterVFX = self:GetCharacterVFXFolder(characterName)
+	local template = characterVFX and characterVFX:FindFirstChild("SOULBURST")
+
+	if template and template:IsA("Attachment") then
+		return template, "Character"
+	end
+
+	local universalVFX = self:GetUniversalVFXFolder()
+	template = universalVFX and universalVFX:FindFirstChild("SOULBURST")
+
+	if template and template:IsA("Attachment") then
+		return template, "Universal"
+	end
+
+	return nil, nil
+end
+
+function VFXService:PlaySoulBurst(character)
+	if not character or not character.Parent then return end
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+
+	local characterName = self:GetCharacterName(character)
+	local template, source = self:GetSoulBurstAttachmentTemplate(characterName)
+
+	if template then
+		local attachment = template:Clone()
+		attachment.Name = "ActiveSOULBURST"
+		attachment.Position = Vector3.new(0, 0, 0)
+		attachment.Parent = root
+
+		for index = 1, 3 do
+			task.delay((index - 1) * 0.05, function()
+				if attachment and attachment.Parent then
+					self:EmitParticlesFromAttachment(attachment)
+				end
+			end)
+		end
+
+		Debris:AddItem(attachment, 2)
+	elseif self.Config.SoulBurstDebugEnabled == true then
+		warn("[VFXService] Missing SOULBURST attachment for:", characterName, "and Universal")
+	end
+
+	local played = self:PlayCharacterSFXAtPart(characterName, "SOULBURST", root, 3)
+
+	if not played and self.Config.SoulBurstDebugEnabled == true then
+		warn("[VFXService] Missing SOULBURST SFX for:", characterName, "and Universal")
+	end
+
+	if source and self.Config.SoulBurstDebugEnabled == true then
+		print("[VFXService] Played SOULBURST VFX source:", source)
+	end
+end
+
 function VFXService:EnableAttachmentOnPart(attachmentName, parentPart, lifetime, activeName)
 	if not parentPart or not parentPart.Parent then return nil end
 

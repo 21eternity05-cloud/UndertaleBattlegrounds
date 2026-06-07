@@ -436,6 +436,10 @@ function ProjectileService:ApplyProjectileHit(info)
 			self.CombatStatusService:TagCombatPair(ownerCharacter, targetCharacter)
 		end
 		self:ReportDamage(ownerCharacter, targetCharacter, targetRoot, finalDamage, attackData)
+
+		if self.SoulBurstService then
+			self.SoulBurstService:AwardForHitTaken(targetCharacter, finalDamage, attackData.Stun, attackData)
+		end
 	end
 
 	if attackData.Stun and attackData.Stun > 0 then

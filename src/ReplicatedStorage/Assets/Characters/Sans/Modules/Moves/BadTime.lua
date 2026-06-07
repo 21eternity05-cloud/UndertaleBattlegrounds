@@ -21,6 +21,7 @@ local BadTime = {
 
 	Blockable = true,
 	CanBeBlocked = true,
+	IgnoreBlockDirection = true,
 	Unblockable = false,
 	Guardbreak = false,
 	CanBeCountered = true,
@@ -353,6 +354,7 @@ local function makeConfirmAttackData(data)
 
 	attackData.Blockable = true
 	attackData.CanBeBlocked = true
+	attackData.IgnoreBlockDirection = true
 	attackData.Unblockable = false
 	attackData.Guardbreak = false
 	attackData.CanBeCountered = true

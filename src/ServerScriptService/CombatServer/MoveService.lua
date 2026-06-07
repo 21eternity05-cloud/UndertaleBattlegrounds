@@ -459,6 +459,10 @@ function MoveService:ApplyStandardHit(
 		if self.UltService and data.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end
+
+		if self.SoulBurstService then
+			self.SoulBurstService:AwardForHitTaken(targetCharacter, finalDamage, data.Stun, data)
+		end
 	end
 
 	if data.Stun and data.Stun > 0 then
@@ -543,6 +547,7 @@ function MoveService:BuildContext(
 		CombatStatusService = self.CombatStatusService,
 		ProjectileService = self.ProjectileService,
 		UltService = self.UltService,
+		SoulBurstService = self.SoulBurstService,
 		CinematicService = self.CinematicService,
 		GrabService = self.GrabService,
 		DamageNumberService = self.DamageNumberService,
@@ -594,6 +599,16 @@ function MoveService:BuildContext(
 		end
 
 		return true
+	end
+
+	function context:ReportDamageEvent(targetCharacter2, damageAmount, targetRoot2, attackData)
+		return moveService:ReportDamageEvent(
+			character,
+			targetCharacter2,
+			damageAmount,
+			targetRoot2,
+			attackData or moveData
+		)
 	end
 
 	function context:GetValidTarget()
@@ -823,7 +838,7 @@ function MoveService:PerformMove(player, moveRequest)
 	end
 end
 
-function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damageAmount, targetRoot)
+function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damageAmount, targetRoot, attackData)
 	if not attackerCharacter or not targetCharacter then
 		return
 	end
@@ -844,6 +859,10 @@ function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damag
 	-- even if the move does not award ult.
 	if self.DamageNumberService and targetRoot then
 		self.DamageNumberService:ShowDamage(targetRoot, damageAmount)
+	end
+
+	if self.SoulBurstService then
+		self.SoulBurstService:AwardForHitTaken(targetCharacter, damageAmount, attackData and attackData.Stun, attackData)
 	end
 
 	if self.UltService and self.UltService.AwardDamageEvent then

@@ -10,6 +10,7 @@ local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local combatRemote = remotes:WaitForChild("CombatRemote")
 local moveRemote = remotes:WaitForChild("MoveRemote")
 local ultRemote = remotes:WaitForChild("UltRemote")
+local soulBurstRemote = remotes:WaitForChild("SoulBurstRemote")
 local cinematicRemote = remotes:WaitForChild("CinematicRemote")
 
 local assets = ReplicatedStorage:WaitForChild("Assets")
@@ -38,6 +39,12 @@ local currentUltFull = false
 
 local ultimateFillTween = nil
 local ULT_BAR_TWEEN_TIME = 0.18
+
+local currentSoulBurst = 0
+local currentSoulBurstMax = 100
+local currentSoulBurstAlpha = 0
+local soulBurstFillTween = nil
+local SOUL_BURST_BAR_TWEEN_TIME = 0.18
 
 local MOVE_KEYS = {
 	[Enum.KeyCode.One] = "Move1",
@@ -90,6 +97,9 @@ local cooldownTexts = {}
 local ultimateFill = nil
 local ultimateText = nil
 local ultimateStroke = nil
+local soulBurstFill = nil
+local soulBurstText = nil
+local soulBurstStroke = nil
 
 local function getCharacter()
 	local character = player.Character
@@ -250,6 +260,52 @@ function updateUltimateBar()
 	end
 end
 
+local function updateSoulBurstBar()
+	local alpha = math.clamp(currentSoulBurstAlpha or 0, 0, 1)
+
+	if currentSoulBurstMax and currentSoulBurstMax > 0 then
+		alpha = math.clamp(currentSoulBurst / currentSoulBurstMax, 0, 1)
+	end
+
+	currentSoulBurstAlpha = alpha
+
+	if soulBurstFill then
+		if soulBurstFillTween then
+			soulBurstFillTween:Cancel()
+			soulBurstFillTween = nil
+		end
+
+		soulBurstFillTween = TweenService:Create(
+			soulBurstFill,
+			TweenInfo.new(
+				SOUL_BURST_BAR_TWEEN_TIME,
+				Enum.EasingStyle.Quad,
+				Enum.EasingDirection.Out
+			),
+			{
+				Size = UDim2.fromScale(1, alpha),
+				Position = UDim2.fromScale(0, 1 - alpha),
+			}
+		)
+
+		soulBurstFillTween:Play()
+	end
+
+	if soulBurstStroke then
+		if alpha >= 1 then
+			soulBurstStroke.Color = Color3.fromRGB(255, 255, 255)
+			soulBurstStroke.Thickness = 2
+		else
+			soulBurstStroke.Color = Color3.fromRGB(90, 90, 105)
+			soulBurstStroke.Thickness = 1
+		end
+	end
+
+	if soulBurstText then
+		soulBurstText.Text = alpha >= 1 and "BURST" or "SOUL"
+	end
+end
+
 local function refreshMoveDisplay()
 	local characterName = getCurrentCharacterName()
 	currentMoveDisplay = buildMoveDisplayFromModule(characterName)
@@ -262,6 +318,7 @@ local function refreshMoveDisplay()
 	end
 
 	updateUltimateBar()
+	updateSoulBurstBar()
 end
 
 local function canRequestAttack()
@@ -593,6 +650,49 @@ local function createMoveGui()
 	buttonsFrame.BackgroundTransparency = 1
 	buttonsFrame.Parent = holder
 
+	local soulBack = Instance.new("Frame")
+	soulBack.Name = "SoulBurstBack"
+	soulBack.Position = UDim2.fromOffset(370, 34)
+	soulBack.Size = UDim2.fromOffset(34, 84)
+	soulBack.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+	soulBack.BorderSizePixel = 0
+	soulBack.ClipsDescendants = true
+	soulBack.Parent = holder
+
+	local soulCorner = Instance.new("UICorner")
+	soulCorner.CornerRadius = UDim.new(0, 8)
+	soulCorner.Parent = soulBack
+
+	soulBurstStroke = Instance.new("UIStroke")
+	soulBurstStroke.Thickness = 1
+	soulBurstStroke.Color = Color3.fromRGB(90, 90, 105)
+	soulBurstStroke.Parent = soulBack
+
+	soulBurstFill = Instance.new("Frame")
+	soulBurstFill.Name = "SoulBurstFill"
+	soulBurstFill.AnchorPoint = Vector2.new(0, 0)
+	soulBurstFill.Position = UDim2.fromScale(0, 1)
+	soulBurstFill.Size = UDim2.fromScale(1, 0)
+	soulBurstFill.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+	soulBurstFill.BorderSizePixel = 0
+	soulBurstFill.Parent = soulBack
+
+	local soulFillCorner = Instance.new("UICorner")
+	soulFillCorner.CornerRadius = UDim.new(0, 8)
+	soulFillCorner.Parent = soulBurstFill
+
+	soulBurstText = Instance.new("TextLabel")
+	soulBurstText.Name = "SoulBurstText"
+	soulBurstText.BackgroundTransparency = 1
+	soulBurstText.Size = UDim2.fromScale(1, 1)
+	soulBurstText.Font = Enum.Font.GothamBlack
+	soulBurstText.TextSize = 9
+	soulBurstText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	soulBurstText.TextStrokeTransparency = 0.2
+	soulBurstText.TextWrapped = true
+	soulBurstText.Text = "SOUL"
+	soulBurstText.Parent = soulBack
+
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -687,6 +787,7 @@ local function createMoveGui()
 
 	refreshMoveDisplay()
 	updateUltimateBar()
+	updateSoulBurstBar()
 end
 
 local function requestAttack()
@@ -764,6 +865,30 @@ ultRemote.OnClientEvent:Connect(function(payload)
 		currentUltFull = payload.Full == true or currentUltAlpha >= 1
 
 		updateUltimateBar()
+	end
+end)
+
+soulBurstRemote.OnClientEvent:Connect(function(payload)
+	if typeof(payload) ~= "table" then return end
+
+	if payload.Action == "Update" or payload.Action == "Activated" or payload.Action == "Ready" then
+		local value = payload.Value or payload.Current
+
+		if typeof(value) == "number" then
+			currentSoulBurst = value
+		end
+
+		if typeof(payload.Max) == "number" and payload.Max > 0 then
+			currentSoulBurstMax = payload.Max
+		end
+
+		if typeof(payload.Alpha) == "number" then
+			currentSoulBurstAlpha = math.clamp(payload.Alpha, 0, 1)
+		else
+			currentSoulBurstAlpha = math.clamp(currentSoulBurst / currentSoulBurstMax, 0, 1)
+		end
+
+		updateSoulBurstBar()
 	end
 end)
 --CAMERA STUFF

@@ -10,6 +10,7 @@ function DebugService.new(config)
 	self.Enabled = false
 	self.CooldownsEnabled = false
 	self.TouchDebounce = {}
+	self.SoulBurstService = nil
 
 	return self
 end
@@ -83,6 +84,22 @@ function DebugService:IsCooldownButton(instance)
 	end
 
 	if instance:GetAttribute("CooldownButton") == true then
+		return true
+	end
+
+	return false
+end
+
+function DebugService:IsSoulBurstButton(instance)
+	if not instance then
+		return false
+	end
+
+	if instance.Name == "SOULBURST_BUTTON" then
+		return true
+	end
+
+	if instance:GetAttribute("SoulBurstButton") == true then
 		return true
 	end
 
@@ -164,9 +181,37 @@ function DebugService:HookCooldownButton(button)
 	print("[DebugService] Hooked cooldown button:", button:GetFullName())
 end
 
+function DebugService:HookSoulBurstButton(button)
+	if not button or not button:IsA("BasePart") then
+		return
+	end
+
+	button.Touched:Connect(function(hit)
+		local player = self:GetPlayerFromHit(hit)
+
+		if not player then
+			return
+		end
+
+		if not self:CanTouch(player) then
+			return
+		end
+
+		if self.SoulBurstService then
+			self.SoulBurstService:SetSoulBurst(player, self.SoulBurstService:GetMax(), "DebugService")
+		else
+			workspace:SetAttribute("DebugSoulBurstFill", true)
+			warn("[DebugService] SoulBurstService is not wired; set DebugSoulBurstFill attribute")
+		end
+	end)
+
+	print("[DebugService] Hooked soul burst button:", button:GetFullName())
+end
+
 function DebugService:Start()
 	self:SetEnabled(false)
 	self:SetCooldownDebugEnabled(false)
+	workspace:SetAttribute("DebugSoulBurstFill", false)
 
 	local button = workspace:FindFirstChild("DEBUG_BUTTON")
 
@@ -184,11 +229,19 @@ function DebugService:Start()
 		warn("[DebugService] Missing workspace.COOLDOWN_BUTTON")
 	end
 
+	local soulBurstButton = workspace:FindFirstChild("SOULBURST_BUTTON")
+
+	if soulBurstButton and soulBurstButton:IsA("BasePart") then
+		self:HookSoulBurstButton(soulBurstButton)
+	end
+
 	workspace.DescendantAdded:Connect(function(descendant)
 		if self:IsDebugButton(descendant) and descendant:IsA("BasePart") then
 			self:HookDebugButton(descendant)
 		elseif self:IsCooldownButton(descendant) and descendant:IsA("BasePart") then
 			self:HookCooldownButton(descendant)
+		elseif self:IsSoulBurstButton(descendant) and descendant:IsA("BasePart") then
+			self:HookSoulBurstButton(descendant)
 		end
 	end)
 end

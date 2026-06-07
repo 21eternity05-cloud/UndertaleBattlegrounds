@@ -25,6 +25,10 @@
           "$className": "RemoteEvent"
         },
 
+        "SoulBurstRemote": {
+          "$className": "RemoteEvent"
+        },
+
         "CinematicRemote": {
           "$className": "RemoteEvent"
         },

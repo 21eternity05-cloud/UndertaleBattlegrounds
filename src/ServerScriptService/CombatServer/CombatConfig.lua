@@ -49,10 +49,27 @@ CombatConfig.UltKillGain = 15
 -- Turn false later for real PvP balance.
 CombatConfig.AllowDummyUltGain = true
 
+-- Universal SOUL BURST evasive meter
+CombatConfig.SoulBurstMax = 300
+CombatConfig.SoulBurstHitGain = 18
+CombatConfig.SoulBurstDamageGainMultiplier = 0.8
+CombatConfig.SoulBurstStunGainMultiplier = 12
+CombatConfig.SoulBurstComboExtenderBonus = 10
+
+CombatConfig.SoulBurstCost = 300
+CombatConfig.SoulBurstIFrameDuration = 2
+CombatConfig.SoulBurstRadius = 15
+CombatConfig.SoulBurstDamage = 0
+CombatConfig.SoulBurstKnockbackSpeed = 55
+CombatConfig.SoulBurstUpwardKnockback = 18
+CombatConfig.SoulBurstKnockbackDuration = 0.22
+CombatConfig.SoulBurstCooldown = 8
+
+CombatConfig.SoulBurstDebugEnabled = true
+
 CombatConfig.DefaultCharacterName = "Chara"
 
 CombatConfig.StartingDust = 0
-CombatConfig.TorielDustCost = 2500
 
 -- Test dummy values
 CombatConfig.TestDummyAttackRange = 8

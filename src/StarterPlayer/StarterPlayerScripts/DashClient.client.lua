@@ -2,8 +2,11 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local soulBurstRemote = remotes:WaitForChild("SoulBurstRemote")
 
 local DASH_KEY = Enum.KeyCode.Q
 
@@ -280,10 +283,33 @@ local function dash()
 	end)
 end
 
+local function requestSoulBurstIfStunned()
+	local character = player.Character
+	if not character or not character.Parent then
+		return false
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return false
+	end
+
+	if character:GetAttribute("Stunned") ~= true then
+		return false
+	end
+
+	soulBurstRemote:FireServer("Activate")
+	return true
+end
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
 	if input.KeyCode == DASH_KEY then
+		if requestSoulBurstIfStunned() then
+			return
+		end
+
 		dash()
 	end
 end)

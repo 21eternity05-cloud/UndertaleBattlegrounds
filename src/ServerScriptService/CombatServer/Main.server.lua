@@ -90,16 +90,31 @@ local GrabService = require(combatFolder:WaitForChild("GrabService")).new(
 	ProgressionService
 )
 
+local SoulBurstService = require(combatFolder:WaitForChild("SoulBurstService")).new(
+	Config,
+	StateService,
+	CombatStatusService,
+	MovementService,
+	HitboxService,
+	VFXService,
+	CounterService,
+	UltService,
+	GrabService,
+	CinematicService
+)
+
 -- Cross-service wiring
 StateService.CounterService = CounterService
 StateService.CombatStatusService = CombatStatusService
 StateService.ProjectileService = ProjectileService
 StateService.UltService = UltService
 StateService.CinematicService = CinematicService
+StateService.SoulBurstService = SoulBurstService
 CharacterService.CombatStatusService = CombatStatusService
 
 M1Service.UltService = UltService
 M1Service.DamageNumberService = DamageNumberService
+M1Service.SoulBurstService = SoulBurstService
 
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
@@ -107,13 +122,16 @@ MoveService.CinematicService = CinematicService
 MoveService.DamageNumberService = DamageNumberService
 MoveService.ProgressionService = ProgressionService
 MoveService.GrabService = GrabService
+MoveService.SoulBurstService = SoulBurstService
 
 ProjectileService.UltService = UltService
 ProjectileService.DamageNumberService = DamageNumberService
 ProjectileService.ProgressionService = ProgressionService
+ProjectileService.SoulBurstService = SoulBurstService
 
 CounterService.UltService = UltService
 UltService.ProgressionService = ProgressionService
+DebugService.SoulBurstService = SoulBurstService
 
 -- Remotes
 combatRemote.OnServerEvent:Connect(function(player, action, payload)
@@ -128,6 +146,12 @@ end)
 
 moveRemote.OnServerEvent:Connect(function(player, moveRequest)
 	MoveService:PerformMove(player, moveRequest)
+end)
+
+SoulBurstService.SoulBurstRemote.OnServerEvent:Connect(function(player, action)
+	if action == "Activate" then
+		SoulBurstService:ActivateSoulBurst(player)
+	end
 end)
 
 local function parseCharacterRequest(action, payload)
@@ -181,6 +205,7 @@ CinematicService:Start()
 LoreCinematicService:Start()
 ShopLocationService:Start()
 UltService:Start()
+SoulBurstService:Start()
 DebugService:Start()
 
 print("[CombatServer] Ready")

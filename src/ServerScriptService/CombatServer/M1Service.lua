@@ -291,6 +291,10 @@ function M1Service:ApplyDamageAndStun(
 		if self.UltService and attackData.AwardsUlt ~= false then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end
+
+		if self.SoulBurstService then
+			self.SoulBurstService:AwardForHitTaken(targetCharacter, finalDamage, stunDuration, attackData)
+		end
 	end
 
 	local shouldStun = stunDuration and stunDuration > 0
