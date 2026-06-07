@@ -72,6 +72,10 @@ function BlockService:CanStartBlocking(character)
 end
 
 function BlockService:StartBlockingNow(character, humanoid)
+	if self.SpawnService and self.SpawnService.ClearSpawnProtection then
+		self.SpawnService:ClearSpawnProtection(character, "BlockStart")
+	end
+
 	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("Blocking", true)
 

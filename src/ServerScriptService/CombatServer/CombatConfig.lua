@@ -3,7 +3,7 @@ local CombatConfig = {}
 CombatConfig.DataStoreName = "UTBG_PlayerData_v1"
 
 -- PvP kill reward later. Keep 0 for now while testing.
-CombatConfig.KillDustReward = 0
+CombatConfig.KillDustReward = 10
 
 -- Test dummy reward.
 CombatConfig.RespawnDummyKillDustReward = 1
@@ -68,6 +68,10 @@ CombatConfig.SoulBurstCooldown = 8
 CombatConfig.SoulBurstDebugEnabled = true
 
 CombatConfig.DefaultCharacterName = "Chara"
+
+CombatConfig.SpawnIFrameDuration = 10
+CombatConfig.SpawnYOffset = 3
+CombatConfig.SpawnEnemyAvoidRadius = 25
 
 CombatConfig.StartingDust = 0
 

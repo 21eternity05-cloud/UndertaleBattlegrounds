@@ -984,6 +984,10 @@ function M1Service:PerformM1(player, payload)
 		return
 	end
 
+	if self.SpawnService and self.SpawnService.ClearSpawnProtection then
+		self.SpawnService:ClearSpawnProtection(character, "M1")
+	end
+
 	self.StateService:RefreshComboTimeout(character)
 
 	local wantUptilt = payload and payload.wantUptilt

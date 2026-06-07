@@ -108,6 +108,14 @@ function CharacterMorphService:IsMorphItem(instance)
 		)
 end
 
+function CharacterMorphService:IsHeadMeshItem(instance)
+	return instance
+		and (
+			instance:IsA("SpecialMesh")
+			or instance:IsA("DataModelMesh")
+		)
+end
+
 function CharacterMorphService:IsBackupSafeItem(instance)
 	return not self:IsMorphItem(instance)
 		and instance:GetAttribute("CharacterWeapon") ~= true
@@ -141,6 +149,10 @@ function CharacterMorphService:SaveOriginalAppearance(player, character)
 	headDecals.Name = "HeadDecals"
 	headDecals.Parent = backup
 
+	local headMeshes = Instance.new("Folder")
+	headMeshes.Name = "HeadMeshes"
+	headMeshes.Parent = backup
+
 	local bodyPartColors = Instance.new("Folder")
 	bodyPartColors.Name = "BodyPartColors"
 	bodyPartColors.Parent = backup
@@ -156,6 +168,8 @@ function CharacterMorphService:SaveOriginalAppearance(player, character)
 		for _, child in ipairs(head:GetChildren()) do
 			if self:IsBackupSafeItem(child) and (child:IsA("Decal") or child:IsA("Texture")) then
 				child:Clone().Parent = headDecals
+			elseif self:IsBackupSafeItem(child) and self:IsHeadMeshItem(child) then
+				child:Clone().Parent = headMeshes
 			end
 		end
 	end
@@ -199,12 +213,28 @@ function CharacterMorphService:ClearFace(character, morphOnly)
 	end
 end
 
+function CharacterMorphService:ClearHeadMeshes(character, morphOnly)
+	local head = character and character:FindFirstChild("Head")
+	if not head then
+		return
+	end
+
+	for _, child in ipairs(head:GetChildren()) do
+		if self:IsHeadMeshItem(child) then
+			if not morphOnly or self:IsMorphItem(child) then
+				child:Destroy()
+			end
+		end
+	end
+end
+
 function CharacterMorphService:ClearMorphItemsOnly(character)
 	if not character then
 		return
 	end
 
 	self:ClearFace(character, true)
+	self:ClearHeadMeshes(character, true)
 
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("BasePart") and child:GetAttribute("CharacterMorphItem") == true then
@@ -270,6 +300,7 @@ function CharacterMorphService:ClearAllAppearance(character)
 	end
 
 	self:ClearFace(character, false)
+	self:ClearHeadMeshes(character, false)
 end
 
 function CharacterMorphService:ClearBaseAppearance(character)
@@ -298,6 +329,23 @@ function CharacterMorphService:CopyFace(character, sourceModel, characterName, s
 
 	for _, child in ipairs(sourceHead:GetChildren()) do
 		if child:IsA("Decal") or child:IsA("Texture") then
+			local clone = child:Clone()
+			self:TagMorphItem(clone, characterName, skinName)
+			clone.Parent = targetHead
+		end
+	end
+end
+
+function CharacterMorphService:CopyHeadMeshes(character, sourceModel, characterName, skinName)
+	local sourceHead = sourceModel:FindFirstChild("Head")
+	local targetHead = character:FindFirstChild("Head")
+
+	if not sourceHead or not targetHead then
+		return
+	end
+
+	for _, child in ipairs(sourceHead:GetChildren()) do
+		if self:IsHeadMeshItem(child) then
 			local clone = child:Clone()
 			self:TagMorphItem(clone, characterName, skinName)
 			clone.Parent = targetHead
@@ -382,6 +430,16 @@ function CharacterMorphService:RestoreOriginalAppearance(player, character)
 
 	local head = character:FindFirstChild("Head")
 	local headDecals = backup:FindFirstChild("HeadDecals")
+	local headMeshes = backup:FindFirstChild("HeadMeshes")
+
+	if head and headMeshes then
+		for _, child in ipairs(headMeshes:GetChildren()) do
+			if self:IsHeadMeshItem(child) then
+				child:Clone().Parent = head
+				restoredVisibleItem = true
+			end
+		end
+	end
 
 	if head and headDecals then
 		for _, child in ipairs(headDecals:GetChildren()) do
@@ -454,6 +512,7 @@ function CharacterMorphService:ApplyMorph(player, character, characterName, skin
 	end
 
 	self:CopyFace(character, sourceModel, characterName, resolvedSkinName)
+	self:CopyHeadMeshes(character, sourceModel, characterName, resolvedSkinName)
 end
 
 function CharacterMorphService:ApplyCharacterMorph(player, character, characterName, skinName, morphEnabled)

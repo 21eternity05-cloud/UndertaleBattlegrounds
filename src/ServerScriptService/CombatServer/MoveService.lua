@@ -779,6 +779,10 @@ function MoveService:PerformMove(player, moveRequest)
 		return
 	end
 
+	if self.SpawnService and self.SpawnService.ClearSpawnProtection then
+		self.SpawnService:ClearSpawnProtection(character, moveSlot == "Ultimate" and "Ultimate" or "Move")
+	end
+
 	if moveSlot == "Ultimate" then
 		self.UltService:SpendUlt(player)
 	end

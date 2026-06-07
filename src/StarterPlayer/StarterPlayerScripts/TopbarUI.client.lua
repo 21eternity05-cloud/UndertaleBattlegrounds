@@ -914,8 +914,6 @@ local function showCustomize()
 			addItemButton("Future Aura Slot", function() end, false)
 		elseif category == "Emotes" then
 			addItemButton("Future Emote Slot", function() end, false)
-		elseif category == "Morphs" then
-			addItemButton("Morphs Reserved - Not Active Yet", function() end, false)
 		end
 	end
 
@@ -925,7 +923,6 @@ local function showCustomize()
 		"Titles",
 		"Auras",
 		"Emotes",
-		"Morphs",
 	}
 
 	for index, category in ipairs(categories) do

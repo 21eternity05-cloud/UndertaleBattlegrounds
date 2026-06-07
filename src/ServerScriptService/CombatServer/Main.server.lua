@@ -38,6 +38,11 @@ local CinematicService = require(combatFolder:WaitForChild("CinematicService")).
 local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
 local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
 local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
+local SpawnService = require(combatFolder:WaitForChild("SpawnService")).new(
+	Config,
+	StateService,
+	CombatStatusService
+)
 
 local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
@@ -110,11 +115,15 @@ StateService.ProjectileService = ProjectileService
 StateService.UltService = UltService
 StateService.CinematicService = CinematicService
 StateService.SoulBurstService = SoulBurstService
+StateService.SpawnService = SpawnService
 CharacterService.CombatStatusService = CombatStatusService
+CharacterService.SpawnService = SpawnService
+BlockService.SpawnService = SpawnService
 
 M1Service.UltService = UltService
 M1Service.DamageNumberService = DamageNumberService
 M1Service.SoulBurstService = SoulBurstService
+M1Service.SpawnService = SpawnService
 
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
@@ -123,6 +132,7 @@ MoveService.DamageNumberService = DamageNumberService
 MoveService.ProgressionService = ProgressionService
 MoveService.GrabService = GrabService
 MoveService.SoulBurstService = SoulBurstService
+MoveService.SpawnService = SpawnService
 
 ProjectileService.UltService = UltService
 ProjectileService.DamageNumberService = DamageNumberService
@@ -206,6 +216,7 @@ LoreCinematicService:Start()
 ShopLocationService:Start()
 UltService:Start()
 SoulBurstService:Start()
+SpawnService:Start()
 DebugService:Start()
 
 print("[CombatServer] Ready")
