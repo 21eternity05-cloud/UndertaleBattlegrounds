@@ -48,6 +48,47 @@ function CounterService:IsCounterActive(character)
 	return false
 end
 
+function CounterService:CanTriggerCounter(info, attackerCharacter, targetCharacter)
+	local attackData = info.AttackData or {}
+
+	if attackData.IgnoreCounter == true then return false end
+	if attackData.CannotBeCountered == true then return false end
+	if attackData.CanBeCountered == false then return false end
+
+	local counterMaxRange = targetCharacter:GetAttribute("CounterMaxRange")
+	if typeof(counterMaxRange) ~= "number" or counterMaxRange <= 0 then
+		return true
+	end
+
+	if targetCharacter:GetAttribute("CounterAllowLongRange") == true
+		or attackData.AllowLongRangeCounter == true
+	then
+		return true
+	end
+
+	local attackerRoot = attackerCharacter:FindFirstChild("HumanoidRootPart")
+	local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+
+	if not attackerRoot or not targetRoot then
+		return false
+	end
+
+	local distance = (attackerRoot.Position - targetRoot.Position).Magnitude
+	if distance > counterMaxRange then
+		print(
+			"[CounterService] Counter ignored; attacker out of range:",
+			attackerCharacter.Name,
+			"distance:",
+			math.floor(distance * 10) / 10,
+			"max:",
+			counterMaxRange
+		)
+		return false
+	end
+
+	return true
+end
+
 function CounterService:TryCounterHit(info)
 	if typeof(info) ~= "table" then return false end
 
@@ -73,6 +114,10 @@ function CounterService:TryCounterHit(info)
 	local alreadyTriggered = targetCharacter:GetAttribute("CounterTriggered") == true
 
 	if not isCountering and not alreadyTriggered then
+		return false
+	end
+
+	if not self:CanTriggerCounter(info, attackerCharacter, targetCharacter) then
 		return false
 	end
 

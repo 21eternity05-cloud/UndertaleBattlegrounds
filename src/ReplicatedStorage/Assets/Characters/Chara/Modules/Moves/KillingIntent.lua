@@ -49,6 +49,7 @@ local KillingIntent = {
 	HasArmor = false,
 
 	CounterWindow = 0.7,
+	CounterRange = 22,
 }
 
 local COUNTER_ANIMATION = "KillingIntentCounter"
@@ -453,6 +454,8 @@ function KillingIntent.Execute(context)
 	character:SetAttribute("CounterToken", counterToken)
 	character:SetAttribute("CounterMoveId", context.MoveId)
 	character:SetAttribute("CounterAttackName", nil)
+	character:SetAttribute("CounterMaxRange", moveData.CounterRange or 22)
+	character:SetAttribute("CounterAllowLongRange", false)
 
 	addActiveFrameHighlight()
 
@@ -469,6 +472,8 @@ function KillingIntent.Execute(context)
 			character:SetAttribute("CounterTriggered", false)
 			character:SetAttribute("CounterMoveId", nil)
 			character:SetAttribute("CounterAttackName", nil)
+			character:SetAttribute("CounterMaxRange", nil)
+			character:SetAttribute("CounterAllowLongRange", nil)
 			clearCounterAttacker(character)
 		end
 	end

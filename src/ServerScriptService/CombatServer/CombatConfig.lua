@@ -32,13 +32,20 @@ CombatConfig.DebugKnockback = false
 CombatConfig.DebugDamageNumbers = false
 CombatConfig.DebugEnabled = false
 
-CombatConfig.PostM5M1Immunity = 1
+CombatConfig.PostM5M1Immunity = 1.3
 
 CombatConfig.DisablePassiveHealing = true
 CombatConfig.AllowOutOfCombatRegen = false -- placeholder for future out of combat regen system, currently has no effect since passive healing is disabled
 CombatConfig.KillCreditWindow = 15
 CombatConfig.ResetKillCreditWindow = 15
 CombatConfig.HealOnKillAmount = 25
+
+CombatConfig.WallComboPreventionEnabled = true
+CombatConfig.WallImpactCheckDuration = 0.35
+CombatConfig.WallImpactRayDistance = 5
+CombatConfig.WallImpactProtectionDuration = 2 --to REALLy discourage wall combos, this has to be pretty long. 
+CombatConfig.WallImpactPushAwaySpeed = 18
+CombatConfig.WallImpactMinSpeed = 18
 
 -- Ultimate meter
 CombatConfig.UltMax = 100

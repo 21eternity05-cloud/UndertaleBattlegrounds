@@ -337,6 +337,20 @@ function MoveService:CanAttackContinue(character, moveData)
 	return true
 end
 
+function MoveService:IsWallComboProtected(targetCharacter, attackData)
+	if self.Config.WallComboPreventionEnabled ~= true then
+		return false
+	end
+	if attackData and attackData.IgnoreWallComboProtection == true then
+		return false
+	end
+	if attackData and attackData.MoveSlot == "Ultimate" then
+		return false
+	end
+
+	return os.clock() < (targetCharacter:GetAttribute("WallComboProtectedUntil") or 0)
+end
+
 function MoveService:ApplyStandardHit(
 	attackerCharacter,
 	attackerRoot,
@@ -374,6 +388,11 @@ function MoveService:ApplyStandardHit(
 	if status and status:HasIFrames(targetCharacter, data) then
 		print("[MoveService] Hit ignored by iframe:", targetCharacter.Name, attackName or "Attack")
 		return "IFrame"
+	end
+
+	if self:IsWallComboProtected(targetCharacter, data) then
+		print("[MoveService] Hit ignored by wall combo protection:", targetCharacter.Name, attackName or "Attack")
+		return "WallComboProtected"
 	end
 
 	if status and status:CanAttackBeCountered(data) then
@@ -665,13 +684,17 @@ function MoveService:BuildContext(
 			return "Canceled"
 		end
 
+		local data = moveService:BuildAttackData(moveData, {
+			MoveSlot = moveSlot,
+		})
+
 		return moveService:ApplyStandardHit(
 			character,
 			root,
 			targetCharacter2,
 			targetHumanoid2,
 			targetRoot2,
-			moveData,
+			data,
 			moveId
 		)
 	end
@@ -687,13 +710,17 @@ function MoveService:BuildContext(
 			return "Canceled"
 		end
 
+		local data = moveService:BuildAttackData(customAttackData or moveData, {
+			MoveSlot = moveSlot,
+		})
+
 		return moveService:ApplyStandardHit(
 			character,
 			root,
 			targetCharacter2,
 			targetHumanoid2,
 			targetRoot2,
-			customAttackData or moveData,
+			data,
 			customAttackName or moveId
 		)
 	end

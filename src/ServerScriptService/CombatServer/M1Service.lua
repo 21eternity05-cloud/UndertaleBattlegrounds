@@ -128,6 +128,14 @@ function M1Service:CanAttackBeCountered(attackData)
 	return attackData.CanBeCountered ~= false
 end
 
+function M1Service:IsWallComboProtected(targetCharacter)
+	if self.Config.WallComboPreventionEnabled ~= true then
+		return false
+	end
+
+	return os.clock() < (targetCharacter:GetAttribute("WallComboProtectedUntil") or 0)
+end
+
 function M1Service:TryTriggerCounter(targetCharacter, attackerCharacter, attackName, attackData, onCountered)
 	if not self:CanAttackBeCountered(attackData or {}) then
 		return false
@@ -225,6 +233,11 @@ function M1Service:CheckStandardHitStart(
 	if self.CombatStatusService and self.CombatStatusService:HasIFrames(targetCharacter, attackData) then
 		print("[M1Service] Hit ignored by iframe:", targetCharacter.Name, attackName or "M1")
 		return "IFrame"
+	end
+
+	if self:IsWallComboProtected(targetCharacter) then
+		print("[M1Service] Target is wall combo protected:", targetCharacter.Name)
+		return "WallComboProtected"
 	end
 
 	if self:TryTriggerCounter(targetCharacter, attackerCharacter, attackName, attackData, options.OnCountered) then
@@ -614,7 +627,12 @@ function M1Service:DoUptilt(player)
 					return
 				end
 
-				if result == "IFrame" or result == "M1Immune" or result == "DamageLocked" or result == "Invalid" then
+				if result == "IFrame"
+					or result == "M1Immune"
+					or result == "WallComboProtected"
+					or result == "DamageLocked"
+					or result == "Invalid"
+				then
 					return
 				end
 
@@ -749,7 +767,11 @@ function M1Service:DoDownslam(player)
 					return
 				end
 
-				if result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
+				if result == "IFrame"
+					or result == "WallComboProtected"
+					or result == "DamageLocked"
+					or result == "Invalid"
+				then
 					return
 				end
 
@@ -879,7 +901,12 @@ function M1Service:DoNormalM1(player)
 					return
 				end
 
-				if result == "IFrame" or result == "M1Immune" or result == "DamageLocked" or result == "Invalid" then
+				if result == "IFrame"
+					or result == "M1Immune"
+					or result == "WallComboProtected"
+					or result == "DamageLocked"
+					or result == "Invalid"
+				then
 					return
 				end
 

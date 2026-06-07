@@ -324,7 +324,117 @@ function MovementService:ShowKnockbackDebug(root, velocity, duration, label)
 	Debris:AddItem(orb, duration + 1)
 end
 
-function MovementService:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel)
+function MovementService:ApplyWallImpactProtection(targetRoot, wallNormal)
+	if not targetRoot or not targetRoot.Parent then return end
+
+	local character = targetRoot:FindFirstAncestorOfClass("Model")
+	if not character then return end
+
+	local protectionDuration = self.Config.WallImpactProtectionDuration or 0.65
+	local protectedUntil = os.clock() + protectionDuration
+	local currentProtectedUntil = character:GetAttribute("WallComboProtectedUntil") or 0
+	local currentM1ImmuneUntil = character:GetAttribute("M1ImmuneUntil") or 0
+
+	character:SetAttribute("WallComboProtectedUntil", math.max(currentProtectedUntil, protectedUntil))
+	character:SetAttribute("M1ImmuneUntil", math.max(currentM1ImmuneUntil, protectedUntil))
+
+	local pushDirection = self:GetFlatDirection(wallNormal, -targetRoot.CFrame.LookVector)
+	local pushSpeed = self.Config.WallImpactPushAwaySpeed or 18
+	local currentVelocity = targetRoot.AssemblyLinearVelocity
+
+	targetRoot.AssemblyLinearVelocity = (pushDirection * pushSpeed) + Vector3.new(0, currentVelocity.Y, 0)
+	targetRoot.AssemblyAngularVelocity = Vector3.zero
+end
+
+function MovementService:StartWallImpactCheck(targetRoot, velocity, options)
+	if self.Config.WallComboPreventionEnabled ~= true then return end
+	if not targetRoot or not targetRoot.Parent then return end
+	if typeof(velocity) ~= "Vector3" then return end
+
+	options = options or {}
+
+	local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
+	local minSpeed = self.Config.WallImpactMinSpeed or 18
+
+	if horizontalVelocity.Magnitude < minSpeed then
+		return
+	end
+
+	local direction = horizontalVelocity.Unit
+	local checkDuration = self.Config.WallImpactCheckDuration or 0.35
+	local rayDistance = self.Config.WallImpactRayDistance or 3
+	local startTime = os.clock()
+	local finished = false
+
+	local exclude = {}
+	local targetCharacter = targetRoot:FindFirstAncestorOfClass("Model")
+	if targetCharacter then
+		table.insert(exclude, targetCharacter)
+	end
+	if options.AttackerCharacter then
+		table.insert(exclude, options.AttackerCharacter)
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = exclude
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function()
+		if finished then
+			connection:Disconnect()
+			return
+		end
+		if not targetRoot or not targetRoot.Parent then
+			connection:Disconnect()
+			return
+		end
+		if os.clock() - startTime > checkDuration then
+			connection:Disconnect()
+			return
+		end
+
+		local currentVelocity = targetRoot.AssemblyLinearVelocity
+		local currentHorizontalVelocity = Vector3.new(currentVelocity.X, 0, currentVelocity.Z)
+		local currentDirection = direction
+
+		if currentHorizontalVelocity.Magnitude >= 1 then
+			currentDirection = currentHorizontalVelocity.Unit
+		end
+
+		local result = workspace:Raycast(targetRoot.Position, currentDirection * rayDistance, params)
+		if not result and os.clock() - startTime > 0.08 and currentHorizontalVelocity.Magnitude < minSpeed then
+			result = workspace:Raycast(targetRoot.Position, direction * rayDistance, params)
+		end
+
+		if not result then
+			return
+		end
+		if result.Normal.Y > 0.45 then
+			return
+		end
+
+		finished = true
+		connection:Disconnect()
+
+		if self.ActiveCombatKnockbacks and self.ActiveCombatKnockbacks[targetRoot] then
+			local active = self.ActiveCombatKnockbacks[targetRoot]
+
+			if active.LinearVelocity and active.LinearVelocity.Parent then
+				active.LinearVelocity:Destroy()
+			end
+			if active.Attachment and active.Attachment.Parent then
+				active.Attachment:Destroy()
+			end
+
+			self.ActiveCombatKnockbacks[targetRoot] = nil
+		end
+
+		self:ApplyWallImpactProtection(targetRoot, result.Normal)
+	end)
+end
+
+function MovementService:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel, options)
 	if not targetRoot or not targetRoot.Parent then
 		return nil, nil
 	end
@@ -360,6 +470,11 @@ function MovementService:ApplyForceKnockback(targetRoot, velocity, duration, max
 	}
 
 	self:ShowKnockbackDebug(targetRoot, velocity, duration, debugLabel or "Force")
+
+	options = options or {}
+	if options.EnableWallComboPrevention == true then
+		self:StartWallImpactCheck(targetRoot, velocity, options)
+	end
 
 	task.delay(duration, function()
 		if
@@ -404,7 +519,28 @@ function MovementService:ApplyPresetKnockback(attackerRoot, targetRoot, data, de
 
 	local velocity = direction * speed + Vector3.new(0, upward, 0)
 
-	return self:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel or "PresetKnockback")
+	return self:ApplyForceKnockback(
+		targetRoot,
+		velocity,
+		duration,
+		maxForce,
+		debugLabel or "PresetKnockback",
+		{
+			EnableWallComboPrevention = true,
+			AttackerCharacter = attackerRoot:FindFirstAncestorOfClass("Model"),
+		}
+	)
+end
+
+function MovementService:ShouldUseWallComboPrevention(data)
+	if self.Config.WallComboPreventionEnabled ~= true then
+		return false
+	end
+	if not data then
+		return false
+	end
+
+	return data.WallComboPrevention == true or data.KnockbackPreset == "PresetKnockback"
 end
 
 function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, data, debugLabel)
@@ -426,9 +562,17 @@ function MovementService:ApplyDirectionalKnockback(attackerRoot, targetRoot, dat
 	local yHoldDuration = data.DirectionalYHoldDuration or data.YHoldDuration or 0
 
 	local velocity = direction * speed
+	local wallOptions = nil
+
+	if self:ShouldUseWallComboPrevention(data) then
+		wallOptions = {
+			EnableWallComboPrevention = true,
+			AttackerCharacter = attackerRoot:FindFirstAncestorOfClass("Model"),
+		}
+	end
 
 	local linearVelocity, attachment =
-		self:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel or "DirectionalXZ")
+		self:ApplyForceKnockback(targetRoot, velocity, duration, maxForce, debugLabel or "DirectionalXZ", wallOptions)
 
 	if yHoldDuration and yHoldDuration > 0 then
 		self:StartYHold(targetRoot, yHoldDuration)

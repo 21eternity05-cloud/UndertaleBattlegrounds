@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local DebugService = {}
 DebugService.__index = DebugService
@@ -11,6 +12,8 @@ function DebugService.new(config)
 	self.CooldownsEnabled = false
 	self.TouchDebounce = {}
 	self.SoulBurstService = nil
+	self.CombatStateDebugConnection = nil
+	self.CombatStateDebugAccumulator = 0
 
 	return self
 end
@@ -35,6 +38,10 @@ function DebugService:SetEnabled(enabled)
 	self:SetConfigValues(self.Enabled)
 	self:SetWorkspaceAttributes(self.Enabled)
 
+	if not self.Enabled then
+		self:ClearAllCombatStateBillboards()
+	end
+
 	print("[DebugService] Debug enabled:", self.Enabled)
 	print("[DebugService] DebugHitboxes:", self.Config.DebugHitboxes)
 	print("[DebugService] DebugKnockback:", self.Config.DebugKnockback)
@@ -56,6 +63,219 @@ end
 
 function DebugService:Toggle()
 	self:SetEnabled(not self.Enabled)
+end
+
+function DebugService:IsEnabled()
+	return self.Config.DebugEnabled == true or workspace:GetAttribute("DebugEnabled") == true
+end
+
+function DebugService:FormatRemaining(untilTime)
+	if typeof(untilTime) ~= "number" then
+		return nil
+	end
+
+	local remaining = untilTime - os.clock()
+
+	if remaining <= 0 then
+		return nil
+	end
+
+	return string.format("%.1f", remaining)
+end
+
+function DebugService:AddTimedState(lines, character, attributeName, label)
+	local remaining = self:FormatRemaining(character:GetAttribute(attributeName) or 0)
+
+	if remaining then
+		table.insert(lines, label .. ": " .. remaining)
+	end
+end
+
+function DebugService:AddBoolState(lines, character, attributeName, label)
+	if character:GetAttribute(attributeName) == true then
+		table.insert(lines, label)
+	end
+end
+
+function DebugService:GetCombatStateLines(character)
+	local lines = {}
+
+	self:AddTimedState(lines, character, "M1ImmuneUntil", "M1 IMMUNE")
+	self:AddTimedState(lines, character, "WallComboProtectedUntil", "WALL")
+
+	if character:GetAttribute("SpawnProtected") == true then
+		local remaining = self:FormatRemaining(character:GetAttribute("SpawnIFrameUntil") or 0)
+		table.insert(lines, remaining and ("SPAWN: " .. remaining) or "SPAWN")
+	else
+		self:AddTimedState(lines, character, "SpawnIFrameUntil", "SPAWN")
+	end
+
+	self:AddBoolState(lines, character, "IFrameActive", "IFRAME")
+	self:AddBoolState(lines, character, "SoulBursting", "SOUL BURST")
+
+	local armorRemaining = self:FormatRemaining(character:GetAttribute("ArmorUntil") or 0)
+	if armorRemaining then
+		table.insert(lines, "ARMOR: " .. armorRemaining)
+	elseif character:GetAttribute("ArmorActive") == true then
+		table.insert(lines, "ARMOR")
+	end
+
+	self:AddBoolState(lines, character, "HasArmor", "HAS ARMOR")
+	self:AddBoolState(lines, character, "Guardbroken", "GUARDBREAK")
+	self:AddBoolState(lines, character, "Stunned", "STUN")
+	self:AddBoolState(lines, character, "Blocking", "BLOCK")
+	self:AddBoolState(lines, character, "Grabbed", "GRABBED")
+	self:AddBoolState(lines, character, "DamageLocked", "DAMAGE LOCK")
+	self:AddBoolState(lines, character, "CinematicLocked", "CINEMATIC")
+
+	return lines
+end
+
+function DebugService:GetCombatStateAdornee(character)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	return character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+end
+
+function DebugService:GetOrCreateCombatStateBillboard(character)
+	local adornee = self:GetCombatStateAdornee(character)
+	if not adornee then
+		return nil
+	end
+
+	local billboard = character:FindFirstChild("CombatStateDebugBillboard")
+
+	if not billboard then
+		billboard = Instance.new("BillboardGui")
+		billboard.Name = "CombatStateDebugBillboard"
+		billboard.AlwaysOnTop = true
+		billboard.MaxDistance = 180
+		billboard.Size = UDim2.fromOffset(150, 120)
+		billboard.StudsOffset = Vector3.new(0, 3.6, 0)
+		billboard.Parent = character
+
+		local text = Instance.new("TextLabel")
+		text.Name = "StateText"
+		text.BackgroundTransparency = 0.25
+		text.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+		text.BorderSizePixel = 0
+		text.Size = UDim2.fromScale(1, 1)
+		text.Font = Enum.Font.GothamBold
+		text.TextSize = 13
+		text.TextColor3 = Color3.fromRGB(245, 245, 245)
+		text.TextStrokeTransparency = 0.3
+		text.TextXAlignment = Enum.TextXAlignment.Left
+		text.TextYAlignment = Enum.TextYAlignment.Top
+		text.Parent = billboard
+	end
+
+	billboard.Adornee = adornee
+
+	return billboard
+end
+
+function DebugService:ClearCombatStateBillboard(character)
+	if not character then
+		return
+	end
+
+	local billboard = character:FindFirstChild("CombatStateDebugBillboard")
+
+	if billboard then
+		billboard:Destroy()
+	end
+end
+
+function DebugService:UpdateCombatStateBillboard(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	if not humanoid or humanoid.Health <= 0 or not self:IsEnabled() then
+		self:ClearCombatStateBillboard(character)
+		return
+	end
+
+	local lines = self:GetCombatStateLines(character)
+
+	if #lines == 0 then
+		self:ClearCombatStateBillboard(character)
+		return
+	end
+
+	local billboard = self:GetOrCreateCombatStateBillboard(character)
+	if not billboard then
+		return
+	end
+
+	local text = billboard:FindFirstChild("StateText")
+	if text and text:IsA("TextLabel") then
+		text.Text = table.concat(lines, "\n")
+	end
+end
+
+function DebugService:GetCombatDebugCharacters()
+	local characters = {}
+	local seen = {}
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+
+		if character and not seen[character] then
+			seen[character] = true
+			table.insert(characters, character)
+		end
+	end
+
+	for _, descendant in ipairs(workspace:GetDescendants()) do
+		if descendant:IsA("Humanoid") then
+			local character = descendant.Parent
+
+			if character and character:IsA("Model") and not seen[character] then
+				seen[character] = true
+				table.insert(characters, character)
+			end
+		end
+	end
+
+	return characters
+end
+
+function DebugService:ClearAllCombatStateBillboards()
+	for _, descendant in ipairs(workspace:GetDescendants()) do
+		if descendant.Name == "CombatStateDebugBillboard" and descendant:IsA("BillboardGui") then
+			descendant:Destroy()
+		end
+	end
+end
+
+function DebugService:StartCombatStateDebugLoop()
+	if self.CombatStateDebugConnection then
+		return
+	end
+
+	self.CombatStateDebugConnection = RunService.Heartbeat:Connect(function(deltaTime)
+		self.CombatStateDebugAccumulator += deltaTime
+
+		if self.CombatStateDebugAccumulator < 0.1 then
+			return
+		end
+
+		self.CombatStateDebugAccumulator = 0
+
+		if not self:IsEnabled() then
+			self:ClearAllCombatStateBillboards()
+			return
+		end
+
+		for _, character in ipairs(self:GetCombatDebugCharacters()) do
+			self:UpdateCombatStateBillboard(character)
+		end
+	end)
 end
 
 function DebugService:IsDebugButton(instance)
@@ -244,6 +464,8 @@ function DebugService:Start()
 			self:HookSoulBurstButton(descendant)
 		end
 	end)
+
+	self:StartCombatStateDebugLoop()
 end
 
 return DebugService

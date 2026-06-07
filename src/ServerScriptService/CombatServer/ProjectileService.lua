@@ -261,6 +261,7 @@ end
 
 function ProjectileService:BuildBeamAttackData(data, isFinalTick)
 	local attackData = self:CopyData(data)
+	attackData.IsFinalBeamTick = isFinalTick == true
 
 	if isFinalTick then
 		attackData.Damage = data.FinalDamage or data.Damage
@@ -269,6 +270,8 @@ function ProjectileService:BuildBeamAttackData(data, isFinalTick)
 		attackData.UpwardKnockback = data.FinalUpwardKnockback or data.UpwardKnockback
 		attackData.KnockbackDuration = data.FinalKnockbackDuration or data.KnockbackDuration
 		attackData.KnockbackMaxForce = data.FinalKnockbackMaxForce or data.KnockbackMaxForce
+		attackData.FinalKnockbackSource = data.FinalKnockbackSource
+		attackData.UseAttackerPositionForFinalKnockback = data.UseAttackerPositionForFinalKnockback == true
 	else
 		-- By default, beam guardbreak happens only on the final tick.
 		if data.GuardbreakFinalOnly ~= false then
@@ -479,6 +482,28 @@ function ProjectileService:ApplyProjectileHit(info)
 	if attackData.Knockback and attackData.Knockback > 0 then
 		if not armorInfo.Active or not armorInfo.PreventsKnockback then
 			local explicitDirection = info.KnockbackDirection or info.BeamDirection
+			local useAttackerPosition = attackData.IsFinalBeamTick == true
+				and (
+					attackData.UseAttackerPositionForFinalKnockback == true
+					or attackData.FinalKnockbackSource == "Attacker"
+				)
+
+			if useAttackerPosition then
+				local ownerRoot = ownerCharacter:FindFirstChild("HumanoidRootPart")
+
+				if ownerRoot then
+					local fromAttacker = targetRoot.Position - ownerRoot.Position
+					local flatFromAttacker = Vector3.new(fromAttacker.X, 0, fromAttacker.Z)
+
+					if flatFromAttacker.Magnitude < 0.05 then
+						flatFromAttacker = Vector3.new(ownerRoot.CFrame.LookVector.X, 0, ownerRoot.CFrame.LookVector.Z)
+					end
+
+					if flatFromAttacker.Magnitude >= 0.05 then
+						explicitDirection = flatFromAttacker.Unit
+					end
+				end
+			end
 
 			if explicitDirection
 				and typeof(explicitDirection) == "Vector3"
@@ -487,15 +512,37 @@ function ProjectileService:ApplyProjectileHit(info)
 				and self.MovementService.ApplyForceKnockback
 			then
 				local direction = explicitDirection.Unit
-				local velocity = (direction * attackData.Knockback)
-					+ Vector3.new(0, attackData.UpwardKnockback or 0, 0)
+				local speed = attackData.Knockback
+				local upward = attackData.UpwardKnockback or 0
+				local duration = attackData.KnockbackDuration
+				local maxForce = attackData.KnockbackMaxForce
+				local debugLabel = attackName
+
+				if attackData.KnockbackPreset == "PresetKnockback" then
+					speed = attackData.PresetKnockbackSpeed or speed
+					upward = attackData.PresetKnockbackUpward or upward
+					duration = attackData.PresetKnockbackDuration or duration
+					maxForce = attackData.PresetKnockbackMaxForce or maxForce
+					debugLabel = attackName .. "Preset"
+				end
+
+				local velocity = (direction * speed) + Vector3.new(0, upward, 0)
+				local wallOptions = nil
+
+				if useAttackerPosition or attackData.WallComboPrevention == true then
+					wallOptions = {
+						EnableWallComboPrevention = true,
+						AttackerCharacter = ownerCharacter,
+					}
+				end
 
 				self.MovementService:ApplyForceKnockback(
 					targetRoot,
 					velocity,
-					attackData.KnockbackDuration,
-					attackData.KnockbackMaxForce,
-					attackName
+					duration,
+					maxForce,
+					debugLabel,
+					wallOptions
 				)
 
 				if armorInfo.Active then

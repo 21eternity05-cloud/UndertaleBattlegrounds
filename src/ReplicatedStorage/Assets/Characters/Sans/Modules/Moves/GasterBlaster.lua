@@ -32,6 +32,8 @@ local GasterBlaster = {
 	FinalKnockback = 95,
 	UpwardKnockback = 4,
 	FinalUpwardKnockback = 28,
+	UseAttackerPositionForFinalKnockback = true,
+	FinalKnockbackSource = "Attacker",
 
 	Blockable = true,
 	CanBeBlocked = true,
@@ -42,6 +44,7 @@ local GasterBlaster = {
 	GuardbreakStun = 1.35,
 
 	CanBeCountered = true,
+	AllowLongRangeCounter = false,
 	HitCancelsTarget = true,
 	CancelableByHit = true,
 
