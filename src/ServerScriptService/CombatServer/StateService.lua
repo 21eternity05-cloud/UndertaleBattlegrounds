@@ -29,9 +29,12 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("SuccessfulM1InCombo", false)
 	character:SetAttribute("UptiltCooldownUntil", 0)
 	character:SetAttribute("BlockBufferedUntil", 0)
+	character:SetAttribute("BlockLockedUntil", 0)
+	character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
 
 	character:SetAttribute("JumpLockedUntil", 0)
 	character:SetAttribute("StunId", 0)
+	character:SetAttribute("GuardbreakId", 0)
 	character:SetAttribute("M1ImmuneUntil", 0)
 	character:SetAttribute("CurrentMoveId", nil)
 	character:SetAttribute("MoveCancelableByHit", true)
@@ -39,6 +42,7 @@ function StateService:SetupCharacter(character)
 
 	character:SetAttribute("IFrameActive", false)
 	character:SetAttribute("ArmorActive", false)
+	character:SetAttribute("CombatTaggedUntil", 0)
 
 	character:SetAttribute("ArmorDamageReduction", 0)
 	character:SetAttribute("ArmorPreventsStun", false)
@@ -256,10 +260,20 @@ function StateService:GuardbreakCharacter(character, duration)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
 
+	duration = duration or 1.25
+	local guardbreakId = (character:GetAttribute("GuardbreakId") or 0) + 1
+	local stunId = (character:GetAttribute("StunId") or 0) + 1
+	local blockLockedUntil = os.clock() + duration + 0.1
+
+	character:SetAttribute("GuardbreakId", guardbreakId)
+	character:SetAttribute("StunId", stunId)
+
 	self:StopBlockingVisuals(character)
 	self:StopCurrentStunAnimations(character)
 
 	character:SetAttribute("BlockBufferedUntil", 0)
+	character:SetAttribute("BlockLockedUntil", blockLockedUntil)
+	character:SetAttribute("BlockInputReleasedAfterGuardbreak", false)
 	character:SetAttribute("Guardbroken", true)
 	character:SetAttribute("Stunned", true)
 
@@ -281,6 +295,7 @@ function StateService:GuardbreakCharacter(character, duration)
 
 	task.delay(duration, function()
 		if not character or not character.Parent then return end
+		if character:GetAttribute("GuardbreakId") ~= guardbreakId then return end
 
 		local currentHumanoid = character:FindFirstChildOfClass("Humanoid")
 		if not currentHumanoid or currentHumanoid.Health <= 0 then return end
@@ -288,15 +303,20 @@ function StateService:GuardbreakCharacter(character, duration)
 		self.AnimationService:StopUniversalAnimation(character, "BlockBreak", 0.08)
 
 		character:SetAttribute("Guardbroken", false)
-		character:SetAttribute("Stunned", false)
+
+		if character:GetAttribute("StunId") == stunId then
+			character:SetAttribute("Stunned", false)
+		end
 
 		if self.ClearDebugHighlight then
 			self:ClearDebugHighlight(character)
 		end
 
-		currentHumanoid.WalkSpeed = self.Config.DefaultWalkSpeed
+		if not character:GetAttribute("Stunned") then
+			currentHumanoid.WalkSpeed = self.Config.DefaultWalkSpeed
+		end
 
-		if not character:GetAttribute("UsingMove") then
+		if not character:GetAttribute("Stunned") and not character:GetAttribute("UsingMove") then
 			currentHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 			currentHumanoid.JumpPower = self.Config.DefaultJumpPower
 			currentHumanoid.JumpHeight = self.Config.DefaultJumpHeight

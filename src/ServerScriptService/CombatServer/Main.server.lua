@@ -96,6 +96,7 @@ StateService.CombatStatusService = CombatStatusService
 StateService.ProjectileService = ProjectileService
 StateService.UltService = UltService
 StateService.CinematicService = CinematicService
+CharacterService.CombatStatusService = CombatStatusService
 
 M1Service.UltService = UltService
 M1Service.DamageNumberService = DamageNumberService

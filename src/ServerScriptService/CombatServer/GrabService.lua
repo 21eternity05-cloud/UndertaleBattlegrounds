@@ -24,6 +24,7 @@ function GrabService:CaptureHumanoidState(humanoid)
 		JumpPower = humanoid.JumpPower,
 		JumpHeight = humanoid.JumpHeight,
 		AutoRotate = humanoid.AutoRotate,
+		PlatformStand = humanoid.PlatformStand,
 		JumpEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping),
 	}
 end
@@ -43,8 +44,15 @@ function GrabService:LockCharacter(character, options)
 	end
 
 	local oldState = self:CaptureHumanoidState(humanoid)
+	local oldRootAnchored = root and root.Anchored or false
+	local grabLockId = (character:GetAttribute("GrabLockId") or 0) + 1
+	local stunId = (character:GetAttribute("StunId") or 0) + 1
+
+	character:SetAttribute("GrabLockId", grabLockId)
+	character:SetAttribute("StunId", stunId)
 
 	character:SetAttribute("Grabbed", true)
+	character:SetAttribute("GrabLocked", true)
 	character:SetAttribute("CinematicLocked", true)
 	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("Stunned", true)
@@ -76,10 +84,13 @@ function GrabService:LockCharacter(character, options)
 	humanoid.JumpPower = 0
 	humanoid.JumpHeight = 0
 	humanoid.AutoRotate = options.AutoRotate == true
+	humanoid.PlatformStand = options.PlatformStand == true
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 
-	if self.StateService and self.StateService.StunCharacter then
-		self.StateService:StunCharacter(character, options.Duration or 3)
+	if root then
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.Anchored = true
 	end
 
 	if self.CombatStatusService and self.CombatStatusService.SetTemporaryCombatStatus then
@@ -98,7 +109,10 @@ function GrabService:LockCharacter(character, options)
 		Humanoid = humanoid,
 		Root = root,
 		OldState = oldState,
+		OldRootAnchored = oldRootAnchored,
 		AttackerCharacter = options.AttackerCharacter,
+		GrabLockId = grabLockId,
+		StunId = stunId,
 	}
 end
 
@@ -116,12 +130,18 @@ function GrabService:UnlockCharacter(lockState)
 			self.CombatStatusService:ClearDamageLock(character, lockState.AttackerCharacter)
 		end
 
-		character:SetAttribute("Grabbed", false)
-		character:SetAttribute("CinematicLocked", false)
-		character:SetAttribute("Stunned", false)
-		character:SetAttribute("UsingMove", false)
-		character:SetAttribute("MovementLocked", false)
-		character:SetAttribute("DashLocked", false)
+		if character:GetAttribute("GrabLockId") == lockState.GrabLockId then
+			character:SetAttribute("Grabbed", false)
+			character:SetAttribute("GrabLocked", false)
+			character:SetAttribute("CinematicLocked", false)
+			character:SetAttribute("UsingMove", false)
+			character:SetAttribute("MovementLocked", false)
+			character:SetAttribute("DashLocked", false)
+
+			if character:GetAttribute("StunId") == lockState.StunId then
+				character:SetAttribute("Stunned", false)
+			end
+		end
 
 		if self.CombatStatusService and self.CombatStatusService.ClearTemporaryCombatStatus then
 			self.CombatStatusService:ClearTemporaryCombatStatus(character)
@@ -133,7 +153,12 @@ function GrabService:UnlockCharacter(lockState)
 		humanoid.JumpPower = oldState.JumpPower or self.Config.DefaultJumpPower or 50
 		humanoid.JumpHeight = oldState.JumpHeight or self.Config.DefaultJumpHeight or 7.2
 		humanoid.AutoRotate = oldState.AutoRotate ~= false
+		humanoid.PlatformStand = oldState.PlatformStand == true
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, oldState.JumpEnabled ~= false)
+	end
+
+	if lockState.Root and lockState.Root.Parent then
+		lockState.Root.Anchored = lockState.OldRootAnchored == true
 	end
 end
 
@@ -160,6 +185,10 @@ function GrabService:ReportNoUltDamage(attackerCharacter, targetCharacter, targe
 
 	if typeof(damage) ~= "number" or damage <= 0 then
 		return
+	end
+
+	if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+		self.CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter)
 	end
 
 	self:ShowDamageNumber(targetRoot, damage, {

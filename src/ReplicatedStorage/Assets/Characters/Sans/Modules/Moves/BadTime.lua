@@ -7,9 +7,9 @@ local BadTime = {
 	AnimationName = "BadTime",
 
 	Cooldown = 1, 
-	Duration =  18,
-	LockTime = 18,
-	MaxLockTime = 14.5,
+	Duration =  23,
+	LockTime = 23,
+	MaxLockTime = 25,
 
 	RequiresTarget = true,
 	RequiresAim = false,
@@ -17,7 +17,7 @@ local BadTime = {
 	WarningTime = .9,
 	ConfirmRange = 80,
 
-	SequenceTime = 18,
+	SequenceTime = 23,
 
 	Blockable = true,
 	CanBeBlocked = true,
@@ -29,11 +29,11 @@ local BadTime = {
 
 	HasIFrames = true,
 	IFrameStart = 0,
-	IFrameEnd = 18,
+	IFrameEnd = 23,
 
 	HasArmor = true,
 	ArmorStart = 0,
-	ArmorEnd = 18,
+	ArmorEnd = 23,
 	ArmorDamageReduction = 1,
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,

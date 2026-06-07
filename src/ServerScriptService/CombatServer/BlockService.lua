@@ -63,6 +63,8 @@ function BlockService:CanStartBlocking(character)
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("BlockInputReleasedAfterGuardbreak") == false then return false end
+	if os.clock() < (character:GetAttribute("BlockLockedUntil") or 0) then return false end
 	if character:GetAttribute("Grabbed") then return false end
 	if character:GetAttribute("CinematicLocked") then return false end
 
@@ -131,6 +133,13 @@ function BlockService:SetBlocking(player, isBlocking)
 	else
 		character:SetAttribute("BlockBufferedUntil", 0)
 		character:SetAttribute("Blocking", false)
+
+		if character:GetAttribute("Guardbroken")
+			or os.clock() < (character:GetAttribute("BlockLockedUntil") or 0)
+			or character:GetAttribute("BlockInputReleasedAfterGuardbreak") == false
+		then
+			character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
+		end
 
 		if self.StateService.AnimationService then
 			self.StateService.AnimationService:StopBlockAnimation(character)

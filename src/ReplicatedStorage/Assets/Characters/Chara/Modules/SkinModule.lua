@@ -32,10 +32,23 @@ SkinModule.Skins = {
 
 	Marin = {
 		DisplayName = "Kitagawa Marin",
-		Free = false,
-		Cost = 10,
+		Free = true,
+		Cost = 100,
 		CharacterModelName = "kitagawa marin",
 		WeaponName = "kitchen knife",
+		MotorTemplateName = "KnifeMotorTemplate",
+
+		-- Future cosmetic hooks:
+		-- VFXColor = Color3.fromRGB(...),
+		-- SFXSet = nil,
+		-- AuraName = nil,
+	},
+	XTale = {
+		DisplayName = "X!Tale Chara",
+		Free = true,
+		Cost = 167,
+		CharacterModelName = "xtale chara",
+		WeaponName = "xtale purple knife",
 		MotorTemplateName = "KnifeMotorTemplate",
 
 		-- Future cosmetic hooks:

@@ -13,8 +13,33 @@ function CharacterService.new(config, weaponService, progressionService, charact
 	self.WeaponService = weaponService
 	self.ProgressionService = progressionService
 	self.CharacterMorphService = characterMorphService
+	self.CombatStatusService = nil
 
 	return self
+end
+
+function CharacterService:IsPlayerRequestInCombat(player)
+	local character = player and player.Character
+
+	if not character then
+		return false
+	end
+
+	if self.CombatStatusService and self.CombatStatusService.IsInCombat then
+		return self.CombatStatusService:IsInCombat(character)
+	end
+
+	if os.clock() < (character:GetAttribute("CombatTaggedUntil") or 0) then
+		return true
+	end
+
+	return character:GetAttribute("Stunned") == true
+		or character:GetAttribute("Guardbroken") == true
+		or character:GetAttribute("Blocking") == true
+		or character:GetAttribute("Attacking") == true
+		or character:GetAttribute("UsingMove") == true
+		or character:GetAttribute("Grabbed") == true
+		or character:GetAttribute("CinematicLocked") == true
 end
 
 function CharacterService:IsValidCharacter(characterName)
@@ -177,6 +202,11 @@ function CharacterService:SetCharacter(player, characterName, options)
 		return
 	end
 
+	if self:IsPlayerRequestInCombat(player) then
+		warn("[CharacterService] Character switch rejected while in combat:", player.Name, characterName)
+		return false
+	end
+
 	if options == nil then
 		options = self:GetCurrentOptions(player, characterName)
 	else
@@ -207,6 +237,7 @@ function CharacterService:SetCharacter(player, characterName, options)
 	end
 
 	print(player.Name .. " changed character to " .. characterName)
+	return true
 end
 
 function CharacterService:SetupPlayer(player)

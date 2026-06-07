@@ -430,6 +430,54 @@ function CombatStatusService:ClearDamageLock(targetCharacter, attackerCharacter)
 	targetCharacter:SetAttribute("DamageLockExpiresAt", 0)
 end
 
+function CombatStatusService:TagCombat(character, duration)
+	if not character or not character.Parent then
+		return
+	end
+
+	duration = duration or self.Config.CombatTagDuration or 8
+	local taggedUntil = os.clock() + duration
+	local currentUntil = character:GetAttribute("CombatTaggedUntil") or 0
+
+	if taggedUntil > currentUntil then
+		character:SetAttribute("CombatTaggedUntil", taggedUntil)
+	end
+end
+
+function CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter, duration)
+	self:TagCombat(attackerCharacter, duration)
+	self:TagCombat(targetCharacter, duration)
+end
+
+function CombatStatusService:IsInCombat(character)
+	if not character or not character.Parent then
+		return false
+	end
+
+	if os.clock() < (character:GetAttribute("CombatTaggedUntil") or 0) then
+		return true
+	end
+
+	for _, attributeName in ipairs({
+		"Stunned",
+		"Guardbroken",
+		"Blocking",
+		"Attacking",
+		"UsingMove",
+		"Grabbed",
+		"GrabLocked",
+		"CinematicLocked",
+		"DamageLocked",
+		"ReservedVictim",
+	}) do
+		if character:GetAttribute(attributeName) == true then
+			return true
+		end
+	end
+
+	return false
+end
+
 function CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, attackerCharacter)
 	if not targetCharacter or not targetCharacter.Parent then
 		return false

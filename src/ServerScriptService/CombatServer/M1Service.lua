@@ -248,6 +248,9 @@ function M1Service:CheckStandardHitStart(
 			self.StateService:GuardbreakCharacter(targetCharacter, attackData.GuardbreakStun or 1.4)
 			self.StateService:ApplyM1Immunity(targetCharacter, self.Config.PostM5M1Immunity or 1)
 			self.BlockService:PlayBlockBreakVFX(targetRoot)
+			if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+				self.CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter)
+			end
 			return "Guardbreak"
 		end
 	end
@@ -277,6 +280,9 @@ function M1Service:ApplyDamageAndStun(
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
+		if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+			self.CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter)
+		end
 
 		if self.DamageNumberService then
 			self.DamageNumberService:ShowDamage(targetRoot, finalDamage)

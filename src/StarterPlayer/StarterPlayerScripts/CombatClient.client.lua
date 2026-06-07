@@ -293,6 +293,8 @@ local function canRequestBlock()
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("BlockInputReleasedAfterGuardbreak") == false then return false end
+	if os.clock() < (character:GetAttribute("BlockLockedUntil") or 0) then return false end
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Grabbed") then return false end
@@ -318,6 +320,15 @@ local function requestBlockStart()
 	combatRemote:FireServer("BlockStart")
 
 	return true
+end
+
+local function clearLocalBlockState(sendEnd)
+	blockBuffered = false
+	blocking = false
+
+	if sendEnd then
+		combatRemote:FireServer("BlockEnd")
+	end
 end
 
 local function bufferBlock()
@@ -692,7 +703,15 @@ end
 local function stopBlocking()
 	blockBuffered = false
 
-	if not blocking then return end
+	local character = getCharacter()
+
+	if not blocking then
+		if character and character:GetAttribute("BlockInputReleasedAfterGuardbreak") == false then
+			combatRemote:FireServer("BlockEnd")
+		end
+
+		return
+	end
 
 	blocking = false
 	combatRemote:FireServer("BlockEnd")
@@ -879,6 +898,12 @@ local function hookCharacter(character)
 	character:GetAttributeChangedSignal("CharacterName"):Connect(function()
 		refreshMoveDisplay()
 		updateUltimateBar()
+	end)
+
+	character:GetAttributeChangedSignal("Guardbroken"):Connect(function()
+		if character:GetAttribute("Guardbroken") then
+			clearLocalBlockState(false)
+		end
 	end)
 end
 

@@ -383,6 +383,10 @@ function MoveService:ApplyStandardHit(
 			self.StateService:GuardbreakCharacter(targetCharacter, data.GuardbreakStun or 1.25)
 			self.BlockService:PlayBlockBreakVFX(targetRoot)
 
+			if status and status.TagCombatPair then
+				status:TagCombatPair(attackerCharacter, targetCharacter)
+			end
+
 			if self.UltService then
 				self.UltService:AwardGuardbreak(attackerCharacter, targetCharacter)
 			end
@@ -421,6 +425,10 @@ function MoveService:ApplyStandardHit(
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
+
+		if status and status.TagCombatPair then
+			status:TagCombatPair(attackerCharacter, targetCharacter)
+		end
 
 		if self.DamageNumberService then
 			self.DamageNumberService:ShowDamage(targetRoot, finalDamage)

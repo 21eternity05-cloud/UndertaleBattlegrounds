@@ -394,6 +394,10 @@ function ProjectileService:ApplyProjectileHit(info)
 			self.StateService:GuardbreakCharacter(targetCharacter, attackData.GuardbreakStun or 1.25)
 			self.BlockService:PlayBlockBreakVFX(targetRoot)
 
+			if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+				self.CombatStatusService:TagCombatPair(ownerCharacter, targetCharacter)
+			end
+
 			if self.UltService then
 				self.UltService:AwardGuardbreak(ownerCharacter, targetCharacter)
 			end
@@ -428,6 +432,9 @@ function ProjectileService:ApplyProjectileHit(info)
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
+		if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+			self.CombatStatusService:TagCombatPair(ownerCharacter, targetCharacter)
+		end
 		self:ReportDamage(ownerCharacter, targetCharacter, targetRoot, finalDamage, attackData)
 	end
 
