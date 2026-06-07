@@ -29,8 +29,6 @@ local CLIENT_JUMP_LOCK_TIME = 0.5
 
 local BLOCK_KEY = Enum.KeyCode.F
 local blocking = false
-local blockBuffered = false
-local BLOCK_BUFFER_TIME = 0.18
 
 local currentUlt = 0
 local currentUltMax = 100
@@ -349,16 +347,6 @@ local function canRequestBlock()
 	local character = getCharacter()
 	if not character then return false end
 
-	if character:GetAttribute("Stunned") then return false end
-	if character:GetAttribute("Blocking") then return false end
-	if character:GetAttribute("Guardbroken") then return false end
-	if character:GetAttribute("BlockInputReleasedAfterGuardbreak") == false then return false end
-	if os.clock() < (character:GetAttribute("BlockLockedUntil") or 0) then return false end
-	if character:GetAttribute("Attacking") then return false end
-	if character:GetAttribute("UsingMove") then return false end
-	if character:GetAttribute("Grabbed") then return false end
-	if character:GetAttribute("CinematicLocked") then return false end
-
 	return true
 end
 
@@ -374,7 +362,6 @@ local function requestBlockStart()
 	if blocking then return true end
 	if not canRequestBlock() then return false end
 
-	blockBuffered = false
 	blocking = true
 	combatRemote:FireServer("BlockStart")
 
@@ -382,35 +369,11 @@ local function requestBlockStart()
 end
 
 local function clearLocalBlockState(sendEnd)
-	blockBuffered = false
 	blocking = false
 
 	if sendEnd then
 		combatRemote:FireServer("BlockEnd")
 	end
-end
-
-local function bufferBlock()
-	blockBuffered = true
-
-	task.delay(BLOCK_BUFFER_TIME, function()
-		blockBuffered = false
-	end)
-
-	task.spawn(function()
-		while blockBuffered do
-			if not UserInputService:IsKeyDown(BLOCK_KEY) then
-				blockBuffered = false
-				return
-			end
-
-			if requestBlockStart() then
-				return
-			end
-
-			task.wait()
-		end
-	end)
 end
 
 local function lockLocalJump(duration)
@@ -820,24 +783,10 @@ local function holdM1Loop()
 end
 
 local function startBlocking()
-	if requestBlockStart() then return end
-
-	bufferBlock()
+	requestBlockStart()
 end
 
 local function stopBlocking()
-	blockBuffered = false
-
-	local character = getCharacter()
-
-	if not blocking then
-		if character and character:GetAttribute("BlockInputReleasedAfterGuardbreak") == false then
-			combatRemote:FireServer("BlockEnd")
-		end
-
-		return
-	end
-
 	blocking = false
 	combatRemote:FireServer("BlockEnd")
 end

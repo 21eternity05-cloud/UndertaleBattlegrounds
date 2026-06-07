@@ -10,16 +10,16 @@ local soulBurstRemote = remotes:WaitForChild("SoulBurstRemote")
 
 local DASH_KEY = Enum.KeyCode.Q
 
-local DASH_DURATION = 0.25
-local DASH_SPEED = 75
+local DASH_DURATION = 0.28
+local DASH_SPEED = 82
 local DASH_COOLDOWN = 1.1
 
--- Higher = follows camera more sharply.
-local TURN_SPEED = 24
+local DASH_MAX_FORCE = 80000
+local TURN_SPEED = 20
+local STEERING_TIME = 0.22
 
--- How long camera steering is allowed.
--- Set equal to DASH_DURATION if you want steering for the whole dash.
-local STEERING_TIME = 0.25
+local WALL_CHECK_DISTANCE = 2.9
+local POST_DASH_MAX_HORIZONTAL_SPEED = 48
 
 local canDash = true
 local isDashing = false
@@ -90,8 +90,12 @@ end
 
 local function getFlatCameraCFrame()
 	local camera = workspace.CurrentCamera
-	local look = camera.CFrame.LookVector
 
+	if not camera then
+		return CFrame.lookAt(Vector3.zero, Vector3.new(0, 0, -1))
+	end
+
+	local look = camera.CFrame.LookVector
 	local flatLook = Vector3.new(look.X, 0, look.Z)
 
 	if flatLook.Magnitude < 0.05 then
@@ -125,7 +129,6 @@ local function getDashType()
 		return "Right"
 	end
 
-	-- Default if no movement key is held.
 	return "Back"
 end
 
@@ -148,6 +151,16 @@ local function getDirectionFromDashType(dashType)
 	return -forward
 end
 
+local function getFlatDirection(direction)
+	local flat = Vector3.new(direction.X, 0, direction.Z)
+
+	if flat.Magnitude < 0.05 then
+		return Vector3.new(0, 0, -1)
+	end
+
+	return flat.Unit
+end
+
 local function createDashDust(root, dashDirection)
 	local dust = Instance.new("Part")
 	dust.Name = "DashDust"
@@ -166,6 +179,63 @@ local function createDashDust(root, dashDirection)
 	Debris:AddItem(dust, 0.15)
 end
 
+local function isWallAhead(character, root, direction)
+	if not character or not root then
+		return false
+	end
+
+	local flatDirection = getFlatDirection(direction)
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+
+	local origin = root.Position + Vector3.new(0, 0.4, 0)
+	local result = workspace:Raycast(origin, flatDirection * WALL_CHECK_DISTANCE, params)
+
+	if not result then
+		return false
+	end
+
+	if result.Normal.Y > 0.45 then
+		return false
+	end
+
+	return true
+end
+
+local function clampPostDashVelocity(root)
+	if not root or not root.Parent then
+		return
+	end
+
+	local velocity = root.AssemblyLinearVelocity
+	local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+
+	if horizontal.Magnitude > POST_DASH_MAX_HORIZONTAL_SPEED then
+		horizontal = horizontal.Unit * POST_DASH_MAX_HORIZONTAL_SPEED
+
+		root.AssemblyLinearVelocity = Vector3.new(
+			horizontal.X,
+			velocity.Y,
+			horizontal.Z
+		)
+	end
+
+	root.AssemblyAngularVelocity = Vector3.zero
+end
+
+local function setDashPlaneVelocity(linearVelocity, direction)
+	if not linearVelocity or not linearVelocity.Parent then
+		return
+	end
+
+	linearVelocity.PlaneVelocity = Vector2.new(
+		direction.X * DASH_SPEED,
+		direction.Z * DASH_SPEED
+	)
+end
+
 local function dash()
 	if not canDash then return end
 	if isDashing then return end
@@ -181,7 +251,7 @@ local function dash()
 	isDashing = true
 
 	local dashType = getDashType()
-	local currentDirection = getDirectionFromDashType(dashType)
+	local currentDirection = getFlatDirection(getDirectionFromDashType(dashType))
 
 	local oldAutoRotate = humanoid.AutoRotate
 	humanoid.AutoRotate = false
@@ -194,16 +264,25 @@ local function dash()
 	linearVelocity.Name = "DashLinearVelocity"
 	linearVelocity.Attachment0 = attachment
 	linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-	linearVelocity.MaxForce = math.huge
-	linearVelocity.VectorVelocity = currentDirection * DASH_SPEED
+	linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	linearVelocity.PrimaryTangentAxis = Vector3.new(1, 0, 0)
+	linearVelocity.SecondaryTangentAxis = Vector3.new(0, 0, 1)
+	linearVelocity.MaxForce = DASH_MAX_FORCE
 	linearVelocity.Parent = root
 
+	setDashPlaneVelocity(linearVelocity, currentDirection)
 	createDashDust(root, currentDirection)
 
 	local startTime = os.clock()
+	local cleanedUp = false
 
 	local function cleanupDash()
+		if cleanedUp then
+			return
+		end
+
+		cleanedUp = true
+
 		if linearVelocity and linearVelocity.Parent then
 			linearVelocity:Destroy()
 		end
@@ -215,6 +294,8 @@ local function dash()
 		if humanoid and humanoid.Parent then
 			humanoid.AutoRotate = oldAutoRotate
 		end
+
+		clampPostDashVelocity(root)
 
 		isDashing = false
 
@@ -245,8 +326,6 @@ local function dash()
 			return
 		end
 
-		-- Dash gets canceled immediately if hard movement lock/status starts mid-dash.
-		-- Blocking does NOT cancel dash anymore.
 		if character:GetAttribute("Stunned")
 			or character:GetAttribute("Guardbroken")
 			or isDashLocked(character)
@@ -262,24 +341,37 @@ local function dash()
 			return
 		end
 
-		-- This is the camera-guided part.
 		if elapsed <= STEERING_TIME then
-			local desiredDirection = getDirectionFromDashType(dashType)
+			local desiredDirection = getFlatDirection(getDirectionFromDashType(dashType))
 			local alpha = math.clamp(deltaTime * TURN_SPEED, 0, 1)
 
 			currentDirection = currentDirection:Lerp(desiredDirection, alpha)
 
 			if currentDirection.Magnitude > 0.05 then
 				currentDirection = currentDirection.Unit
+			else
+				currentDirection = desiredDirection
 			end
 		end
 
-		linearVelocity.VectorVelocity = currentDirection * DASH_SPEED
+		if isWallAhead(character, root, currentDirection) then
+			connection:Disconnect()
+			cleanupDash()
+			return
+		end
 
-		-- Character keeps facing the camera direction, even during side/back dashes.
+		setDashPlaneVelocity(linearVelocity, currentDirection)
+
 		local cameraCFrame = getFlatCameraCFrame()
-		local faceDirection = cameraCFrame.LookVector
-		root.CFrame = CFrame.lookAt(root.Position, root.Position + faceDirection)
+		local faceDirection = Vector3.new(
+			cameraCFrame.LookVector.X,
+			0,
+			cameraCFrame.LookVector.Z
+		)
+
+		if faceDirection.Magnitude > 0.05 then
+			root.CFrame = CFrame.lookAt(root.Position, root.Position + faceDirection.Unit)
+		end
 	end)
 end
 

@@ -188,7 +188,7 @@ CombatConfig.M1Data = {
 
 	[5] = {
 		Damage = 8,
-		Stun = 1.05,
+		Stun = 0.5,
 		Cooldown = 0.56,
 		HitDelay = 0.12,
 

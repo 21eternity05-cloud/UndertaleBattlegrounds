@@ -29,6 +29,8 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("SuccessfulM1InCombo", false)
 	character:SetAttribute("UptiltCooldownUntil", 0)
 	character:SetAttribute("BlockBufferedUntil", 0)
+	character:SetAttribute("BlockHeld", false)
+	character:SetAttribute("BlockBufferToken", 0)
 	character:SetAttribute("BlockLockedUntil", 0)
 	character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
 
@@ -280,7 +282,7 @@ function StateService:GuardbreakCharacter(character, duration)
 
 	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("BlockLockedUntil", blockLockedUntil)
-	character:SetAttribute("BlockInputReleasedAfterGuardbreak", false)
+	character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
 	character:SetAttribute("Guardbroken", true)
 	character:SetAttribute("Stunned", true)
 

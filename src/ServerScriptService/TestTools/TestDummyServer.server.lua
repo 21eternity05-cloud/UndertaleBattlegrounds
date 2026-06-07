@@ -5,8 +5,31 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local CombatServer = ServerScriptService:WaitForChild("CombatServer")
 local Config = require(CombatServer:WaitForChild("CombatConfig"))
 
+local AnimationService = require(CombatServer:WaitForChild("AnimationService")).new(Config)
+local VFXService = require(CombatServer:WaitForChild("VFXService")).new(Config)
+local StateService = require(CombatServer:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
+local MovementService = require(CombatServer:WaitForChild("MovementService")).new(Config)
+local BlockService = require(CombatServer:WaitForChild("BlockService")).new(Config, StateService, VFXService)
+local CombatStatusService = require(CombatServer:WaitForChild("CombatStatusService")).new(Config)
+local CounterService = require(CombatServer:WaitForChild("CounterService")).new(
+	Config,
+	StateService,
+	MovementService,
+	VFXService
+)
+
+StateService.CounterService = CounterService
+StateService.CombatStatusService = CombatStatusService
+
 local NPCM1Module = require(script.Parent:WaitForChild("NPCM1"))
-local NPCM1 = NPCM1Module.new(Config)
+local NPCM1 = NPCM1Module.new(Config, {
+	StateService = StateService,
+	MovementService = MovementService,
+	BlockService = BlockService,
+	VFXService = VFXService,
+	CounterService = CounterService,
+	CombatStatusService = CombatStatusService,
+})
 
 local dummyFolder = workspace:WaitForChild("TestDummies")
 
@@ -83,6 +106,12 @@ local function initializeCombatAttributes(character)
 	character:SetAttribute("Attacking", false)
 	character:SetAttribute("Stunned", false)
 	character:SetAttribute("Guardbroken", false)
+	character:SetAttribute("Blocking", false)
+	character:SetAttribute("BlockBufferedUntil", 0)
+	character:SetAttribute("BlockHeld", false)
+	character:SetAttribute("BlockBufferToken", 0)
+	character:SetAttribute("BlockLockedUntil", 0)
+	character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
 
 	character:SetAttribute("UsingMove", false)
 	character:SetAttribute("MoveToken", 0)
@@ -504,4 +533,4 @@ RunService.Heartbeat:Connect(function()
 	faceTarget(root, nearestRoot)
 end)
 
-print("[TestDummyServer] Ready")
+print("[TestDummyServer] Ready. Block buffer test: stand near ComboDummy, get hit, hold block during stun, and block should start as stun ends.")

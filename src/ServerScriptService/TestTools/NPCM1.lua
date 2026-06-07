@@ -119,10 +119,11 @@ local function copyData(data)
 	return copy
 end
 
-function NPCM1.new(config)
+function NPCM1.new(config, services)
 	local self = setmetatable({}, NPCM1)
 
 	self.Config = config or {}
+	services = services or {}
 
 	self.ActiveCarries = {}
 	self.ActiveYHolds = {}
@@ -130,12 +131,17 @@ function NPCM1.new(config)
 	self.CombatVFXFolder = ReplicatedStorage:FindFirstChild("CombatVFX")
 	self.CombatSFXFolder = ReplicatedStorage:FindFirstChild("CombatSFX")
 
-	self.MovementService = nil
+	self.MovementService = services.MovementService
+	self.BlockService = services.BlockService
+	self.StateService = services.StateService
+	self.VFXService = services.VFXService
+	self.CounterService = services.CounterService
+	self.CombatStatusService = services.CombatStatusService
 
 	local combatServer = ServerScriptService:FindFirstChild("CombatServer")
 	local movementServiceModule = combatServer and combatServer:FindFirstChild("MovementService")
 
-	if movementServiceModule then
+	if not self.MovementService and movementServiceModule then
 		local success, movementService = pcall(function()
 			return require(movementServiceModule).new(self.Config)
 		end)
@@ -148,6 +154,203 @@ function NPCM1.new(config)
 	end
 
 	return self
+end
+
+function NPCM1:BuildAttackData(baseData, extraData)
+	local data = {}
+
+	for key, value in pairs(baseData or {}) do
+		data[key] = value
+	end
+
+	for key, value in pairs(extraData or {}) do
+		data[key] = value
+	end
+
+	if data.CanBeBlocked == nil and data.Blockable ~= nil then
+		data.CanBeBlocked = data.Blockable ~= false
+	end
+	if data.CanBeBlocked == nil then
+		data.CanBeBlocked = true
+	end
+	if data.Unblockable == nil then
+		data.Unblockable = false
+	end
+	if data.CanBeCountered == nil then
+		data.CanBeCountered = true
+	end
+	if data.HitCancelsTarget == nil then
+		data.HitCancelsTarget = true
+	end
+	if data.CancelableByHit == nil then
+		data.CancelableByHit = true
+	end
+	if data.IgnoresIFrames == nil then
+		data.IgnoresIFrames = false
+	end
+	if data.IgnoresArmor == nil then
+		data.IgnoresArmor = false
+	end
+
+	return data
+end
+
+function NPCM1:CanAttackBeBlocked(attackData)
+	if self.CombatStatusService and self.CombatStatusService.CanAttackBeBlocked then
+		return self.CombatStatusService:CanAttackBeBlocked(attackData)
+	end
+
+	if attackData.Unblockable == true then return false end
+	if attackData.CanBeBlocked == false then return false end
+	if attackData.Blockable == false then return false end
+
+	return true
+end
+
+function NPCM1:GetArmorInfo(targetCharacter, attackData)
+	if self.CombatStatusService and self.CombatStatusService.GetArmorInfo then
+		return self.CombatStatusService:GetArmorInfo(targetCharacter, attackData)
+	end
+
+	return {
+		Active = false,
+		DamageReduction = 0,
+		PreventsStun = false,
+		PreventsKnockback = false,
+		PreventsHitCancel = false,
+	}
+end
+
+function NPCM1:TryHitCancelTarget(targetCharacter, attackData)
+	if self.CombatStatusService and self.CombatStatusService.TryHitCancelTarget then
+		return self.CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
+	end
+
+	return false
+end
+
+function NPCM1:HasIFrames(targetCharacter, attackData)
+	if self.CombatStatusService and self.CombatStatusService.HasIFrames then
+		return self.CombatStatusService:HasIFrames(targetCharacter, attackData)
+	end
+
+	return targetCharacter:GetAttribute("IFrameActive") == true
+end
+
+function NPCM1:IsDamageLocked(targetCharacter, attackerCharacter)
+	if self.CombatStatusService and self.CombatStatusService.IsDamageLockedFromAttacker then
+		return self.CombatStatusService:IsDamageLockedFromAttacker(targetCharacter, attackerCharacter)
+	end
+
+	return false
+end
+
+function NPCM1:IsM1Immune(targetCharacter)
+	if self.StateService and self.StateService.IsM1Immune then
+		return self.StateService:IsM1Immune(targetCharacter)
+	end
+
+	return os.clock() < (targetCharacter:GetAttribute("M1ImmuneUntil") or 0)
+end
+
+function NPCM1:ApplyM1Immunity(targetCharacter, duration)
+	if self.StateService and self.StateService.ApplyM1Immunity then
+		self.StateService:ApplyM1Immunity(targetCharacter, duration)
+		return
+	end
+
+	targetCharacter:SetAttribute("M1ImmuneUntil", os.clock() + duration)
+end
+
+function NPCM1:TryStandardHitStart(npc, npcRoot, target, targetHumanoid, targetRoot, attackData, attackName, options)
+	options = options or {}
+
+	if not target or not target.Parent then return "Invalid" end
+	if not targetHumanoid or targetHumanoid.Health <= 0 then return "Invalid" end
+	if not targetRoot or not targetRoot.Parent then return "Invalid" end
+
+	if self:IsDamageLocked(target, npc) then
+		return "DamageLocked"
+	end
+
+	if self:HasIFrames(target, attackData) then
+		return "IFrame"
+	end
+
+	if self:TryTriggerCounter(target, npc, attackName, attackData) then
+		return "Countered"
+	end
+
+	if options.RespectM1Immunity and self:IsM1Immune(target) then
+		return "M1Immune"
+	end
+
+	local canBlock = self:CanAttackBeBlocked(attackData)
+
+	if canBlock and options.BlockMode == "Normal" then
+		if self.BlockService and self.BlockService.CanBlockHit and self.BlockService:CanBlockHit(target, npcRoot, attackData) then
+			if self.BlockService.PlayBlockVFX then
+				self.BlockService:PlayBlockVFX(targetRoot)
+			end
+
+			return "Blocked"
+		end
+	elseif canBlock and options.BlockMode == "GuardbreakBlocking" then
+		if target:GetAttribute("Blocking") then
+			if self.StateService and self.StateService.GuardbreakCharacter then
+				self.StateService:GuardbreakCharacter(target, attackData.GuardbreakStun or 1.4)
+			end
+
+			self:ApplyM1Immunity(target, self.Config.PostM5M1Immunity or 1)
+
+			if self.BlockService and self.BlockService.PlayBlockBreakVFX then
+				self.BlockService:PlayBlockBreakVFX(targetRoot)
+			end
+
+			return "Guardbreak"
+		end
+	end
+
+	return "CanHit"
+end
+
+function NPCM1:ApplyDamageAndStun(npc, target, targetHumanoid, targetRoot, attackData, stunDuration, stunAnimationKey)
+	local armorInfo = self:GetArmorInfo(target, attackData)
+
+	self:TryHitCancelTarget(target, attackData)
+
+	local rawDamage = attackData.Damage or 0
+	local finalDamage = rawDamage
+
+	if armorInfo.Active then
+		finalDamage = rawDamage * (1 - (armorInfo.DamageReduction or 0))
+	end
+
+	if finalDamage > 0 then
+		targetHumanoid:TakeDamage(finalDamage)
+
+		if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
+			self.CombatStatusService:TagCombatPair(npc, target)
+		end
+	end
+
+	if stunDuration and stunDuration > 0 then
+		if not armorInfo.Active or not armorInfo.PreventsStun then
+			if self.StateService and self.StateService.StunCharacter then
+				self.StateService:StunCharacter(target, stunDuration, stunAnimationKey)
+			else
+				self:StunTarget(target, stunDuration)
+			end
+		end
+	end
+
+	if self.VFXService and self.VFXService.EmitHitVFXOnVictim then
+		self.VFXService:EmitHitVFXOnVictim(targetRoot, npc)
+	else
+		self:EmitHitVFX(targetRoot)
+	end
+
+	return armorInfo
 end
 
 function NPCM1:GetFinalM1()
@@ -245,10 +448,24 @@ function NPCM1:GetOrCreateCounterAttackerValue(character)
 	return value
 end
 
-function NPCM1:TryTriggerCounter(targetCharacter, attackerCharacter, attackName)
+function NPCM1:TryTriggerCounter(targetCharacter, attackerCharacter, attackName, attackData)
 	if not targetCharacter or not targetCharacter.Parent then return false end
 	if not attackerCharacter or not attackerCharacter.Parent then return false end
 	if targetCharacter == attackerCharacter then return false end
+
+	if self.CounterService and self.CounterService.TryCounterHit then
+		return self.CounterService:TryCounterHit({
+			AttackerCharacter = attackerCharacter,
+			TargetCharacter = targetCharacter,
+			AttackName = attackName or "DummyM1",
+			AttackData = attackData,
+			OnCountered = function()
+				local attackerRoot = attackerCharacter:FindFirstChild("HumanoidRootPart")
+				local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+				self:StopAllMovementControllers(attackerRoot, targetRoot)
+			end,
+		})
+	end
 
 	local targetHumanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 	if not targetHumanoid or targetHumanoid.Health <= 0 then return false end
@@ -758,8 +975,17 @@ function NPCM1:MonitorGroundSplat(target, targetRoot, linearVelocity, attachment
 
 			targetRoot.AssemblyLinearVelocity = Vector3.zero
 
-			self:StunTarget(target, data.GroundSplatStun or 0.55)
-			self:PlaySFX("GroundSplat", targetRoot)
+			if self.StateService and self.StateService.StunCharacter then
+				self.StateService:StunCharacter(target, data.GroundSplatStun or 0.55, "DownslamSplat")
+			else
+				self:StunTarget(target, data.GroundSplatStun or 0.55)
+			end
+
+			if self.VFXService and self.VFXService.PlaySFXAtPart then
+				self.VFXService:PlaySFXAtPart("GroundSplat", targetRoot, 3)
+			else
+				self:PlaySFX("GroundSplat", targetRoot)
+			end
 		end
 	end)
 end
@@ -770,6 +996,15 @@ function NPCM1:DoDownslam(npc)
 	if not self:CanAttack(npc) then return end
 
 	local data = self:GetDownslamData()
+	local attackData = self:BuildAttackData(data, {
+		AttackType = "Downslam",
+		CanBeBlocked = false,
+		Unblockable = true,
+		CanBeCountered = true,
+		HitCancelsTarget = true,
+		Damage = data.Damage,
+		Stun = data.AirStunMax or data.Stun or 1.3,
+	})
 
 	npc:SetAttribute("NPCAttacking", true)
 	npc:SetAttribute("NPCAirComboReady", false)
@@ -778,9 +1013,27 @@ function NPCM1:DoDownslam(npc)
 		if not npc.Parent or humanoid.Health <= 0 then return end
 
 		self:PerformHitbox(npc, root, data, function(target, targetHumanoid, targetRoot)
-			if self:TryTriggerCounter(target, npc, "DummyDownslam") then
+			local result = self:TryStandardHitStart(
+				npc,
+				root,
+				target,
+				targetHumanoid,
+				targetRoot,
+				attackData,
+				"DummyDownslam",
+				{
+					RespectM1Immunity = false,
+					BlockMode = "None",
+				}
+			)
+
+			if result == "Countered" then
 				self:StopAllMovementControllers(root, targetRoot)
 				print("[NPCM1] Downslam countered")
+				return
+			end
+
+			if result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
 				return
 			end
 
@@ -788,10 +1041,25 @@ function NPCM1:DoDownslam(npc)
 
 			self:StopAllMovementControllers(root, targetRoot)
 
-			targetHumanoid:TakeDamage(data.Damage or 3)
-			self:StunTarget(target, data.AirStunMax or 1.3)
-			self:EmitHitVFX(targetRoot)
-			self:PlaySFX("DownslamHit", targetRoot)
+			local armorInfo = self:ApplyDamageAndStun(
+				npc,
+				target,
+				targetHumanoid,
+				targetRoot,
+				attackData,
+				data.AirStunMax or 1.3,
+				"DownslamAir"
+			)
+
+			if self.VFXService and self.VFXService.PlaySFXAtPart then
+				self.VFXService:PlaySFXAtPart("DownslamHit", targetRoot, 3)
+			else
+				self:PlaySFX("DownslamHit", targetRoot)
+			end
+
+			if armorInfo.Active and armorInfo.PreventsKnockback then
+				return
+			end
 
 			local velocity =
 				forward * (data.DownForwardSpeed or 70)
@@ -820,6 +1088,14 @@ function NPCM1:DoUptilt(npc)
 	if npc:GetAttribute("NPCUsedUptilt") then return end
 
 	local data = self:GetUptiltData()
+	local attackData = self:BuildAttackData(data, {
+		AttackType = "Uptilt",
+		CanBeBlocked = true,
+		CanBeCountered = true,
+		HitCancelsTarget = true,
+		Damage = data.Damage,
+		Stun = data.Stun,
+	})
 
 	npc:SetAttribute("NPCAttacking", true)
 	npc:SetAttribute("NPCUsedUptilt", true)
@@ -829,9 +1105,32 @@ function NPCM1:DoUptilt(npc)
 		if not npc.Parent or humanoid.Health <= 0 then return end
 
 		self:PerformHitbox(npc, root, data, function(target, targetHumanoid, targetRoot)
-			if self:TryTriggerCounter(target, npc, "DummyUptilt") then
+			local result = self:TryStandardHitStart(
+				npc,
+				root,
+				target,
+				targetHumanoid,
+				targetRoot,
+				attackData,
+				"DummyUptilt",
+				{
+					RespectM1Immunity = true,
+					BlockMode = "Normal",
+				}
+			)
+
+			if result == "Countered" then
 				self:StopAllMovementControllers(root, targetRoot)
 				print("[NPCM1] Uptilt countered")
+				return
+			end
+
+			if result == "IFrame" or result == "M1Immune" or result == "DamageLocked" or result == "Invalid" then
+				return
+			end
+
+			if result == "Blocked" then
+				print("[NPCM1] Uptilt blocked")
 				return
 			end
 
@@ -839,11 +1138,18 @@ function NPCM1:DoUptilt(npc)
 			npc:SetAttribute("NPCComboCount", math.clamp(currentCombo + 1, 1, self:GetFinalM1() - 1))
 			npc:SetAttribute("NPCLastM1Time", os.clock())
 
-			targetHumanoid:TakeDamage(data.Damage or 2)
-			self:StunTarget(target, data.Stun or 1.2)
-			self:EmitHitVFX(targetRoot)
+			local armorInfo = self:ApplyDamageAndStun(
+				npc,
+				target,
+				targetHumanoid,
+				targetRoot,
+				attackData,
+				data.Stun or 1.2
+			)
 
-			self:StartUptilt(root, targetRoot)
+			if not armorInfo.Active or not armorInfo.PreventsKnockback then
+				self:StartUptilt(root, targetRoot)
+			end
 		end)
 	end)
 
@@ -894,6 +1200,18 @@ function NPCM1:PerformM1(npc, options)
 	end
 
 	local data = self:GetM1Data(combo)
+	local isFinal = combo == finalM1
+	local attackData = self:BuildAttackData(data, {
+		AttackType = "M1",
+		Combo = combo,
+		CanBeBlocked = true,
+		CanBeCountered = true,
+		HitCancelsTarget = true,
+		Guardbreak = isFinal and data.Guardbreak == true,
+		GuardbreakStun = data.GuardbreakStun,
+		Damage = data.Damage,
+		Stun = data.Stun,
+	})
 
 	npc:SetAttribute("NPCAttacking", true)
 
@@ -901,26 +1219,72 @@ function NPCM1:PerformM1(npc, options)
 		if not npc.Parent or humanoid.Health <= 0 then return end
 
 		self:PerformHitbox(npc, root, data, function(target, targetHumanoid, targetRoot)
-			if self:TryTriggerCounter(target, npc, "DummyM" .. tostring(combo)) then
+			local blockMode = isFinal and "GuardbreakBlocking" or "Normal"
+
+			local result = self:TryStandardHitStart(
+				npc,
+				root,
+				target,
+				targetHumanoid,
+				targetRoot,
+				attackData,
+				"DummyM" .. tostring(combo),
+				{
+					RespectM1Immunity = not isFinal,
+					BlockMode = blockMode,
+				}
+			)
+
+			if result == "Countered" then
 				self:StopAllMovementControllers(root, targetRoot)
 				print("[NPCM1] M" .. combo .. " countered")
 				return
 			end
 
-			self:EmitHitVFX(targetRoot)
-			targetHumanoid:TakeDamage(data.Damage or 2)
+			if result == "IFrame" or result == "M1Immune" or result == "DamageLocked" or result == "Invalid" then
+				return
+			end
+
+			if result == "Blocked" then
+				print("[NPCM1] M" .. combo .. " blocked")
+				return
+			end
+
+			if result == "Guardbreak" then
+				self:StopAllMovementControllers(root, targetRoot)
+				print("[NPCM1] M" .. combo .. " guardbreak")
+				return
+			end
+
+			local armorInfo = self:ApplyDamageAndStun(
+				npc,
+				target,
+				targetHumanoid,
+				targetRoot,
+				attackData,
+				data.Stun or 0.65
+			)
 
 			if combo < finalM1 then
-				self:StunTarget(target, data.Stun or 0.65)
-				self:StartCarry(root, targetRoot, data)
-				self:StartYHold(root, 0.35)
-				self:StartYHold(targetRoot, 0.35)
+				if not armorInfo.Active or not armorInfo.PreventsKnockback then
+					self:StartCarry(root, targetRoot, data)
+					self:StartYHold(root, data.YHoldDuration or 0.35)
+					self:StartYHold(targetRoot, data.YHoldDuration or 0.35)
+				end
 			else
 				self:StopAllMovementControllers(root, targetRoot)
 
-				self:StunTarget(target, data.Stun or 0.95)
-				self:ApplyM5Knockback(root, targetRoot, data)
-				self:PlaySFX("GroundM5", targetRoot)
+				if not armorInfo.Active or not armorInfo.PreventsKnockback then
+					self:ApplyM5Knockback(root, targetRoot, data)
+				end
+
+				self:ApplyM1Immunity(target, self.Config.PostM5M1Immunity or 1)
+
+				if self.VFXService and self.VFXService.PlaySFXAtPart then
+					self.VFXService:PlaySFXAtPart("GroundM5", targetRoot, 3)
+				else
+					self:PlaySFX("GroundM5", targetRoot)
+				end
 			end
 		end)
 	end)
