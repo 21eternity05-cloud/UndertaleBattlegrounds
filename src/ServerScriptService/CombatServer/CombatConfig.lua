@@ -34,6 +34,12 @@ CombatConfig.DebugEnabled = false
 
 CombatConfig.PostM5M1Immunity = 1
 
+CombatConfig.DisablePassiveHealing = true
+CombatConfig.AllowOutOfCombatRegen = false -- placeholder for future out of combat regen system, currently has no effect since passive healing is disabled
+CombatConfig.KillCreditWindow = 15
+CombatConfig.ResetKillCreditWindow = 15
+CombatConfig.HealOnKillAmount = 25
+
 -- Ultimate meter
 CombatConfig.UltMax = 100
 

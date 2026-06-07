@@ -446,6 +446,10 @@ function MoveService:ApplyStandardHit(
 	end
 
 	if finalDamage > 0 then
+		if self.KillCreditService then
+			self.KillCreditService:RecordDamage(attackerCharacter, targetCharacter, finalDamage, "Move")
+		end
+
 		targetHumanoid:TakeDamage(finalDamage)
 
 		if status and status.TagCombatPair then
@@ -552,6 +556,7 @@ function MoveService:BuildContext(
 		GrabService = self.GrabService,
 		DamageNumberService = self.DamageNumberService,
 		ProgressionService = self.ProgressionService,
+		KillCreditService = self.KillCreditService,
 
 		CharacterName = characterName,
 		MoveSlot = moveSlot,
@@ -562,8 +567,18 @@ function MoveService:BuildContext(
 		Payload = payload,
 
 		ReportNoUltDamage = function(ctx, targetCharacter, targetRoot, damageAmount)
+			if self.KillCreditService then
+				self.KillCreditService:RecordDamage(character, targetCharacter, damageAmount, "Move")
+			end
+
 			if self.GrabService and self.GrabService.ReportNoUltDamage then
 				self.GrabService:ReportNoUltDamage(character, targetCharacter, targetRoot, damageAmount)
+
+				local humanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.Health <= 0 and self.KillCreditService then
+					self.KillCreditService:AwardKill(character, targetCharacter, "MoveNoUlt")
+				end
+
 				return
 			end
 
@@ -576,7 +591,11 @@ function MoveService:BuildContext(
 			local humanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
 
 			if humanoid and humanoid.Health <= 0 and self.ProgressionService then
-				self.ProgressionService:AwardKill(character, targetCharacter)
+				if self.KillCreditService then
+					self.KillCreditService:AwardKill(character, targetCharacter, "MoveNoUlt")
+				else
+					self.ProgressionService:AwardKill(character, targetCharacter)
+				end
 			end
 		end,
 	}
@@ -859,6 +878,10 @@ function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damag
 		self.CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter)
 	end
 
+	if self.KillCreditService then
+		self.KillCreditService:RecordDamage(attackerCharacter, targetCharacter, damageAmount, "Move")
+	end
+
 	-- Debug damage numbers should be shown for every reported damage event,
 	-- even if the move does not award ult.
 	if self.DamageNumberService and targetRoot then
@@ -878,7 +901,11 @@ function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damag
 		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 
 		if humanoid and humanoid.Health <= 0 then
-			self.ProgressionService:AwardKill(attackerCharacter, targetCharacter)
+			if self.KillCreditService then
+				self.KillCreditService:AwardKill(attackerCharacter, targetCharacter, "MoveDamageEvent")
+			else
+				self.ProgressionService:AwardKill(attackerCharacter, targetCharacter)
+			end
 		end
 	end
 end

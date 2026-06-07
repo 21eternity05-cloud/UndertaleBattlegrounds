@@ -31,6 +31,7 @@ function ProjectileService.new(
 	self.ProgressionService = progressionService
 
 	self.UltService = nil
+	self.KillCreditService = nil
 
 	return self
 end
@@ -303,13 +304,27 @@ function ProjectileService:ReportDamage(ownerCharacter, targetCharacter, targetR
 		return
 	end
 
+	if self.KillCreditService then
+		local source = "Projectile"
+
+		if attackData and attackData.AttackType == "Beam" then
+			source = "Beam"
+		elseif attackData and typeof(attackData.AttackName) == "string" then
+			source = attackData.AttackName
+		end
+
+		self.KillCreditService:RecordDamage(ownerCharacter, targetCharacter, damageAmount, source)
+	end
+
 	self:ShowDamageNumber(targetRoot, damageAmount)
 
 	if attackData and attackData.AwardsUlt == false then
 		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 
 		if humanoid and humanoid.Health <= 0 then
-			if self.ProgressionService and self.ProgressionService.AwardKill then
+			if self.KillCreditService then
+				self.KillCreditService:AwardKill(ownerCharacter, targetCharacter, "ProjectileNoUlt")
+			elseif self.ProgressionService and self.ProgressionService.AwardKill then
 				self.ProgressionService:AwardKill(ownerCharacter, targetCharacter)
 			elseif self.UltService
 				and self.UltService.ProgressionService
@@ -331,7 +346,11 @@ function ProjectileService:ReportDamage(ownerCharacter, targetCharacter, targetR
 		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 
 		if humanoid and humanoid.Health <= 0 then
-			self.ProgressionService:AwardKill(ownerCharacter, targetCharacter)
+			if self.KillCreditService then
+				self.KillCreditService:AwardKill(ownerCharacter, targetCharacter, "ProjectileDamageEvent")
+			else
+				self.ProgressionService:AwardKill(ownerCharacter, targetCharacter)
+			end
 		end
 	end
 end
@@ -344,6 +363,7 @@ function ProjectileService:ApplyProjectileHit(info)
 	local targetRoot = info.TargetRoot
 	local attackData = self:BuildAttackData(info.AttackData)
 	local attackName = info.AttackName or "Projectile"
+	attackData.AttackName = attackName
 
 	if not ownerCharacter or not ownerCharacter.Parent then return "Invalid" end
 	if not targetCharacter or not targetCharacter.Parent then return "Invalid" end

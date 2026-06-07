@@ -22,6 +22,7 @@ function UltService.new(config)
 	self.AllowDummyUltGain = config.AllowDummyUltGain == true
 
 	self.PlayerUlt = {}
+	self.KillCreditService = nil
 
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	self.UltRemote = remotes:FindFirstChild("UltRemote")
@@ -281,7 +282,9 @@ function UltService:AwardDamageEvent(attackerCharacter, targetCharacter, damageA
 	if targetHumanoid and targetHumanoid.Health <= 0 then
 		self:AwardKill(attackerCharacter, targetCharacter)
 
-		if self.ProgressionService and self.ProgressionService.AwardKill then
+		if self.KillCreditService then
+			self.KillCreditService:AwardKill(attackerCharacter, targetCharacter, "DamageEvent")
+		elseif self.ProgressionService and self.ProgressionService.AwardKill then
 			self.ProgressionService:AwardKill(attackerCharacter, targetCharacter)
 		end
 	end

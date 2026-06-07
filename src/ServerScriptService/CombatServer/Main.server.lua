@@ -108,6 +108,12 @@ local SoulBurstService = require(combatFolder:WaitForChild("SoulBurstService")).
 	CinematicService
 )
 
+local KillCreditService = require(combatFolder:WaitForChild("KillCreditService")).new(
+	Config,
+	ProgressionService,
+	CombatStatusService
+)
+
 -- Cross-service wiring
 StateService.CounterService = CounterService
 StateService.CombatStatusService = CombatStatusService
@@ -116,6 +122,8 @@ StateService.UltService = UltService
 StateService.CinematicService = CinematicService
 StateService.SoulBurstService = SoulBurstService
 StateService.SpawnService = SpawnService
+StateService.KillCreditService = KillCreditService
+CombatStatusService.KillCreditService = KillCreditService
 CharacterService.CombatStatusService = CombatStatusService
 CharacterService.SpawnService = SpawnService
 BlockService.SpawnService = SpawnService
@@ -124,6 +132,7 @@ M1Service.UltService = UltService
 M1Service.DamageNumberService = DamageNumberService
 M1Service.SoulBurstService = SoulBurstService
 M1Service.SpawnService = SpawnService
+M1Service.KillCreditService = KillCreditService
 
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
@@ -133,14 +142,17 @@ MoveService.ProgressionService = ProgressionService
 MoveService.GrabService = GrabService
 MoveService.SoulBurstService = SoulBurstService
 MoveService.SpawnService = SpawnService
+MoveService.KillCreditService = KillCreditService
 
 ProjectileService.UltService = UltService
 ProjectileService.DamageNumberService = DamageNumberService
 ProjectileService.ProgressionService = ProgressionService
 ProjectileService.SoulBurstService = SoulBurstService
+ProjectileService.KillCreditService = KillCreditService
 
 CounterService.UltService = UltService
 UltService.ProgressionService = ProgressionService
+UltService.KillCreditService = KillCreditService
 DebugService.SoulBurstService = SoulBurstService
 
 -- Remotes
@@ -208,6 +220,7 @@ end)
 
 -- Startup
 StateService:StartCharacterSetup()
+KillCreditService:Start()
 ProgressionService:Start()
 CharacterMorphService:Start()
 CharacterService:Start()

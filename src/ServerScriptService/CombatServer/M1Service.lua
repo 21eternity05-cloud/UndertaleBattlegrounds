@@ -279,6 +279,10 @@ function M1Service:ApplyDamageAndStun(
 	end
 
 	if finalDamage > 0 then
+		if self.KillCreditService then
+			self.KillCreditService:RecordDamage(attackerCharacter, targetCharacter, finalDamage, "M1")
+		end
+
 		targetHumanoid:TakeDamage(finalDamage)
 		if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
 			self.CombatStatusService:TagCombatPair(attackerCharacter, targetCharacter)
