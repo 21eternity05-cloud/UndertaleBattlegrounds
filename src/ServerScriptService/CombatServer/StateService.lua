@@ -32,6 +32,8 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("BlockHeld", false)
 	character:SetAttribute("BlockBufferToken", 0)
 	character:SetAttribute("BlockLockedUntil", 0)
+	character:SetAttribute("AllowBlockWhileDamageLocked", false)
+	character:SetAttribute("BadTimeBlockPermissionToken", nil)
 	character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
 
 	character:SetAttribute("JumpLockedUntil", 0)

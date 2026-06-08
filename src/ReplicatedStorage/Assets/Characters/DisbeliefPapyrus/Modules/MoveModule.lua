@@ -1,3 +1,4 @@
+
 local MovesFolder = script.Parent:WaitForChild("Moves")
 
 local DisbeliefPapyrusMoves = {}
@@ -12,7 +13,7 @@ function DisbeliefPapyrusMoves.new(config)
 		Move1 = "WeakBoneShot",
 		Move2 = "BoneWall",
 		Move3 = "DisbeliefCounter",
-		Move4 = "BoneSmash",
+		Move4 = "BrokenBlaster",
 		Ultimate = "LastStand",
 	}
 
@@ -20,7 +21,7 @@ function DisbeliefPapyrusMoves.new(config)
 		WeakBoneShot = require(MovesFolder:WaitForChild("WeakBoneShot")),
 		BoneWall = require(MovesFolder:WaitForChild("BoneWall")),
 		DisbeliefCounter = require(MovesFolder:WaitForChild("DisbeliefCounter")),
-		BoneSmash = require(MovesFolder:WaitForChild("BoneSmash")),
+		BrokenBlaster = require(MovesFolder:WaitForChild("BrokenBlaster")),
 		LastStand = require(MovesFolder:WaitForChild("LastStand")),
 	}
 

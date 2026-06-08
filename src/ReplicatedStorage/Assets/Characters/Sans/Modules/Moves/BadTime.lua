@@ -1,6 +1,10 @@
 local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local BLOCK_MODE_NORMAL = "Normal"
+local BLOCK_MODE_ALL_ROUND = "AllRound"
 
 local BadTime = {
 	DisplayName = "Bad Time",
@@ -14,7 +18,7 @@ local BadTime = {
 	RequiresTarget = true,
 	RequiresAim = false,
 
-	WarningTime = .9,
+	WarningTime = .8,
 	ConfirmRange = 80,
 
 	SequenceTime = 25,
@@ -159,6 +163,70 @@ local function clearReservedVictim(character, expectedVictim)
 	end
 
 	value.Value = nil
+end
+
+local function isReservedVictim(ctx, targetCharacter)
+	local reservedTarget = ctx and ctx.BadTimeReservedTargetCharacter
+
+	if not reservedTarget then
+		if ctx and ctx.BadTimeHadReservedTarget then
+			return false
+		end
+
+		return true
+	end
+	if targetCharacter ~= reservedTarget then
+		return false
+	end
+
+	local value = ctx.Character and ctx.Character:FindFirstChild("ReservedVictim")
+
+	if value and value.Value ~= reservedTarget then
+		return false
+	end
+
+	return true
+end
+
+local function setBeatdownBlockPermission(targetCharacter, token, isAllowed)
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+
+	targetCharacter:SetAttribute("BadTimeBlockPermissionToken", token)
+	targetCharacter:SetAttribute("AllowBlockWhileDamageLocked", isAllowed == true)
+end
+
+local function clearBeatdownBlockPermission(targetCharacter, token)
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if token and targetCharacter:GetAttribute("BadTimeBlockPermissionToken") ~= token then
+		return
+	end
+
+	targetCharacter:SetAttribute("AllowBlockWhileDamageLocked", false)
+	targetCharacter:SetAttribute("BadTimeBlockPermissionToken", nil)
+end
+
+local function forceStopBlocking(ctx, targetCharacter)
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+
+	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
+
+	if targetPlayer and ctx.BlockService and ctx.BlockService.SetBlocking then
+		ctx.BlockService:SetBlocking(targetPlayer, false)
+		return
+	end
+
+	targetCharacter:SetAttribute("BlockHeld", false)
+	targetCharacter:SetAttribute("Blocking", false)
+
+	if ctx.StateService and ctx.StateService.StopBlockingVisuals then
+		ctx.StateService:StopBlockingVisuals(targetCharacter)
+	end
 end
 
 local function setupWorldObject(object)
@@ -326,6 +394,29 @@ local function startHeadAttachment(ctx, character, templateName, lifetime, keepE
 end
 
 local function getVictim(ctx)
+	local reservedTarget = ctx and ctx.BadTimeReservedTargetCharacter
+
+	if reservedTarget then
+		if not reservedTarget.Parent then
+			return nil, nil, nil
+		end
+		if not isReservedVictim(ctx, reservedTarget) then
+			return nil, nil, nil
+		end
+
+		local humanoid = reservedTarget:FindFirstChildOfClass("Humanoid")
+		local root = reservedTarget:FindFirstChild("HumanoidRootPart")
+
+		if not humanoid or not root or humanoid.Health <= 0 then
+			return nil, nil, nil
+		end
+
+		return reservedTarget, humanoid, root
+	end
+	if ctx and ctx.BadTimeHadReservedTarget then
+		return nil, nil, nil
+	end
+
 	local targetCharacter, targetHumanoid, targetRoot = ctx:GetValidTarget()
 
 	if not targetCharacter or not targetHumanoid or not targetRoot then
@@ -464,6 +555,9 @@ local function nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot,
 	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
+	if not isReservedVictim(ctx, targetCharacter) then
+		return
+	end
 	if not targetHumanoid or targetHumanoid.Health <= 0 then
 		return
 	end
@@ -486,6 +580,9 @@ local function lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, da
 	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
+	if not isReservedVictim(ctx, targetCharacter) then
+		return
+	end
 	if not targetHumanoid or targetHumanoid.Health <= 0 then
 		return
 	end
@@ -499,20 +596,55 @@ local function lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, da
 	reportDamage(ctx, targetCharacter, targetRoot, damage)
 end
 
-local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, targetRoot, sourcePosition, damage)
+local function makeSequenceAttackData(blockMode)
+	local isAllRoundBlock = blockMode == BLOCK_MODE_ALL_ROUND
+
+	return {
+		Blockable = true,
+		CanBeBlocked = true,
+		Unblockable = false,
+
+		-- All-round block ignores facing direction. Normal block uses front-block checks.
+		IgnoreBlockDirection = isAllRoundBlock,
+		AllRoundBlock = isAllRoundBlock,
+
+		Guardbreak = false,
+		CanBeCountered = false,
+		AwardsUlt = false,
+	}
+end
+
+local function makeNormalBlockableAttackData()
+	return makeSequenceAttackData(BLOCK_MODE_NORMAL)
+end
+
+local function makeAllRoundBlockableAttackData()
+	return makeSequenceAttackData(BLOCK_MODE_ALL_ROUND)
+end
+
+local function blockableSequenceDamage(
+	ctx,
+	targetCharacter,
+	targetHumanoid,
+	targetRoot,
+	sourcePosition,
+	damage,
+	blockMode
+)
+	if not isReservedVictim(ctx, targetCharacter) then
+		return false
+	end
 	if not canDamageTarget(ctx, targetCharacter) then
 		return false
 	end
 
-	local attackData = {
-		Blockable = true,
-		CanBeBlocked = true,
-		Unblockable = false,
-		IgnoreBlockDirection = true,
-		AllRoundBlock = true,
-		CanBeCountered = false,
-		AwardsUlt = false,
-	}
+	local attackData
+
+	if blockMode == BLOCK_MODE_ALL_ROUND then
+		attackData = makeAllRoundBlockableAttackData()
+	else
+		attackData = makeNormalBlockableAttackData()
+	end
 
 	if wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition, attackData) then
 		return false
@@ -624,6 +756,9 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 			targetPosition,
 			data.BoneShotRadius or 7.5,
 			function(hitCharacter, hitHumanoid, hitRoot)
+				if not isReservedVictim(ctx, hitCharacter) then
+					return
+				end
 				if hitOnce then
 					return
 				end
@@ -635,7 +770,8 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 					hitHumanoid,
 					hitRoot,
 					startPosition,
-					data.BoneShotDamage or 1
+					data.BoneShotDamage or 1,
+					BLOCK_MODE_NORMAL
 				)
 			end
 		)
@@ -716,12 +852,15 @@ local function spawnBoneZoneAtVictim(ctx, data)
 	local hitOnce = false
 
 	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, position, 10, function(hitCharacter, hitHumanoid, hitRoot)
+		if not isReservedVictim(ctx, hitCharacter) then
+			return
+		end
 		if hitOnce then
 			return
 		end
 		hitOnce = true
 
-		blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, position, data.BoneZoneDamage or 4)
+		blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, position, data.BoneZoneDamage or 4, BLOCK_MODE_ALL_ROUND)
 	end)
 
 	task.delay(0.5, function()
@@ -801,6 +940,9 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 				wallCFrame.Position,
 				8,
 				function(hitCharacter, hitHumanoid, hitRoot)
+					if not isReservedVictim(ctx, hitCharacter) then
+						return
+					end
 					if hitDone then
 						return
 					end
@@ -812,7 +954,8 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 						hitHumanoid,
 						hitRoot,
 						wallCFrame.Position,
-						data.BoneWallDamage or 4
+						data.BoneWallDamage or 4,
+						BLOCK_MODE_NORMAL
 					)
 				end
 			)
@@ -947,13 +1090,16 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 		data.BlasterBeamStep or 6,
 		radius,
 		function(hitCharacter, hitHumanoid, hitRoot, hitPosition)
+			if not isReservedVictim(ctx, hitCharacter) then
+				return
+			end
 			if hitOnce then
 				return
 			end
 			hitOnce = true
 
 			if blockable ~= false then
-				blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, hitPosition, damage)
+				blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, startPosition, damage, BLOCK_MODE_NORMAL)
 			else
 				nonlethalDamage(ctx, hitCharacter, hitHumanoid, hitRoot, damage)
 
@@ -1378,9 +1524,9 @@ local function finalSlam(ctx, data)
 	slamData.DownForwardSpeed = data.FinalSlamForwardSpeed or 12
 	slamData.DownSpeed = data.FinalSlamDownSpeed or -95
 	slamData.DownLaunchMaxForce = data.FinalSlamMaxForce or 95000
-	slamData.AirStunMax = data.FinalSlamAirStunMax or 1.1
-	slamData.GroundSplatStun = data.FinalSlamGroundSplatStun or 0.45
-	slamData.PostSplatM1Immunity = data.FinalSlamM1Immunity or 1
+	slamData.AirStunMax = 3
+	slamData.GroundSplatStun = 2
+	slamData.PostSplatM1Immunity = data.FinalSlamM1Immunity or 0
 	slamData.SplatPartLifetime = data.SplatPartLifetime or 0.35
 	slamData.SplatPartSize = data.SplatPartSize or Vector3.new(10, 0.25, 10)
 	slamData.AirAnimationName = "DownslamAir"
@@ -1420,6 +1566,8 @@ function BadTime.Execute(ctx)
 	for key, value in pairs(ctx.MoveData or {}) do
 		data[key] = value
 	end
+	ctx.BadTimeReservedTargetCharacter = nil
+	ctx.BadTimeHadReservedTarget = false
 
 	if not character or not character.Parent then
 		ctx:FinishMove(0)
@@ -1447,6 +1595,7 @@ function BadTime.Execute(ctx)
 	local eyeGlowAttachment = nil
 	local sansLockState = nil
 	local confirmedVictim = nil
+	local beatdownBlockToken = nil
 	local cinematicService = ctx.CinematicService
 
 	local function cleanup()
@@ -1469,11 +1618,19 @@ function BadTime.Execute(ctx)
 			cinematicService:ClearTemporaryCombatStatus(character)
 		end
 
-		if ctx.CombatStatusService and ctx.CombatStatusService.ClearDamageLock then
-			ctx.CombatStatusService:ClearDamageLock(targetCharacter, character)
+		if confirmedVictim then
+			clearBeatdownBlockPermission(confirmedVictim, beatdownBlockToken)
 		end
 
-		clearReservedVictim(character, confirmedVictim)
+		if confirmedVictim and ctx.CombatStatusService and ctx.CombatStatusService.ClearDamageLock then
+			ctx.CombatStatusService:ClearDamageLock(confirmedVictim, character)
+		end
+
+		if confirmedVictim then
+			clearReservedVictim(character, confirmedVictim)
+		end
+
+		ctx.BadTimeReservedTargetCharacter = nil
 
 		if cinematicService then
 			cinematicService:ResetCamera(character)
@@ -1556,6 +1713,9 @@ function BadTime.Execute(ctx)
 
 	print("[BadTime] Confirmed:", targetCharacter.Name)
 	confirmedVictim = targetCharacter
+	ctx.BadTimeReservedTargetCharacter = confirmedVictim
+	ctx.BadTimeHadReservedTarget = true
+	beatdownBlockToken = (targetCharacter:GetAttribute("BadTimeBlockPermissionToken") or 0) + 1
 	setReservedVictim(character, confirmedVictim)
 
 	-- DamageLock only prevents other players from damaging/stealing this victim.
@@ -1563,6 +1723,7 @@ function BadTime.Execute(ctx)
 	if ctx.CombatStatusService and ctx.CombatStatusService.SetDamageLock then
 		ctx.CombatStatusService:SetDamageLock(targetCharacter, character, data.SequenceTime or 11.5)
 	end
+	setBeatdownBlockPermission(targetCharacter, beatdownBlockToken, true)
 
 	if cinematicService then
 		sansLockState = cinematicService:LockCharacter(character, {
@@ -1623,6 +1784,8 @@ function BadTime.Execute(ctx)
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 
 	if targetCharacter then
+		clearBeatdownBlockPermission(targetCharacter, beatdownBlockToken)
+		forceStopBlocking(ctx, targetCharacter)
 		teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 		runBlueGravityFinale(ctx, data)
 	end

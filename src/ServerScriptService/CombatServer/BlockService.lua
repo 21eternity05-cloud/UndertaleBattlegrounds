@@ -65,6 +65,8 @@ function BlockService:CanBlockNow(character)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then return false end
 
+	local allowBlockWhileDamageLocked = character:GetAttribute("AllowBlockWhileDamageLocked") == true
+
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Attacking") then return false end
@@ -73,10 +75,10 @@ function BlockService:CanBlockNow(character)
 	if os.clock() < (character:GetAttribute("BlockLockedUntil") or 0) then return false end
 	if character:GetAttribute("Grabbed") then return false end
 	if character:GetAttribute("GrabLocked") then return false end
-	if character:GetAttribute("CinematicLocked") then return false end
-	if character:GetAttribute("MovementLocked") then return false end
-	if character:GetAttribute("ReservedVictim") then return false end
-	if character:GetAttribute("DamageLocked") then return false end
+	if character:GetAttribute("CinematicLocked") and not allowBlockWhileDamageLocked then return false end
+	if character:GetAttribute("MovementLocked") and not allowBlockWhileDamageLocked then return false end
+	if character:GetAttribute("ReservedVictim") and not allowBlockWhileDamageLocked then return false end
+	if character:GetAttribute("DamageLocked") and not allowBlockWhileDamageLocked then return false end
 	if character:GetAttribute("SoulBursting") then return false end
 
 	return true
@@ -139,6 +141,7 @@ function BlockService:HookBlockWakeSignals(player, character)
 		"MovementLocked",
 		"ReservedVictim",
 		"DamageLocked",
+		"AllowBlockWhileDamageLocked",
 		"SoulBursting",
 		"UsingMove",
 		"Attacking",
