@@ -64,7 +64,7 @@ CombatConfig.AllowDummyUltGain = true
 
 -- Universal SOUL BURST evasive meter
 CombatConfig.SoulBurstMax = 300
-CombatConfig.SoulBurstHitGain = 8
+CombatConfig.SoulBurstHitGain = 6
 CombatConfig.SoulBurstDamageGainMultiplier = 0.5
 CombatConfig.SoulBurstStunGainMultiplier = 5
 CombatConfig.SoulBurstComboExtenderBonus = 5

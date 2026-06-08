@@ -326,6 +326,61 @@ function DebugService:IsSoulBurstButton(instance)
 	return false
 end
 
+function DebugService:IsHealButton(instance)
+	if not instance then
+		return false
+	end
+
+	if instance.Name == "HEAL_BUTTON" then
+		return true
+	end
+
+	if instance:GetAttribute("HealButton") == true then
+		return true
+	end
+
+	return false
+end
+
+function DebugService:HealCharacter(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return
+	end
+
+	character:SetAttribute("AllowCombatHealUntil", os.clock() + 0.2)
+	humanoid.Health = humanoid.MaxHealth
+end
+
+function DebugService:HealAllPlayersAndDummies()
+	for _, player in ipairs(Players:GetPlayers()) do
+		self:HealCharacter(player.Character)
+	end
+
+	local dummyFolder = workspace:FindFirstChild("TestDummies")
+	if dummyFolder then
+		for _, descendant in ipairs(dummyFolder:GetDescendants()) do
+			if descendant:IsA("Humanoid") then
+				self:HealCharacter(descendant.Parent)
+			end
+		end
+	end
+
+	for _, dummyName in ipairs({
+		"RespawnDummy",
+		"ComboDummy",
+		"AirComboDummy",
+		"BlockDummy",
+		"SOULBURSTDummy",
+	}) do
+		self:HealCharacter(workspace:FindFirstChild(dummyName))
+	end
+end
+
 function DebugService:GetPlayerFromHit(hit)
 	if not hit then
 		return nil
@@ -428,6 +483,28 @@ function DebugService:HookSoulBurstButton(button)
 	print("[DebugService] Hooked soul burst button:", button:GetFullName())
 end
 
+function DebugService:HookHealButton(button)
+	if not button or not button:IsA("BasePart") then
+		return
+	end
+
+	button.Touched:Connect(function(hit)
+		local player = self:GetPlayerFromHit(hit)
+
+		if not player then
+			return
+		end
+
+		if not self:CanTouch(player) then
+			return
+		end
+
+		self:HealAllPlayersAndDummies()
+	end)
+
+	print("[DebugService] Hooked heal button:", button:GetFullName())
+end
+
 function DebugService:Start()
 	self:SetEnabled(false)
 	self:SetCooldownDebugEnabled(false)
@@ -455,6 +532,12 @@ function DebugService:Start()
 		self:HookSoulBurstButton(soulBurstButton)
 	end
 
+	local healButton = workspace:FindFirstChild("HEAL_BUTTON")
+
+	if healButton and healButton:IsA("BasePart") then
+		self:HookHealButton(healButton)
+	end
+
 	workspace.DescendantAdded:Connect(function(descendant)
 		if self:IsDebugButton(descendant) and descendant:IsA("BasePart") then
 			self:HookDebugButton(descendant)
@@ -462,6 +545,8 @@ function DebugService:Start()
 			self:HookCooldownButton(descendant)
 		elseif self:IsSoulBurstButton(descendant) and descendant:IsA("BasePart") then
 			self:HookSoulBurstButton(descendant)
+		elseif self:IsHealButton(descendant) and descendant:IsA("BasePart") then
+			self:HookHealButton(descendant)
 		end
 	end)
 

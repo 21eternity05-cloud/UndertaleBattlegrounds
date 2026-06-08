@@ -704,10 +704,14 @@ function M1Service:DoDownslam(player)
 	end
 
 	local rawData = self.M1Data.Downslam
+	local finalM1Data = self.M1Data[self.FinalM1] or {}
 	local attackData = self:BuildAttackData(rawData, {
 		AttackType = "Downslam",
-		CanBeBlocked = false,
-		Unblockable = true,
+		Combo = self.FinalM1,
+		CanBeBlocked = true,
+		Unblockable = false,
+		Guardbreak = true,
+		GuardbreakStun = finalM1Data.GuardbreakStun or rawData.GuardbreakStun,
 		CanBeCountered = true,
 		HitCancelsTarget = true,
 		Damage = rawData.Damage,
@@ -758,7 +762,7 @@ function M1Service:DoDownslam(player)
 					"Downslam",
 					{
 						RespectM1Immunity = false,
-						BlockMode = "None",
+						BlockMode = "GuardbreakBlocking",
 					}
 				)
 
@@ -772,6 +776,15 @@ function M1Service:DoDownslam(player)
 					or result == "DamageLocked"
 					or result == "Invalid"
 				then
+					return
+				end
+
+				if result == "Guardbreak" then
+					if self.UltService then
+						self.UltService:AwardGuardbreak(character, targetCharacter)
+					end
+
+					print("M5 DOWNSLAM GUARDBREAK")
 					return
 				end
 

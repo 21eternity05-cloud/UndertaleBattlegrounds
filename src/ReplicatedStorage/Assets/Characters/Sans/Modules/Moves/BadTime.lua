@@ -355,6 +355,7 @@ local function makeConfirmAttackData(data)
 	attackData.Blockable = true
 	attackData.CanBeBlocked = true
 	attackData.IgnoreBlockDirection = true
+	attackData.AllRoundBlock = true
 	attackData.Unblockable = false
 	attackData.Guardbreak = false
 	attackData.CanBeCountered = true
@@ -365,7 +366,7 @@ local function makeConfirmAttackData(data)
 	return attackData
 end
 
-local function wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition)
+local function wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition, attackData)
 	if not targetCharacter or not targetRoot then
 		return false
 	end
@@ -380,7 +381,7 @@ local function wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePo
 		Position = sourcePosition,
 	}
 
-	if ctx.BlockService:CanBlockHit(targetCharacter, blockSource) then
+	if ctx.BlockService:CanBlockHit(targetCharacter, blockSource, attackData) then
 		if ctx.BlockService.PlayBlockVFX then
 			ctx.BlockService:PlayBlockVFX(targetRoot)
 		end
@@ -503,7 +504,17 @@ local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, tar
 		return false
 	end
 
-	if wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition) then
+	local attackData = {
+		Blockable = true,
+		CanBeBlocked = true,
+		Unblockable = false,
+		IgnoreBlockDirection = true,
+		AllRoundBlock = true,
+		CanBeCountered = false,
+		AwardsUlt = false,
+	}
+
+	if wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition, attackData) then
 		return false
 	end
 
@@ -1405,7 +1416,10 @@ function BadTime.Execute(ctx)
 	local character = ctx.Character
 	local humanoid = ctx.Humanoid
 	local root = ctx.Root
-	local data = ctx.MoveData
+	local data = {}
+	for key, value in pairs(ctx.MoveData or {}) do
+		data[key] = value
+	end
 
 	if not character or not character.Parent then
 		ctx:FinishMove(0)

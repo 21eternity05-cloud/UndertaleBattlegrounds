@@ -147,6 +147,32 @@ function MoveService:SetCooldown(player, moveId, moveData)
 	self.Cooldowns[userId][moveId] = os.clock() + lockTime + cooldown
 end
 
+function MoveService:GetTargetRange(moveData)
+	if moveData and typeof(moveData.TargetRange) == "number" then
+		return moveData.TargetRange
+	end
+
+	if moveData and typeof(moveData.MaxTargetRange) == "number" then
+		return moveData.MaxTargetRange
+	end
+
+	return nil
+end
+
+function MoveService:IsTargetInRange(attackerRoot, targetRoot, moveData)
+	local targetRange = self:GetTargetRange(moveData)
+
+	if not targetRange then
+		return true
+	end
+
+	if not attackerRoot or not targetRoot then
+		return false
+	end
+
+	return (targetRoot.Position - attackerRoot.Position).Magnitude <= targetRange
+end
+
 function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
 	if not VALID_MOVE_SLOTS[moveSlot] then
 		return false
@@ -665,6 +691,10 @@ function MoveService:BuildContext(
 			return nil
 		end
 
+		if not moveService:IsTargetInRange(root, currentRoot, moveData) then
+			return nil
+		end
+
 		return targetCharacter, currentHumanoid, currentRoot
 	end
 
@@ -801,7 +831,11 @@ function MoveService:PerformMove(player, moveRequest)
 			local targetHumanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 			local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
 
-			if targetHumanoid and targetRoot and targetHumanoid.Health > 0 then
+			if targetHumanoid
+				and targetRoot
+				and targetHumanoid.Health > 0
+				and self:IsTargetInRange(root, targetRoot, moveData)
+			then
 				validTarget = true
 			end
 		end

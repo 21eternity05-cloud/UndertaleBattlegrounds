@@ -8,6 +8,7 @@ local Config = require(CombatServer:WaitForChild("CombatConfig"))
 local AnimationService = require(CombatServer:WaitForChild("AnimationService")).new(Config)
 local VFXService = require(CombatServer:WaitForChild("VFXService")).new(Config)
 local StateService = require(CombatServer:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
+local HitboxService = require(CombatServer:WaitForChild("HitboxService")).new(Config)
 local MovementService = require(CombatServer:WaitForChild("MovementService")).new(Config)
 local BlockService = require(CombatServer:WaitForChild("BlockService")).new(Config, StateService, VFXService)
 local CombatStatusService = require(CombatServer:WaitForChild("CombatStatusService")).new(Config)
@@ -20,6 +21,16 @@ local CounterService = require(CombatServer:WaitForChild("CounterService")).new(
 
 StateService.CounterService = CounterService
 StateService.CombatStatusService = CombatStatusService
+
+local SoulBurstService = require(CombatServer:WaitForChild("SoulBurstService")).new(
+	Config,
+	StateService,
+	CombatStatusService,
+	MovementService,
+	HitboxService,
+	VFXService,
+	CounterService
+)
 
 local NPCM1Module = require(script.Parent:WaitForChild("NPCM1"))
 local NPCM1 = NPCM1Module.new(Config, {
@@ -44,6 +55,14 @@ local RESPAWN_DUMMY_HEALTH = Config.RespawnDummyHealth or 100
 local activeLoops = {}
 local respawnTemplates = {}
 local respawnCFrames = {}
+
+local RESPAWNING_DUMMY_NAMES = {
+	RespawnDummy = true,
+	ComboDummy = true,
+	AirComboDummy = true,
+	BlockDummy = true,
+	SOULBURSTDummy = true,
+}
 
 local function findHumanoidAndRoot(model)
 	if not model then return nil, nil end
@@ -136,6 +155,10 @@ local function isRespawnDummy(dummy)
 		return true
 	end
 
+	if RESPAWNING_DUMMY_NAMES[dummy.Name] then
+		return true
+	end
+
 	local loweredName = string.lower(dummy.Name)
 
 	if string.find(loweredName, "respawn") then
@@ -143,6 +166,23 @@ local function isRespawnDummy(dummy)
 	end
 
 	return false
+end
+
+local function setupCommonDummyStats(dummy, humanoid, respawns)
+	dummy:SetAttribute("RespawnDummy", respawns == true)
+	dummy:SetAttribute("Immortal", respawns ~= true)
+	dummy:SetAttribute("TestDummy", true)
+
+	humanoid.BreakJointsOnDeath = false
+	humanoid.RequiresNeck = false
+
+	if respawns then
+		humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
+		humanoid.Health = RESPAWN_DUMMY_HEALTH
+	else
+		humanoid.MaxHealth = IMMORTAL_DUMMY_HEALTH
+		humanoid.Health = IMMORTAL_DUMMY_HEALTH
+	end
 end
 
 local function isImmortalDummy(dummy)
@@ -184,10 +224,7 @@ local function cacheRespawnTemplate(dummy)
 
 	local templateHumanoid = template:FindFirstChildOfClass("Humanoid")
 	if templateHumanoid then
-		templateHumanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
-		templateHumanoid.Health = RESPAWN_DUMMY_HEALTH
-		templateHumanoid.BreakJointsOnDeath = false
-		templateHumanoid.RequiresNeck = false
+		setupCommonDummyStats(template, templateHumanoid, true)
 	end
 
 	respawnTemplates[dummy.Name] = template
@@ -370,11 +407,140 @@ local function startAirComboDummy(dummy)
 	end)
 end
 
+local function getSoulBurstAdornee(dummy)
+	return dummy:FindFirstChild("Torso")
+		or dummy:FindFirstChild("UpperTorso")
+		or dummy:FindFirstChild("HumanoidRootPart")
+end
+
+local function isDebugEnabled()
+	return Config.DebugEnabled == true or workspace:GetAttribute("DebugEnabled") == true
+end
+
+local function clearSoulBurstBillboard(dummy)
+	local billboard = dummy and dummy:FindFirstChild("SoulBurstDummyBillboard")
+
+	if billboard then
+		billboard:Destroy()
+	end
+end
+
+local function getOrCreateSoulBurstBillboard(dummy)
+	if not isDebugEnabled() then
+		clearSoulBurstBillboard(dummy)
+		return nil
+	end
+
+	local adornee = getSoulBurstAdornee(dummy)
+	if not adornee then
+		return nil
+	end
+
+	local billboard = dummy:FindFirstChild("SoulBurstDummyBillboard")
+
+	if not billboard then
+		billboard = Instance.new("BillboardGui")
+		billboard.Name = "SoulBurstDummyBillboard"
+		billboard.AlwaysOnTop = true
+		billboard.MaxDistance = 180
+		billboard.Size = UDim2.fromOffset(250, 50)
+		billboard.StudsOffset = Vector3.new(0, 0, 0)
+		billboard.Parent = dummy
+
+		local text = Instance.new("TextLabel")
+		text.Name = "SoulText"
+		text.BackgroundTransparency = 0.2
+		text.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+		text.BorderSizePixel = 0
+		text.Size = UDim2.fromScale(1, 1)
+		text.Font = Enum.Font.GothamBold
+		text.TextSize = 15
+		text.TextScaled = false
+		text.TextColor3 = Color3.fromRGB(245, 245, 255)
+		text.TextStrokeTransparency = 0.35
+		text.Parent = billboard
+	end
+
+	billboard.Adornee = adornee
+
+	return billboard
+end
+
+local function updateSoulBurstBillboard(dummy)
+	if not isDebugEnabled() then
+		clearSoulBurstBillboard(dummy)
+		return
+	end
+
+	local billboard = getOrCreateSoulBurstBillboard(dummy)
+	if not billboard then
+		return
+	end
+
+	local text = billboard:FindFirstChild("SoulText")
+	if text and text:IsA("TextLabel") then
+		text.Text = string.format(
+			"Soul: %d / %d",
+			math.floor(dummy:GetAttribute("SoulBurst") or 0),
+			SoulBurstService:GetMax()
+		)
+	end
+end
+
+local function startSoulBurstDummy(dummy)
+	if activeLoops[dummy] then return end
+	activeLoops[dummy] = true
+
+	dummy:SetAttribute("SoulBurstDummy", true)
+	dummy:SetAttribute("CanSoulBurst", true)
+	dummy:SetAttribute("SoulBurst", dummy:GetAttribute("SoulBurst") or 0)
+	dummy:SetAttribute("SoulBursting", false)
+	dummy:SetAttribute("SoulBurstCooldownUntil", dummy:GetAttribute("SoulBurstCooldownUntil") or 0)
+	dummy:SetAttribute("SoulBurstIFrameId", dummy:GetAttribute("SoulBurstIFrameId") or 0)
+
+	local lastStunnedAt = dummy:GetAttribute("Stunned") == true and os.clock() or nil
+	updateSoulBurstBillboard(dummy)
+
+	task.spawn(function()
+		while dummy.Parent and activeLoops[dummy] do
+			local humanoid = dummy:FindFirstChildOfClass("Humanoid")
+
+			if not humanoid or humanoid.Health <= 0 then
+				task.wait(0.2)
+				continue
+			end
+
+			if dummy:GetAttribute("Stunned") == true then
+				lastStunnedAt = os.clock()
+
+				if (dummy:GetAttribute("SoulBurst") or 0) >= SoulBurstService:GetCost()
+					and dummy:GetAttribute("CanSoulBurst") == true
+				then
+					SoulBurstService:ActivateSoulBurstForCharacter(dummy)
+				end
+			elseif lastStunnedAt and os.clock() - lastStunnedAt >= 3 then
+				if (dummy:GetAttribute("SoulBurst") or 0) ~= 0 then
+					SoulBurstService:SetSoulBurst(dummy, 0, "DummyOutOfStunReset")
+				end
+
+				lastStunnedAt = nil
+			end
+
+			updateSoulBurstBillboard(dummy)
+			task.wait(0.15)
+		end
+
+		activeLoops[dummy] = nil
+	end)
+end
+
 local function startDummyBehavior(dummy)
 	if dummy.Name == "ComboDummy" or dummy:GetAttribute("ComboDummy") == true then
 		startComboDummy(dummy)
 	elseif dummy.Name == "AirComboDummy" or dummy:GetAttribute("AirComboDummy") == true then
 		startAirComboDummy(dummy)
+	elseif dummy.Name == "SOULBURSTDummy" or dummy:GetAttribute("SoulBurstDummy") == true then
+		startSoulBurstDummy(dummy)
 	end
 end
 
@@ -398,10 +564,7 @@ local function respawnDummy(dummyName)
 
 	local humanoid = clone:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
-		humanoid.Health = RESPAWN_DUMMY_HEALTH
-		humanoid.BreakJointsOnDeath = false
-		humanoid.RequiresNeck = false
+		setupCommonDummyStats(clone, humanoid, true)
 	end
 
 	clone.Parent = dummyFolder
@@ -426,29 +589,9 @@ local function setupDummy(dummy)
 
 	local respawns = isRespawnDummy(dummy)
 
-	if respawns then
-	dummy:SetAttribute("RespawnDummy", true)
-	dummy:SetAttribute("Immortal", false)
-
-	humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
-	humanoid.Health = RESPAWN_DUMMY_HEALTH
-else
-	humanoid.MaxHealth = IMMORTAL_DUMMY_HEALTH
-	humanoid.Health = IMMORTAL_DUMMY_HEALTH
-end
+	setupCommonDummyStats(dummy, humanoid, respawns)
 
 	cacheRespawnTemplate(dummy)
-
-	humanoid.BreakJointsOnDeath = false
-	humanoid.RequiresNeck = false
-
-	if respawns then
-		humanoid.MaxHealth = RESPAWN_DUMMY_HEALTH
-		humanoid.Health = RESPAWN_DUMMY_HEALTH
-	else
-		humanoid.MaxHealth = IMMORTAL_DUMMY_HEALTH
-		humanoid.Health = IMMORTAL_DUMMY_HEALTH
-	end
 
 	root.Anchored = false
 
@@ -459,7 +602,7 @@ end
 	initializeCombatAttributes(dummy)
 
 	if dummy.Name == "BlockDummy" or dummy:GetAttribute("BlockDummy") == true then
-		dummy:SetAttribute("Blocking", true)
+		dummy:SetAttribute("BlockHeld", true)
 	else
 		dummy:SetAttribute("Blocking", false)
 	end
@@ -525,7 +668,10 @@ RunService.Heartbeat:Connect(function()
 	local humanoid, root = findHumanoidAndRoot(blockDummy)
 	if not humanoid or not root or humanoid.Health <= 0 then return end
 
-	blockDummy:SetAttribute("Blocking", true)
+	blockDummy:SetAttribute("BlockHeld", true)
+	if blockDummy:GetAttribute("Blocking") ~= true then
+		BlockService:SetCharacterBlocking(blockDummy, true)
+	end
 
 	local _, _, _, nearestRoot = getNearestPlayer(root.Position)
 	if not nearestRoot then return end

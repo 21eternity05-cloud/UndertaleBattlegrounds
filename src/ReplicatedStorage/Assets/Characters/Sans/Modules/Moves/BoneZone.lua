@@ -10,6 +10,7 @@ local BoneZone = {
 	MaxLockTime = 1,
 
 	RequiresTarget = true,
+	TargetRange = 40,
 
 	WarningTime = 0.5,
 	EarlyUnlockTime = 0.2,
@@ -21,8 +22,9 @@ local BoneZone = {
 	Stun = 0.75,
 
 	Knockback = 120,
-	UpwardKnockback = 85,
+	UpwardKnockback = 0,
 	UseAttackerAsKnockbackSource = true,
+	WallComboPrevention = true,
 
 	CanBeBlocked = true,
 	IgnoreBlockDirection = true,
@@ -390,14 +392,20 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 			direction = direction.Unit
 		end
 
-		if ctx.MovementService and ctx.MovementService.ApplyStraightKnockback then
-			ctx.MovementService:ApplyStraightKnockback(
+		if ctx.MovementService and ctx.MovementService.ApplyForceKnockback then
+			local velocity = (direction * (attackData.Knockback or 120))
+				+ Vector3.new(0, attackData.UpwardKnockback or 85, 0)
+
+			ctx.MovementService:ApplyForceKnockback(
 				targetRoot,
-				direction,
-				attackData.Knockback or 120,
-				attackData.UpwardKnockback or 85,
+				velocity,
 				attackData.KnockbackDuration or 0.28,
-				attackData.KnockbackMaxForce or 130000
+				attackData.KnockbackMaxForce or 130000,
+				"BoneZone",
+				{
+					EnableWallComboPrevention = attackData.WallComboPrevention == true,
+					AttackerCharacter = ctx.Character,
+				}
 			)
 		else
 			targetRoot.AssemblyLinearVelocity =

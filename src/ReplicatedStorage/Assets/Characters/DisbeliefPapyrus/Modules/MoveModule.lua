@@ -9,18 +9,18 @@ function DisbeliefPapyrusMoves.new(config)
 	self.Config = config
 
 	self.Slots = {
-		Move1 = "BoneRush",
-		Move2 = "BlueSlam",
+		Move1 = "WeakBoneShot",
+		Move2 = "BoneWall",
 		Move3 = "DisbeliefCounter",
-		Move4 = "SpineWall",
+		Move4 = "BoneSmash",
 		Ultimate = "LastStand",
 	}
 
 	self.Moves = {
-		BoneRush = require(MovesFolder:WaitForChild("BoneRush")),
-		BlueSlam = require(MovesFolder:WaitForChild("BlueSlam")),
+		WeakBoneShot = require(MovesFolder:WaitForChild("WeakBoneShot")),
+		BoneWall = require(MovesFolder:WaitForChild("BoneWall")),
 		DisbeliefCounter = require(MovesFolder:WaitForChild("DisbeliefCounter")),
-		SpineWall = require(MovesFolder:WaitForChild("SpineWall")),
+		BoneSmash = require(MovesFolder:WaitForChild("BoneSmash")),
 		LastStand = require(MovesFolder:WaitForChild("LastStand")),
 	}
 

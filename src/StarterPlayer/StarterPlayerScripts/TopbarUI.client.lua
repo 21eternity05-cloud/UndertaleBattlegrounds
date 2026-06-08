@@ -909,9 +909,6 @@ local function showCustomize()
 					end, owned)
 				end
 			end
-		elseif category == "Auras" then
-			addItemButton("No Aura", function() end, true)
-			addItemButton("Future Aura Slot", function() end, false)
 		elseif category == "Emotes" then
 			addItemButton("Future Emote Slot", function() end, false)
 		end
@@ -921,7 +918,6 @@ local function showCustomize()
 		"Characters",
 		"Skins",
 		"Titles",
-		"Auras",
 		"Emotes",
 	}
 

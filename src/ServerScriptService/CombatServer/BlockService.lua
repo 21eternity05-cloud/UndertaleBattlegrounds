@@ -235,6 +235,44 @@ function BlockService:StartBlockRetry(player, character)
 	end)
 end
 
+function BlockService:SetCharacterBlocking(character, isBlocking)
+	if not character or not character.Parent then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return
+	end
+
+	if isBlocking then
+		character:SetAttribute("BlockHeld", true)
+
+		if self:CanBlockNow(character) then
+			self:StartBlockingNow(character, humanoid)
+		end
+	else
+		character:SetAttribute("BlockHeld", false)
+		self:StopBlockRetry(character)
+		character:SetAttribute("Blocking", false)
+
+		if self.StateService.AnimationService then
+			self.StateService.AnimationService:StopBlockAnimation(character)
+		end
+
+		self.VFXService:StopBlockVFX(character)
+
+		if not character:GetAttribute("Stunned")
+			and not character:GetAttribute("Guardbroken")
+			and not character:GetAttribute("UsingMove")
+		then
+			humanoid.WalkSpeed = self.Config.DefaultWalkSpeed
+			humanoid.JumpPower = self.Config.DefaultJumpPower
+			humanoid.JumpHeight = self.Config.DefaultJumpHeight
+		end
+	end
+end
+
 function BlockService:SetBlocking(player, isBlocking)
 	local character, humanoid, root = self.StateService:GetCharacterInfo(player)
 	if not character then return end
