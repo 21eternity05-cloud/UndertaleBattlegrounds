@@ -694,6 +694,10 @@ local function cloneM1Bone(ctx)
 end
 
 local function spawnBoneShotAtVictim(ctx, data, index, count)
+	if not ctx:IsActive() then
+		return
+	end
+
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then
 		return
@@ -749,6 +753,11 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 
 		cframeValue:Destroy()
 
+		if not ctx:IsActive() then
+			fadeOutObject(bone, 0.08)
+			return
+		end
+
 		local hitOnce = false
 
 		ctx.HitboxService:PerformSphereAtPosition(
@@ -756,6 +765,9 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 			targetPosition,
 			data.BoneShotRadius or 7.5,
 			function(hitCharacter, hitHumanoid, hitRoot)
+				if not ctx:IsActive() then
+					return
+				end
 				if not isReservedVictim(ctx, hitCharacter) then
 					return
 				end
@@ -782,6 +794,10 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 end
 
 local function spawnBoneZoneAtVictim(ctx, data)
+	if not ctx:IsActive() then
+		return
+	end
+
 	local targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then
 		return
@@ -806,6 +822,11 @@ local function spawnBoneZoneAtVictim(ctx, data)
 	playSansSFX(ctx, "BoneZoneWarning", targetRoot, 2)
 
 	task.wait(0.34)
+
+	if not ctx:IsActive() then
+		fadeOutObject(zoneModel, 0.16)
+		return
+	end
 
 	if not zoneModel.Parent then
 		return
@@ -852,6 +873,9 @@ local function spawnBoneZoneAtVictim(ctx, data)
 	local hitOnce = false
 
 	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, position, 10, function(hitCharacter, hitHumanoid, hitRoot)
+		if not ctx:IsActive() then
+			return
+		end
 		if not isReservedVictim(ctx, hitCharacter) then
 			return
 		end
@@ -871,6 +895,10 @@ local function spawnBoneZoneAtVictim(ctx, data)
 end
 
 local function spawnTrackingBoneWall(ctx, data, sideIndex)
+	if not ctx:IsActive() then
+		return
+	end
+
 	local template = getVFXTemplate(ctx, "BoneWall")
 	if not template then
 		return
@@ -924,6 +952,11 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 	end
 
 	while os.clock() - startTime < duration do
+		if not ctx:IsActive() then
+			fadeOutObject(wall, 0.1)
+			return
+		end
+
 		local alpha = math.clamp((os.clock() - startTime) / duration, 0, 1)
 		local easedAlpha = 1 - ((1 - alpha) * (1 - alpha))
 		local wallCFrame = getWallCFrame(easedAlpha)
@@ -934,12 +967,15 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 			forcePrimaryInvisible(wall)
 		end
 
-		if not hitDone then
+		if not hitDone and ctx:IsActive() then
 			ctx.HitboxService:PerformSphereAtPosition(
 				ctx.Character,
 				wallCFrame.Position,
 				8,
 				function(hitCharacter, hitHumanoid, hitRoot)
+					if not ctx:IsActive() then
+						return
+					end
 					if not isReservedVictim(ctx, hitCharacter) then
 						return
 					end
@@ -1075,6 +1111,9 @@ local function createBeamVisual(startPosition, direction, length, radius, fadeTi
 end
 
 local function hitVictimWithBeam(ctx, data, startPosition, direction, length, radius, damage, blockable)
+	if not ctx:IsActive() then
+		return
+	end
 	if not ctx.HitboxService or not ctx.HitboxService.PerformSphereChain then
 		warn("[BadTime] Missing HitboxService:PerformSphereChain")
 		return
@@ -1090,6 +1129,9 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 		data.BlasterBeamStep or 6,
 		radius,
 		function(hitCharacter, hitHumanoid, hitRoot, hitPosition)
+			if not ctx:IsActive() then
+				return
+			end
 			if not isReservedVictim(ctx, hitCharacter) then
 				return
 			end
@@ -1226,6 +1268,10 @@ local function spawnGasterBlasterAtVictim(
 	beamStep,
 	giant
 )
+	if not ctx:IsActive() then
+		return
+	end
+
 	local template = getVFXTemplate(ctx, "GasterBlaster")
 	if not template then
 		return
@@ -1271,6 +1317,19 @@ local function spawnGasterBlasterAtVictim(
 
 	task.wait(tweenTime)
 
+	if not ctx:IsActive() then
+		if tweenConnection then
+			tweenConnection:Disconnect()
+		end
+
+		if cframeValue then
+			cframeValue:Destroy()
+		end
+
+		fadeOutObject(blaster, data.BlasterFadeOutTime or 0.16)
+		return
+	end
+
 	if tweenConnection then
 		tweenConnection:Disconnect()
 	end
@@ -1293,6 +1352,17 @@ local function spawnGasterBlasterAtVictim(
 	openBlasterJaws(blaster)
 
 	task.wait(chargeTime or 0.75)
+
+	if not ctx:IsActive() then
+		tweenBlasterOut(
+			blaster,
+			finalCFrame,
+			directionToCenter,
+			giant and (data.GiantBlasterMoveOutDistance or 10) or (data.BlasterMoveOutDistance or 7),
+			data.BlasterFadeOutTime or 0.16
+		)
+		return
+	end
 
 	if not blaster.Parent then
 		return
@@ -1322,6 +1392,17 @@ local function spawnGasterBlasterAtVictim(
 
 	playSansSFX(ctx, "GasterBlasterShoot", primary, 3)
 	hideBlasterRightEye(blaster)
+
+	if not ctx:IsActive() then
+		tweenBlasterOut(
+			blaster,
+			finalCFrame,
+			directionToCenter,
+			giant and (data.GiantBlasterMoveOutDistance or 10) or (data.BlasterMoveOutDistance or 7),
+			data.BlasterFadeOutTime or 0.16
+		)
+		return
+	end
 
 	createBeamVisual(beamStart, beamDirection, beamLength or 78, beamRadius or 5.5, giant and 0.24 or 0.18)
 
@@ -1378,6 +1459,10 @@ local function runBoneWalls(ctx, data)
 		end
 
 		task.spawn(function()
+			if not ctx:IsActive() then
+				return
+			end
+
 			spawnTrackingBoneWall(ctx, data, index)
 		end)
 
@@ -1405,6 +1490,10 @@ local function runBlasterRing(ctx, data)
 			local angle = math.rad((360 / count) * index) + angleOffset
 
 			task.spawn(function()
+				if not ctx:IsActive() then
+					return
+				end
+
 				spawnGasterBlasterAtVictim(
 					ctx,
 					data,
@@ -1442,6 +1531,10 @@ local function runGiantBlasters(ctx, data)
 		end
 
 		task.spawn(function()
+			if not ctx:IsActive() then
+				return
+			end
+
 			spawnGasterBlasterAtVictim(
 				ctx,
 				data,

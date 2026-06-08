@@ -188,20 +188,26 @@ function UltService:AddUlt(player, amount, reason)
 	self:SetUlt(player, current + amount, reason)
 end
 
-function UltService:SpendUlt(player)
+function UltService:SpendUlt(player, cooldown)
 	if not player then return false end
 	if not self:IsFull(player) then return false end
 
 	self:SetUlt(player, 0, "SpendUlt")
 
+	local payload = {
+		Action = "Spent",
+		Current = 0,
+		Max = self.UltMax,
+		Alpha = 0,
+		Full = false,
+	}
+
+	if typeof(cooldown) == "number" and cooldown > 0 then
+		payload.Cooldown = cooldown
+	end
+
 	if self.UltRemote then
-		self.UltRemote:FireClient(player, {
-			Action = "Spent",
-			Current = 0,
-			Max = self.UltMax,
-			Alpha = 0,
-			Full = false,
-		})
+		self.UltRemote:FireClient(player, payload)
 	end
 
 	return true

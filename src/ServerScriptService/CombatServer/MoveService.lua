@@ -863,8 +863,10 @@ function MoveService:PerformMove(player, moveRequest)
 		self.SpawnService:ClearSpawnProtection(character, moveSlot == "Ultimate" and "Ultimate" or "Move")
 	end
 
+	local localCooldownDuration = self:GetMoveLockTime(moveData) + self:GetMoveCooldown(moveData)
+
 	if moveSlot == "Ultimate" then
-		self.UltService:SpendUlt(player)
+		self.UltService:SpendUlt(player, localCooldownDuration)
 	end
 
 	self:SetCooldown(player, moveId, moveData)
