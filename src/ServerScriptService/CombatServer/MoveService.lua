@@ -197,7 +197,7 @@ function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
 		return false
 	end
 
-	if self:IsOnCooldown(player, moveId) then
+	if moveSlot ~= "Ultimate" and self:IsOnCooldown(player, moveId) then
 		return false
 	end
 
@@ -863,13 +863,11 @@ function MoveService:PerformMove(player, moveRequest)
 		self.SpawnService:ClearSpawnProtection(character, moveSlot == "Ultimate" and "Ultimate" or "Move")
 	end
 
-	local localCooldownDuration = self:GetMoveLockTime(moveData) + self:GetMoveCooldown(moveData)
-
 	if moveSlot == "Ultimate" then
-		self.UltService:SpendUlt(player, localCooldownDuration)
+		self.UltService:SpendUlt(player)
+	else
+		self:SetCooldown(player, moveId, moveData)
 	end
-
-	self:SetCooldown(player, moveId, moveData)
 
 	local moveToken = (character:GetAttribute("MoveToken") or 0) + 1
 	character:SetAttribute("MoveToken", moveToken)

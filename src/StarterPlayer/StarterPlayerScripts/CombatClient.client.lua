@@ -457,25 +457,6 @@ local function startLocalCooldown(moveSlot)
 	end)
 end
 
-local function startAcceptedUltimateCooldown(cooldown)
-	if localMoveCooldowns.Ultimate then
-		return
-	end
-
-	local duration = cooldown
-
-	if typeof(duration) ~= "number" or duration <= 0 then
-		duration = getLockTimeForSlot("Ultimate") + getCooldownForSlot("Ultimate")
-	end
-
-	localMoveCooldowns.Ultimate = true
-	startLocalCooldown("Ultimate")
-
-	task.delay(duration, function()
-		localMoveCooldowns.Ultimate = false
-	end)
-end
-
 local function getMouseTargetCharacter()
 	local camera = workspace.CurrentCamera
 	if not camera then return nil end
@@ -843,10 +824,6 @@ ultRemote.OnClientEvent:Connect(function(payload)
 		currentUltFull = payload.Full == true or currentUltAlpha >= 1
 
 		updateUltimateBar()
-
-		if payload.Action == "Spent" then
-			startAcceptedUltimateCooldown(payload.Cooldown)
-		end
 	end
 end)
 
