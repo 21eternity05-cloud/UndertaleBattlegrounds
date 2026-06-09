@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -855,6 +857,13 @@ local activeCinematicCamera = false
 local oldCameraType = nil
 local oldCameraSubject = nil
 local cameraTween = nil
+local activeCameraShakes = {}
+local lastShakeTransform = CFrame.new()
+local impactFrameToken = 0
+local fovPunchToken = 0
+local fovPunchInTween = nil
+local fovPunchOutTween = nil
+local fovPunchBaseFOV = nil
 
 local function getCamera()
 	return workspace.CurrentCamera
@@ -936,6 +945,161 @@ local function resetCinematicCamera()
 	end
 end
 
+local function startCameraShake(intensity, roughness, duration)
+	intensity = typeof(intensity) == "number" and math.max(0, intensity) or 1
+	roughness = typeof(roughness) == "number" and math.max(0.1, roughness) or 8
+	duration = typeof(duration) == "number" and math.max(0.01, duration) or 0.25
+
+	table.insert(activeCameraShakes, {
+		StartTime = os.clock(),
+		Duration = duration,
+		Intensity = intensity,
+		Roughness = roughness,
+		Seed = math.random() * 1000,
+	})
+end
+
+local function getImpactFrameEffect()
+	local effect = Lighting:FindFirstChild("CombatImpactFrame")
+
+	if effect and not effect:IsA("ColorCorrectionEffect") then
+		effect = nil
+	end
+
+	if not effect then
+		effect = Instance.new("ColorCorrectionEffect")
+		effect.Name = "CombatImpactFrame"
+		effect.Enabled = false
+		effect.Parent = Lighting
+	end
+
+	return effect
+end
+
+local function playImpactFrame(payload)
+	local effect = getImpactFrameEffect()
+
+	impactFrameToken += 1
+	local token = impactFrameToken
+	local duration = typeof(payload.Duration) == "number" and math.max(0.01, payload.Duration) or 0.06
+
+	effect.TintColor = typeof(payload.Color) == "Color3" and payload.Color or Color3.new(1, 1, 1)
+	effect.Contrast = typeof(payload.Contrast) == "number" and payload.Contrast or 0.5
+	effect.Saturation = typeof(payload.Saturation) == "number" and payload.Saturation or -0.2
+	effect.Brightness = typeof(payload.Brightness) == "number" and payload.Brightness or 0
+	effect.Enabled = true
+
+	task.delay(duration, function()
+		if token ~= impactFrameToken then return end
+		if not effect or not effect.Parent then return end
+
+		effect.Enabled = false
+		effect.TintColor = Color3.new(1, 1, 1)
+		effect.Contrast = 0
+		effect.Saturation = 0
+		effect.Brightness = 0
+	end)
+end
+
+local function playFOVPunch(targetFOV, inTime, outTime)
+	local camera = getCamera()
+	if not camera then return end
+
+	fovPunchToken += 1
+	local token = fovPunchToken
+	local originalFOV = fovPunchBaseFOV or camera.FieldOfView
+	fovPunchBaseFOV = originalFOV
+
+	if fovPunchInTween then
+		fovPunchInTween:Cancel()
+		fovPunchInTween = nil
+	end
+
+	if fovPunchOutTween then
+		fovPunchOutTween:Cancel()
+		fovPunchOutTween = nil
+	end
+
+	targetFOV = typeof(targetFOV) == "number" and math.clamp(targetFOV, 1, 120) or math.max(1, originalFOV - 6)
+	inTime = typeof(inTime) == "number" and math.max(0, inTime) or 0.05
+	outTime = typeof(outTime) == "number" and math.max(0, outTime) or 0.18
+
+	fovPunchInTween = TweenService:Create(
+		camera,
+		TweenInfo.new(inTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			FieldOfView = targetFOV,
+		}
+	)
+
+	fovPunchInTween.Completed:Connect(function()
+		if token ~= fovPunchToken then return end
+
+		fovPunchOutTween = TweenService:Create(
+			camera,
+			TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				FieldOfView = originalFOV,
+			}
+		)
+
+		fovPunchOutTween.Completed:Connect(function()
+			if token ~= fovPunchToken then return end
+			if camera and camera.Parent then
+				camera.FieldOfView = originalFOV
+			end
+			fovPunchBaseFOV = nil
+			fovPunchOutTween = nil
+		end)
+
+		fovPunchOutTween:Play()
+		fovPunchInTween = nil
+	end)
+
+	fovPunchInTween:Play()
+end
+
+RunService:BindToRenderStep("CombatCameraShake", Enum.RenderPriority.Camera.Value + 1, function()
+	local camera = getCamera()
+	if not camera then return end
+
+	if lastShakeTransform ~= CFrame.new() then
+		camera.CFrame = camera.CFrame * lastShakeTransform:Inverse()
+		lastShakeTransform = CFrame.new()
+	end
+
+	if #activeCameraShakes == 0 then
+		return
+	end
+
+	local now = os.clock()
+	local totalOffset = Vector3.zero
+
+	for index = #activeCameraShakes, 1, -1 do
+		local shake = activeCameraShakes[index]
+		local elapsed = now - shake.StartTime
+
+		if elapsed >= shake.Duration then
+			table.remove(activeCameraShakes, index)
+		else
+			local alpha = 1 - math.clamp(elapsed / shake.Duration, 0, 1)
+			local time = (elapsed * shake.Roughness) + shake.Seed
+			local offset = Vector3.new(
+				math.noise(time, 0, 0),
+				math.noise(0, time, 0),
+				math.noise(0, 0, time)
+			)
+
+			totalOffset += offset * shake.Intensity * alpha * 0.18
+		end
+	end
+
+	if totalOffset.Magnitude > 0 then
+		lastShakeTransform = CFrame.new(totalOffset)
+		camera.CFrame = camera.CFrame * lastShakeTransform
+	end
+end)
+
 cinematicRemote.OnClientEvent:Connect(function(payload)
 	if typeof(payload) ~= "table" then return end
 
@@ -945,6 +1109,12 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 		tweenCinematicCamera(payload.CFrame, payload.Time or 0.25)
 	elseif payload.Action == "ResetCamera" then
 		resetCinematicCamera()
+	elseif payload.Action == "CameraShakeOnce" then
+		startCameraShake(payload.Intensity, payload.Roughness, payload.Duration)
+	elseif payload.Action == "ImpactFrame" then
+		playImpactFrame(payload)
+	elseif payload.Action == "FOVPunch" then
+		playFOVPunch(payload.TargetFOV, payload.InTime, payload.OutTime)
 	end
 end)
 --

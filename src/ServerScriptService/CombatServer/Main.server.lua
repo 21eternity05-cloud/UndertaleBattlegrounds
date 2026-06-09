@@ -133,6 +133,7 @@ M1Service.DamageNumberService = DamageNumberService
 M1Service.SoulBurstService = SoulBurstService
 M1Service.SpawnService = SpawnService
 M1Service.KillCreditService = KillCreditService
+M1Service.CinematicService = CinematicService
 
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService

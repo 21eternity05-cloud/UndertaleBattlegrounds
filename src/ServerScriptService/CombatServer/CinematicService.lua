@@ -108,6 +108,57 @@ function CinematicService:ImpactFrame(character, mode, color, contrast, saturati
 	})
 end
 
+function CinematicService:FOVPunch(character, targetFOV, inTime, outTime)
+	self:FireCamera(character, {
+		Action = "FOVPunch",
+		TargetFOV = targetFOV,
+		InTime = inTime,
+		OutTime = outTime,
+	})
+end
+
+function CinematicService:ShakeRadius(originPosition, radius, intensity, roughness, duration, excludeCharacters)
+	if typeof(originPosition) ~= "Vector3" then return end
+
+	radius = typeof(radius) == "number" and radius or 45
+	if radius <= 0 then return end
+
+	local excluded = {}
+
+	if typeof(excludeCharacters) == "table" then
+		for key, value in pairs(excludeCharacters) do
+			if typeof(key) == "Instance" then
+				excluded[key] = value ~= false
+			elseif typeof(value) == "Instance" then
+				excluded[value] = true
+			end
+		end
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+
+		if character and character.Parent and not excluded[character] then
+			local humanoid, root = self:GetHumanoidAndRoot(character)
+
+			if humanoid and humanoid.Health > 0 and root and root.Parent then
+				local distance = (root.Position - originPosition).Magnitude
+				local alpha = 1 - math.clamp(distance / radius, 0, 1)
+				local finalIntensity = (intensity or 1) * alpha
+
+				if finalIntensity >= 0.12 then
+					self:GetRemote():FireClient(player, {
+						Action = "CameraShakeOnce",
+						Intensity = finalIntensity,
+						Roughness = roughness or 8,
+						Duration = duration or 0.25,
+					})
+				end
+			end
+		end
+	end
+end
+
 function CinematicService:ZeroVelocity(root)
 	if not root or not root.Parent then return end
 

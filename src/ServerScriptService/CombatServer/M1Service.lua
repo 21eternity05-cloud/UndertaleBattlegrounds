@@ -395,6 +395,50 @@ function M1Service:CreateGroundSplatPart(position, data)
 	Debris:AddItem(part, data.SplatPartLifetime or 0.35)
 end
 
+function M1Service:PlayM5DownslamHitPolish(attackerCharacter, targetCharacter, targetRoot)
+	local cinematicService = self.CinematicService
+	if not cinematicService then return end
+	if not attackerCharacter or not attackerCharacter.Parent then return end
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetRoot or not targetRoot.Parent then return end
+
+	cinematicService:ShakeOnce(attackerCharacter, 0.75, 10, 0.16)
+	cinematicService:FOVPunch(attackerCharacter, 64, 0.045, 0.18)
+	cinematicService:ImpactFrame(
+		attackerCharacter,
+		"Flash",
+		Color3.fromRGB(255, 255, 255),
+		0.35,
+		-0.15,
+		0.045
+	)
+
+	cinematicService:ShakeOnce(targetCharacter, 1, 11, 0.18)
+	cinematicService:FOVPunch(targetCharacter, 62, 0.045, 0.2)
+	cinematicService:ImpactFrame(
+		targetCharacter,
+		"Flash",
+		Color3.fromRGB(255, 255, 255),
+		0.45,
+		-0.2,
+		0.055
+	)
+
+	if cinematicService.ShakeRadius then
+		cinematicService:ShakeRadius(
+			targetRoot.Position,
+			45,
+			0.55,
+			9,
+			0.14,
+			{
+				[attackerCharacter] = true,
+				[targetCharacter] = true,
+			}
+		)
+	end
+end
+
 function M1Service:GetGroundBelow(root, excludeList)
 	if not root or not root.Parent then
 		return nil
@@ -407,7 +451,7 @@ function M1Service:GetGroundBelow(root, excludeList)
 	return workspace:Raycast(root.Position, Vector3.new(0, -5, 0), params)
 end
 
-function M1Service:MonitorDownslamGroundSplat(targetCharacter, targetRoot, data, linearVelocity, attachment)
+function M1Service:MonitorDownslamGroundSplat(attackerCharacter, targetCharacter, targetRoot, data, linearVelocity, attachment)
 	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
@@ -784,6 +828,8 @@ function M1Service:DoDownslam(player)
 						self.UltService:AwardGuardbreak(character, targetCharacter)
 					end
 
+					self:PlayM5DownslamHitPolish(character, targetCharacter, targetRoot)
+
 					print("M5 DOWNSLAM GUARDBREAK")
 					return
 				end
@@ -802,6 +848,8 @@ function M1Service:DoDownslam(player)
 
 				self.VFXService:PlaySFXAtPart("DownslamHit", targetRoot, 3)
 
+				self:PlayM5DownslamHitPolish(character, targetCharacter, targetRoot)
+
 				if armorInfo.Active and armorInfo.PreventsKnockback then
 					print("[M1Service] Armor prevented downslam knockback:", targetCharacter.Name)
 					return
@@ -817,7 +865,7 @@ function M1Service:DoDownslam(player)
 
 				root.AssemblyLinearVelocity = (forward * 12) + Vector3.new(0, -24, 0)
 
-				self:MonitorDownslamGroundSplat(targetCharacter, targetRoot, rawData, linearVelocity, attachment)
+				self:MonitorDownslamGroundSplat(character, targetCharacter, targetRoot, rawData, linearVelocity, attachment)
 
 				print("AIR M5 DOWNSLAM HIT")
 			end
