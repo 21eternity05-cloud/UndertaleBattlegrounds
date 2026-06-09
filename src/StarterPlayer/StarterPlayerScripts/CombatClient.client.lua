@@ -534,6 +534,8 @@ local function requestMove(moveSlot)
 
 	local cooldown = getLockTimeForSlot(moveSlot) + getCooldownForSlot(moveSlot)
 
+	-- Ultimates do not use local client cooldown.
+	-- The server gates ultimates by ult bar, UsingMove, and normal move state.
 	if moveSlot == "Ultimate" then
 		moveRemote:FireServer({
 			MoveSlot = moveSlot,
@@ -805,7 +807,7 @@ end
 
 ultRemote.OnClientEvent:Connect(function(payload)
 	print("[CombatClient] UltRemote payload:", payload)
-	
+
 	if typeof(payload) ~= "table" then return end
 
 	if payload.Action == "Update" or payload.Action == "Spent" then
@@ -852,14 +854,48 @@ soulBurstRemote.OnClientEvent:Connect(function(payload)
 		updateSoulBurstBar()
 	end
 end)
---CAMERA STUFF
+
+--============================================================
+-- CINEMATIC / MOVE-FEEL CLIENT EFFECTS
+--============================================================
+-- These effects are controlled by CinematicService on the server.
+-- Server sends payloads through CinematicRemote.
+--
+-- Supported actions:
+-- SetCamera:
+--   Full scripted camera placement, used for true cinematics.
+--
+-- TweenCamera:
+--   Smooth scripted camera movement, used for ult cutscenes.
+--
+-- ResetCamera:
+--   Restores normal player camera after cinematics.
+--
+-- CameraShakeOnce:
+--   Lightweight client-only screen shake.
+--   Good for heavy hits, downslams, nearby ult impacts.
+--
+-- ImpactFrame:
+--   Temporary ColorCorrectionEffect flash.
+--   Use sparingly for anime-style impact moments.
+--
+-- FOVPunch:
+--   Temporary FOV zoom.
+--   Use VERY sparingly. Best for movement moves or very specific cinematic punish moments.
+--   Example: Knife Dash speed burst, Killing Intent confirmed punish.
+--============================================================
+
 local activeCinematicCamera = false
 local oldCameraType = nil
 local oldCameraSubject = nil
 local cameraTween = nil
+
 local activeCameraShakes = {}
 local lastShakeTransform = CFrame.new()
+
 local impactFrameToken = 0
+local impactFrameTween = nil
+
 local fovPunchToken = 0
 local fovPunchInTween = nil
 local fovPunchOutTween = nil
@@ -981,32 +1017,84 @@ local function playImpactFrame(payload)
 
 	impactFrameToken += 1
 	local token = impactFrameToken
-	local duration = typeof(payload.Duration) == "number" and math.max(0.01, payload.Duration) or 0.06
 
-	effect.TintColor = typeof(payload.Color) == "Color3" and payload.Color or Color3.new(1, 1, 1)
-	effect.Contrast = typeof(payload.Contrast) == "number" and payload.Contrast or 0.5
-	effect.Saturation = typeof(payload.Saturation) == "number" and payload.Saturation or -0.2
-	effect.Brightness = typeof(payload.Brightness) == "number" and payload.Brightness or 0
+	local holdTime = typeof(payload.Duration) == "number" and math.max(0.01, payload.Duration) or 0.18
+	local inTime = typeof(payload.InTime) == "number" and math.max(0, payload.InTime) or 0.035
+	local outTime = typeof(payload.OutTime) == "number" and math.max(0.01, payload.OutTime) or 0.18
+
+	local tintColor = typeof(payload.Color) == "Color3" and payload.Color or Color3.new(1, 1, 1)
+	local contrast = typeof(payload.Contrast) == "number" and payload.Contrast or 0.45
+	local saturation = typeof(payload.Saturation) == "number" and payload.Saturation or -0.2
+	local brightness = typeof(payload.Brightness) == "number" and payload.Brightness or 0.05
+
+	if impactFrameTween then
+		impactFrameTween:Cancel()
+		impactFrameTween = nil
+	end
+
 	effect.Enabled = true
+	effect.TintColor = Color3.new(1, 1, 1)
+	effect.Contrast = 0
+	effect.Saturation = 0
+	effect.Brightness = 0
 
-	task.delay(duration, function()
+	local tweenIn = TweenService:Create(
+		effect,
+		TweenInfo.new(inTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			TintColor = tintColor,
+			Contrast = contrast,
+			Saturation = saturation,
+			Brightness = brightness,
+		}
+	)
+
+	impactFrameTween = tweenIn
+	tweenIn:Play()
+
+	tweenIn.Completed:Connect(function()
 		if token ~= impactFrameToken then return end
-		if not effect or not effect.Parent then return end
 
-		effect.Enabled = false
-		effect.TintColor = Color3.new(1, 1, 1)
-		effect.Contrast = 0
-		effect.Saturation = 0
-		effect.Brightness = 0
+		task.delay(holdTime, function()
+			if token ~= impactFrameToken then return end
+			if not effect or not effect.Parent then return end
+
+			local tweenOut = TweenService:Create(
+				effect,
+				TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					TintColor = Color3.new(1, 1, 1),
+					Contrast = 0,
+					Saturation = 0,
+					Brightness = 0,
+				}
+			)
+
+			impactFrameTween = tweenOut
+			tweenOut:Play()
+
+			tweenOut.Completed:Connect(function()
+				if token ~= impactFrameToken then return end
+				if not effect or not effect.Parent then return end
+
+				effect.Enabled = false
+				effect.TintColor = Color3.new(1, 1, 1)
+				effect.Contrast = 0
+				effect.Saturation = 0
+				effect.Brightness = 0
+				impactFrameTween = nil
+			end)
+		end)
 	end)
 end
 
-local function playFOVPunch(targetFOV, inTime, outTime)
+local function playFOVPunch(targetFOV, inTime, outTime, holdTime)
 	local camera = getCamera()
 	if not camera then return end
 
 	fovPunchToken += 1
 	local token = fovPunchToken
+
 	local originalFOV = fovPunchBaseFOV or camera.FieldOfView
 	fovPunchBaseFOV = originalFOV
 
@@ -1021,8 +1109,9 @@ local function playFOVPunch(targetFOV, inTime, outTime)
 	end
 
 	targetFOV = typeof(targetFOV) == "number" and math.clamp(targetFOV, 1, 120) or math.max(1, originalFOV - 6)
-	inTime = typeof(inTime) == "number" and math.max(0, inTime) or 0.05
-	outTime = typeof(outTime) == "number" and math.max(0, outTime) or 0.18
+	inTime = typeof(inTime) == "number" and math.max(0, inTime) or 0.08
+	holdTime = typeof(holdTime) == "number" and math.max(0, holdTime) or 0
+	outTime = typeof(outTime) == "number" and math.max(0, outTime) or 0.35
 
 	fovPunchInTween = TweenService:Create(
 		camera,
@@ -1035,25 +1124,31 @@ local function playFOVPunch(targetFOV, inTime, outTime)
 	fovPunchInTween.Completed:Connect(function()
 		if token ~= fovPunchToken then return end
 
-		fovPunchOutTween = TweenService:Create(
-			camera,
-			TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				FieldOfView = originalFOV,
-			}
-		)
-
-		fovPunchOutTween.Completed:Connect(function()
+		task.delay(holdTime, function()
 			if token ~= fovPunchToken then return end
-			if camera and camera.Parent then
-				camera.FieldOfView = originalFOV
-			end
-			fovPunchBaseFOV = nil
-			fovPunchOutTween = nil
-		end)
+			if not camera or not camera.Parent then return end
 
-		fovPunchOutTween:Play()
-		fovPunchInTween = nil
+			fovPunchOutTween = TweenService:Create(
+				camera,
+				TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					FieldOfView = originalFOV,
+				}
+			)
+
+			fovPunchOutTween.Completed:Connect(function()
+				if token ~= fovPunchToken then return end
+				if camera and camera.Parent then
+					camera.FieldOfView = originalFOV
+				end
+
+				fovPunchBaseFOV = nil
+				fovPunchOutTween = nil
+			end)
+
+			fovPunchOutTween:Play()
+			fovPunchInTween = nil
+		end)
 	end)
 
 	fovPunchInTween:Play()
@@ -1084,6 +1179,7 @@ RunService:BindToRenderStep("CombatCameraShake", Enum.RenderPriority.Camera.Valu
 		else
 			local alpha = 1 - math.clamp(elapsed / shake.Duration, 0, 1)
 			local time = (elapsed * shake.Roughness) + shake.Seed
+
 			local offset = Vector3.new(
 				math.noise(time, 0, 0),
 				math.noise(0, time, 0),
@@ -1105,19 +1201,24 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 
 	if payload.Action == "SetCamera" and typeof(payload.CFrame) == "CFrame" then
 		setCinematicCamera(payload.CFrame)
+
 	elseif payload.Action == "TweenCamera" and typeof(payload.CFrame) == "CFrame" then
 		tweenCinematicCamera(payload.CFrame, payload.Time or 0.25)
+
 	elseif payload.Action == "ResetCamera" then
 		resetCinematicCamera()
+
 	elseif payload.Action == "CameraShakeOnce" then
 		startCameraShake(payload.Intensity, payload.Roughness, payload.Duration)
+
 	elseif payload.Action == "ImpactFrame" then
 		playImpactFrame(payload)
+
 	elseif payload.Action == "FOVPunch" then
-		playFOVPunch(payload.TargetFOV, payload.InTime, payload.OutTime)
+		playFOVPunch(payload.TargetFOV, payload.InTime, payload.OutTime, payload.HoldTime)
 	end
 end)
---
+
 UserInputService.JumpRequest:Connect(function()
 	local character, humanoid = getCharacter()
 	if not humanoid then return end

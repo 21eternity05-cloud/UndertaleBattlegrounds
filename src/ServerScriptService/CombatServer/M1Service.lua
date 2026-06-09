@@ -397,40 +397,77 @@ end
 
 function M1Service:PlayM5DownslamHitPolish(attackerCharacter, targetCharacter, targetRoot)
 	local cinematicService = self.CinematicService
-	if not cinematicService then return end
-	if not attackerCharacter or not attackerCharacter.Parent then return end
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not targetRoot or not targetRoot.Parent then return end
+	if not cinematicService then
+		return
+	end
+	if not attackerCharacter or not attackerCharacter.Parent then
+		return
+	end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
 
-	cinematicService:ShakeOnce(attackerCharacter, 0.75, 10, 0.16)
-	cinematicService:FOVPunch(attackerCharacter, 64, 0.045, 0.18)
+	-- TWEAK THESE VALUES FIRST.
+	-- Duration target: visible but not annoying.
+	local attackerShakeIntensity = 0.8
+	local attackerShakeRoughness = 9
+	local attackerShakeDuration = 0.5
+
+	local victimShakeIntensity = 1.15
+	local victimShakeRoughness = 10
+	local victimShakeDuration = 0.55
+
+	local radiusShakeRadius = 45
+	local radiusShakeIntensity = 0.55
+	local radiusShakeRoughness = 8
+	local radiusShakeDuration = 0.5
+
+	local attackerFOV = 64
+	local attackerFOVInTime = 0.08
+	local attackerFOVOutTime = 0.42
+
+	local victimFOV = 61
+	local victimFOVInTime = 0.08
+	local victimFOVOutTime = 0.48
+
+	local attackerImpactDuration = 0.2
+	local victimImpactDuration = 0.25
+
+	-- Attacker feedback.
+	cinematicService:ShakeOnce(attackerCharacter, attackerShakeIntensity, attackerShakeRoughness, attackerShakeDuration)
+	cinematicService:FOVPunch(attackerCharacter, attackerFOV, attackerFOVInTime, attackerFOVOutTime)
 	cinematicService:ImpactFrame(
 		attackerCharacter,
 		"Flash",
 		Color3.fromRGB(255, 255, 255),
-		0.35,
-		-0.15,
-		0.045
+		0.3,
+		-0.1,
+		attackerImpactDuration
 	)
 
-	cinematicService:ShakeOnce(targetCharacter, 1, 11, 0.18)
-	cinematicService:FOVPunch(targetCharacter, 62, 0.045, 0.2)
+	-- Victim feedback.
+	cinematicService:ShakeOnce(targetCharacter, victimShakeIntensity, victimShakeRoughness, victimShakeDuration)
+	cinematicService:FOVPunch(targetCharacter, victimFOV, victimFOVInTime, victimFOVOutTime)
 	cinematicService:ImpactFrame(
 		targetCharacter,
 		"Flash",
 		Color3.fromRGB(255, 255, 255),
-		0.45,
-		-0.2,
-		0.055
+		0.42,
+		-0.18,
+		victimImpactDuration
 	)
 
+	-- Nearby spectators only get environmental shake.
 	if cinematicService.ShakeRadius then
 		cinematicService:ShakeRadius(
 			targetRoot.Position,
-			45,
-			0.55,
-			9,
-			0.14,
+			radiusShakeRadius,
+			radiusShakeIntensity,
+			radiusShakeRoughness,
+			radiusShakeDuration,
 			{
 				[attackerCharacter] = true,
 				[targetCharacter] = true,
