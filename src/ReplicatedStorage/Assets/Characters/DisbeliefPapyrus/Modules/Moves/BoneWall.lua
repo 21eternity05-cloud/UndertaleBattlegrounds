@@ -242,33 +242,6 @@ local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
 	end
 end
 
-local function isGrounded(character, humanoid, root)
-	if not character or not humanoid or not root then
-		return false
-	end
-
-	local state = humanoid:GetState()
-
-	if state == Enum.HumanoidStateType.Jumping
-		or state == Enum.HumanoidStateType.Freefall
-		or state == Enum.HumanoidStateType.FallingDown
-		or state == Enum.HumanoidStateType.Flying
-	then
-		return false
-	end
-
-	if humanoid.FloorMaterial ~= Enum.Material.Air then
-		return true
-	end
-
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character }
-
-	local result = workspace:Raycast(root.Position, Vector3.new(0, -4.25, 0), params)
-
-	return result ~= nil
-end
 
 local function isMoveInterrupted(ctx)
 	local character = ctx.Character
@@ -554,21 +527,10 @@ function BoneWall.Execute(ctx)
 		return
 	end
 
-	if not isGrounded(character, humanoid, root) then
-		print("[BoneWall] Cannot cast while airborne")
-		ctx:FinishMove(0)
-		return
-	end
 
 	task.wait(moveData.Startup or 0.24)
 
 	if isMoveInterrupted(ctx) then
-		ctx:FinishMove(0)
-		return
-	end
-
-	if not isGrounded(character, humanoid, root) then
-		print("[BoneWall] Canceled because caster left the ground")
 		ctx:FinishMove(0)
 		return
 	end

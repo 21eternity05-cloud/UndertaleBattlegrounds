@@ -183,6 +183,107 @@ function MovementService:IsKnockbackDebugEnabled()
 	return false
 end
 
+function MovementService:GetBattlegroundsMap()
+	local mapFolder = workspace:FindFirstChild("BattlegroundsMap")
+
+	if not mapFolder and not self.WarnedMissingBattlegroundsMap then
+		self.WarnedMissingBattlegroundsMap = true
+		warn("[MovementService] Missing workspace.BattlegroundsMap; wall combo protection will ignore workspace parts.")
+	end
+
+	return mapFolder
+end
+
+function MovementService:IsBattlegroundsMapPart(hitPart)
+	if not hitPart or not hitPart:IsA("BasePart") then
+		return false
+	end
+
+	local mapFolder = self:GetBattlegroundsMap()
+	if not mapFolder then
+		return false
+	end
+
+	return hitPart:IsDescendantOf(mapFolder)
+end
+
+function MovementService:GetWallIndicatorCFrame(position, normal)
+	local up = Vector3.yAxis
+
+	if typeof(normal) == "Vector3" and normal.Magnitude > 0 then
+		up = normal.Unit
+	end
+
+	local forward = Vector3.yAxis
+	if math.abs(up:Dot(forward)) > 0.95 then
+		forward = Vector3.zAxis
+	end
+
+	local right = forward:Cross(up)
+	if right.Magnitude < 0.05 then
+		right = Vector3.xAxis
+	else
+		right = right.Unit
+	end
+
+	forward = up:Cross(right)
+	if forward.Magnitude < 0.05 then
+		forward = Vector3.zAxis
+	else
+		forward = forward.Unit
+	end
+
+	return CFrame.fromMatrix(position, right, up, -forward)
+end
+
+function MovementService:CreateWallImmunityPart(position, normal, data)
+	data = data or {}
+
+	local part = Instance.new("Part")
+	part.Name = "WallImmunityIndicatorPlaceholder"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Material = Enum.Material.Neon
+	part.Color = Color3.fromRGB(80, 220, 255)
+	part.Transparency = data.WallImmunityPartTransparency or 0.32
+	part.Size = data.WallImmunityPartSize or Vector3.new(7, 0.18, 7)
+	part.CFrame = self:GetWallIndicatorCFrame(position, normal)
+	part.Parent = workspace
+
+	local selectionBox = Instance.new("SelectionBox")
+	selectionBox.Name = "WallImmunityIndicatorOutline"
+	selectionBox.Adornee = part
+	selectionBox.Color3 = Color3.fromRGB(220, 255, 255)
+	selectionBox.LineThickness = 0.04
+	selectionBox.Transparency = 0.15
+	selectionBox.Parent = part
+
+	Debris:AddItem(part, data.WallImmunityPartLifetime or 0.55)
+
+	return part
+end
+
+function MovementService:PlayWallImmunityIndicator(raycastResult)
+	if not raycastResult then
+		return
+	end
+
+	local normal = raycastResult.Normal
+	local position = raycastResult.Position
+
+	if typeof(normal) == "Vector3" and normal.Magnitude > 0 then
+		position += normal.Unit * 0.035
+	end
+
+	local part = self:CreateWallImmunityPart(position, normal)
+
+	if self.VFXService and self.VFXService.PlaySFXAtPart then
+		self.VFXService:PlaySFXAtPart("GroundSplat", part, 3)
+	end
+end
+
 function MovementService:GetKnockbackDebugFolder()
 	local folder = workspace:FindFirstChild("KnockbackDebug")
 
@@ -324,7 +425,7 @@ function MovementService:ShowKnockbackDebug(root, velocity, duration, label)
 	Debris:AddItem(orb, duration + 1)
 end
 
-function MovementService:ApplyWallImpactProtection(targetRoot, wallNormal)
+function MovementService:ApplyWallImpactProtection(targetRoot, wallNormal, raycastResult)
 	if not targetRoot or not targetRoot.Parent then return end
 
 	local character = targetRoot:FindFirstAncestorOfClass("Model")
@@ -337,6 +438,8 @@ function MovementService:ApplyWallImpactProtection(targetRoot, wallNormal)
 
 	character:SetAttribute("WallComboProtectedUntil", math.max(currentProtectedUntil, protectedUntil))
 	character:SetAttribute("M1ImmuneUntil", math.max(currentM1ImmuneUntil, protectedUntil))
+
+	self:PlayWallImmunityIndicator(raycastResult)
 
 	local pushDirection = self:GetFlatDirection(wallNormal, -targetRoot.CFrame.LookVector)
 	local pushSpeed = self.Config.WallImpactPushAwaySpeed or 18
@@ -410,6 +513,9 @@ function MovementService:StartWallImpactCheck(targetRoot, velocity, options)
 		if not result then
 			return
 		end
+		if not self:IsBattlegroundsMapPart(result.Instance) then
+			return
+		end
 		if result.Normal.Y > 0.45 then
 			return
 		end
@@ -430,7 +536,7 @@ function MovementService:StartWallImpactCheck(targetRoot, velocity, options)
 			self.ActiveCombatKnockbacks[targetRoot] = nil
 		end
 
-		self:ApplyWallImpactProtection(targetRoot, result.Normal)
+		self:ApplyWallImpactProtection(targetRoot, result.Normal, result)
 	end)
 end
 

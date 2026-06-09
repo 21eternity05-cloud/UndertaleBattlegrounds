@@ -26,6 +26,10 @@ function M1Service.new(
 	self.CounterService = counterService
 	self.CombatStatusService = combatStatusService
 
+	if self.MovementService then
+		self.MovementService.VFXService = vfxService
+	end
+
 	self.M1Data = config.M1Data
 	self.FinalM1 = config.FinalM1
 
@@ -468,6 +472,56 @@ function M1Service:PlayM5DownslamHitPolish(attackerCharacter, targetCharacter, t
 			radiusShakeIntensity,
 			radiusShakeRoughness,
 			radiusShakeDuration,
+			{
+				[attackerCharacter] = true,
+				[targetCharacter] = true,
+			}
+		)
+	end
+end
+
+function M1Service:PlayM5GroundHitPolish(attackerCharacter, targetCharacter, targetRoot)
+	local cinematicService = self.CinematicService
+	if not cinematicService then
+		return
+	end
+	if not attackerCharacter or not attackerCharacter.Parent then
+		return
+	end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
+
+	cinematicService:ShakeOnce(attackerCharacter, 0.65, 9, 0.42)
+	cinematicService:ImpactFrame(
+		attackerCharacter,
+		"Flash",
+		Color3.fromRGB(255, 255, 255),
+		0.25,
+		-0.08,
+		0.12
+	)
+
+	cinematicService:ShakeOnce(targetCharacter, 0.9, 10, 0.46)
+	cinematicService:ImpactFrame(
+		targetCharacter,
+		"Flash",
+		Color3.fromRGB(255, 255, 255),
+		0.34,
+		-0.14,
+		0.14
+	)
+
+	if cinematicService.ShakeRadius then
+		cinematicService:ShakeRadius(
+			targetRoot.Position,
+			38,
+			0.42,
+			8,
+			0.36,
 			{
 				[attackerCharacter] = true,
 				[targetCharacter] = true,
@@ -1028,6 +1082,7 @@ function M1Service:DoNormalM1(player)
 					end
 
 					self:PlayM1Visual(character, combo, targetCharacter, targetRoot, true)
+					self:PlayM5GroundHitPolish(character, targetCharacter, targetRoot)
 
 					print("M5 GUARDBREAK")
 					return
@@ -1062,6 +1117,7 @@ function M1Service:DoNormalM1(player)
 					self.MovementService:StopCarryController(targetRoot)
 					self.MovementService:StopYHoldController(root)
 					self.MovementService:StopYHoldController(targetRoot)
+					self:PlayM5GroundHitPolish(character, targetCharacter, targetRoot)
 
 					if not armorInfo.Active or not armorInfo.PreventsKnockback then
 						if self.MovementService and self.MovementService.ApplyPresetKnockback then

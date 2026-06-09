@@ -1,18 +1,26 @@
 --!strict
 -- HollowSnowdinLighting.server.lua
 -- Location:
--- src/ServerScriptService/HollowSnowdinLighting.server.lua
+-- src/ServerScriptService/World/HollowSnowdinLighting.server.lua
 --
 -- Purpose:
--- Sets the global Hollow Snowdin lighting mood.
+-- Global Hollow Snowdin lighting preset.
 --
--- Goal:
--- - eerie / empty / cold, but NOT pitch-black horror
--- - neon attacks should pop more
--- - map should still be readable for PvP
--- - bloom should make bones, slashes, souls, blasters, and neon VFX feel brighter
+-- Direction:
+-- - eerie and empty, but NOT horror-night dark
+-- - cold Undertale arena feeling
+-- - no visible sun/moon feeling
+-- - neon should pop, but not blind the whole screen
+-- - use classic Lighting fog instead of Atmosphere
 
 local Lighting = game:GetService("Lighting")
+
+local function destroyIfExists(name: string)
+	local existing = Lighting:FindFirstChild(name)
+	if existing then
+		existing:Destroy()
+	end
+end
 
 local function getOrCreate(className: string, name: string)
 	local existing = Lighting:FindFirstChild(name)
@@ -33,92 +41,103 @@ local function getOrCreate(className: string, name: string)
 end
 
 --============================================================
+-- REMOVE EFFECTS WE DO NOT WANT
+--============================================================
+
+-- Atmosphere looked bad for this map, so force-remove it.
+destroyIfExists("HollowSnowdinAtmosphere")
+
+-- No sun/moon ray feeling in Hollow Snowdin.
+destroyIfExists("HollowSnowdinSunRays")
+
+--============================================================
 -- BASE LIGHTING
 --============================================================
--- Use late evening instead of night.
--- 16.5 - 17.5 gives a cold dusk look without making the arena unreadable.
-Lighting.ClockTime = 17.15
+-- Use a bright overcast dusk/day value, not night.
+-- This keeps the arena readable but still cold/empty.
+Lighting.ClockTime = 14.25
 
--- Higher brightness + slight exposure helps neon/VFX actually stand out.
-Lighting.Brightness = 2.8
-Lighting.ExposureCompensation = 0.12
+Lighting.Brightness = 2.6
+Lighting.ExposureCompensation = 0.05
 
--- Cold blue-gray ambience. Still bright enough for combat readability.
-Lighting.Ambient = Color3.fromRGB(75, 86, 110)
-Lighting.OutdoorAmbient = Color3.fromRGB(115, 130, 160)
+-- Cold ambient light. This is the main "there is no real sun" feeling.
+Lighting.Ambient = Color3.fromRGB(82, 92, 115)
+Lighting.OutdoorAmbient = Color3.fromRGB(125, 140, 165)
 
--- Cool sky/top lighting, dark lower bounce.
-Lighting.ColorShift_Top = Color3.fromRGB(145, 175, 220)
-Lighting.ColorShift_Bottom = Color3.fromRGB(45, 52, 70)
+-- Slight cold top color, muted bottom.
+Lighting.ColorShift_Top = Color3.fromRGB(140, 165, 205)
+Lighting.ColorShift_Bottom = Color3.fromRGB(55, 62, 80)
 
--- Keeps things from looking too flat, but not hyper-realistic.
 Lighting.EnvironmentDiffuseScale = 0.45
-Lighting.EnvironmentSpecularScale = 0.65
+Lighting.EnvironmentSpecularScale = 0.55
 
 Lighting.GlobalShadows = true
-Lighting.ShadowSoftness = 0.45
+Lighting.ShadowSoftness = 0.55
 
--- Future lighting makes neon/bloom look better, but pcall keeps script safe
--- if Roblox changes available Technology values.
 pcall(function()
 	Lighting.Technology = Enum.Technology.Future
 end)
 
 --============================================================
--- ATMOSPHERE
+-- CLASSIC LIGHTING FOG
 --============================================================
--- Foggy and empty, but not so dense that attacks disappear.
-local atmosphere = getOrCreate("Atmosphere", "HollowSnowdinAtmosphere") :: Atmosphere
+-- This replaces Atmosphere.
+-- FogStart/FogEnd are easier to control for arena readability.
+Lighting.FogColor = Color3.fromRGB(165, 180, 205)
+Lighting.FogStart = 95
+Lighting.FogEnd = 520
 
-atmosphere.Density = 0.24
-atmosphere.Offset = -0.05
-atmosphere.Color = Color3.fromRGB(185, 205, 235)
-atmosphere.Decay = Color3.fromRGB(75, 90, 125)
-atmosphere.Glare = 0.12
-atmosphere.Haze = 1.15
+-- If you want heavier fog later:
+-- FogStart = 65
+-- FogEnd = 380
+--
+-- If combat feels too foggy:
+-- FogStart = 140
+-- FogEnd = 700
 
 --============================================================
 -- COLOR CORRECTION
 --============================================================
--- Slightly cinematic/cold.
--- Do not over-desaturate or red/blue attacks will stop popping.
+-- Slight cold cinematic correction.
+-- Keep saturation close to normal so red/blue attacks do not die.
 local colorCorrection = getOrCreate("ColorCorrectionEffect", "HollowSnowdinColorCorrection") :: ColorCorrectionEffect
 
-colorCorrection.Brightness = 0.02
-colorCorrection.Contrast = 0.18
-colorCorrection.Saturation = -0.06
-colorCorrection.TintColor = Color3.fromRGB(220, 232, 255)
+colorCorrection.Brightness = 0.01
+colorCorrection.Contrast = 0.14
+colorCorrection.Saturation = -0.03
+colorCorrection.TintColor = Color3.fromRGB(222, 234, 255)
 
 --============================================================
 -- BLOOM
 --============================================================
--- This is the main "make Neon pop" effect.
--- Higher Intensity + lower Threshold means more neon glow.
+-- Neon was too bright before, so this is toned down.
+-- Still enough to make Neon readable and more premium.
 local bloom = getOrCreate("BloomEffect", "HollowSnowdinBloom") :: BloomEffect
 
-bloom.Intensity = 1.15
-bloom.Size = 36
-bloom.Threshold = 0.78
+bloom.Intensity = 0.55
+bloom.Size = 22
+bloom.Threshold = 1.1
+
+-- More neon pop:
+-- bloom.Intensity = 0.95
+-- bloom.Size = 32
+-- bloom.Threshold = 0.85
+--
+-- Less neon glow:
+-- bloom.Intensity = 0.55
+-- bloom.Size = 22
+-- bloom.Threshold = 1.1
 
 --============================================================
 -- DEPTH OF FIELD
 --============================================================
--- Very subtle. Strong DOF is bad for battleground combat.
+-- Keep this almost invisible for combat readability.
 local depthOfField = getOrCreate("DepthOfFieldEffect", "HollowSnowdinDepthOfField") :: DepthOfFieldEffect
 
 depthOfField.Enabled = true
-depthOfField.FarIntensity = 0.05
+depthOfField.FarIntensity = 0.025
 depthOfField.NearIntensity = 0
-depthOfField.FocusDistance = 120
-depthOfField.InFocusRadius = 90
+depthOfField.FocusDistance = 130
+depthOfField.InFocusRadius = 110
 
---============================================================
--- OPTIONAL SUN RAYS
---============================================================
--- Very low. Just gives the sky a little atmosphere.
-local sunRays = getOrCreate("SunRaysEffect", "HollowSnowdinSunRays") :: SunRaysEffect
-
-sunRays.Intensity = 0.025
-sunRays.Spread = 0.65
-
-print("[HollowSnowdinLighting] Applied Hollow Snowdin lighting preset.")
+print("[HollowSnowdinLighting] Applied classic fog Hollow Snowdin lighting preset.")
