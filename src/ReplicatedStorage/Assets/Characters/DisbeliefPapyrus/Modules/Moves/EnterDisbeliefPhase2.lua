@@ -399,6 +399,41 @@ local function enterPhase2Attributes(ctx)
 	character:SetAttribute("Phase2Active", true)
 end
 
+-- Starts Disbelief Papyrus's awakening music.
+-- This must only be called after the counter successfully commits to Phase 2.
+local function startAwakeningTheme(ctx)
+	if not ctx then return end
+	if not ctx.AwakeningMusicService then return end
+
+	local character = ctx.Character
+	if not character or not character.Parent then return end
+
+	local player = ctx.Player
+
+	if not player then
+		player = getPlayerFromCharacter(character)
+	end
+
+	if not player then
+		warn("[EnterDisbeliefPhase2] Could not find player for AwakeningTheme")
+		return
+	end
+
+	local success, result = pcall(function()
+		ctx.AwakeningMusicService:StartForPlayer(player, character, {
+			Volume = 0.55,
+			FadeInTime = 1.2,
+			FadeOutTime = 0.8,
+			RollOffMaxDistance = 140,
+			RollOffMinDistance = 12,
+		})
+	end)
+
+	if not success then
+		warn("[EnterDisbeliefPhase2] Failed to start AwakeningTheme:", result)
+	end
+end
+
 local function equipPhase2Weapons(ctx)
 	local character = ctx.Character
 	if not character or not character.Parent then return end
@@ -879,7 +914,12 @@ function EnterDisbeliefPhase2.Execute(context)
 		local function setPhase2AttributesOnce()
 			if phase2AttributesSet then return end
 			phase2AttributesSet = true
+
 			enterPhase2Attributes(ctx)
+
+			-- AwakeningTheme starts only after the counter succeeded and Phase 2 is actually committed.
+			-- Do not move this to Execute startup, G press, or counter-window startup.
+			startAwakeningTheme(ctx)
 		end
 
 		local function weaponChangeOnce()
