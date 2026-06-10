@@ -9,20 +9,38 @@ function DisbeliefPapyrusMoves.new(config)
 
 	self.Config = config
 
-	self.Slots = {
-		Move1 = "WeakBoneShot",
-		Move2 = "BoneWall",
-		Move3 = "DisbeliefCounter",
-		Move4 = "BrokenBlaster",
-		Ultimate = "LastStand",
+	self.SlotSets = {
+		Base = {
+			Move1 = "WeakBoneShot",
+			Move2 = "BoneWall",
+			Move3 = "DisbeliefCounter",
+			Move4 = "BrokenBlaster",
+			Ultimate = "EnterDisbeliefPhase2",
+		},
+
+		Phase2 = {
+			Move1 = "BrokenBoneRush",
+			Move2 = "BlueSoulCrush",
+			Move3 = "BoneStorm",
+			Move4 = "BlueTrap",
+			Ultimate = "DisbeliefFinale",
+		},
 	}
+
+	self.Slots = self.SlotSets.Base
 
 	self.Moves = {
 		WeakBoneShot = require(MovesFolder:WaitForChild("WeakBoneShot")),
 		BoneWall = require(MovesFolder:WaitForChild("BoneWall")),
 		DisbeliefCounter = require(MovesFolder:WaitForChild("DisbeliefCounter")),
 		BrokenBlaster = require(MovesFolder:WaitForChild("BrokenBlaster")),
-		LastStand = require(MovesFolder:WaitForChild("LastStand")),
+		EnterDisbeliefPhase2 = require(MovesFolder:WaitForChild("EnterDisbeliefPhase2")),
+
+		BrokenBoneRush = require(MovesFolder:WaitForChild("BrokenBoneRush")),
+		BlueSoulCrush = require(MovesFolder:WaitForChild("BlueSoulCrush")),
+		BoneStorm = require(MovesFolder:WaitForChild("BoneStorm")),
+		BlueTrap = require(MovesFolder:WaitForChild("BlueTrap")),
+		DisbeliefFinale = require(MovesFolder:WaitForChild("DisbeliefFinale")),
 	}
 
 	return self

@@ -193,6 +193,9 @@ function CharacterService:ApplyCharacterAttributes(player, character, characterN
 	if character then
 		character:SetAttribute("CharacterName", characterName)
 		character:SetAttribute("MorphEnabled", options.MorphEnabled == true)
+		character:SetAttribute("CombatMode", "Base")
+		character:SetAttribute("AwakeningActive", false)
+		character:SetAttribute("AwakeningEndsAt", 0)
 
 		if options.SkinName then
 			character:SetAttribute("SelectedSkin", options.SkinName)

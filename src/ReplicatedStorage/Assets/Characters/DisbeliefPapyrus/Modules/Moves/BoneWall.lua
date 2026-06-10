@@ -18,8 +18,6 @@ local BoneWall = {
 	Damage = 7,
 	Stun = 0.65,
 
-	-- HitboxService uses this.
-	-- Low Y offset helps make it jumpable.
 	Radius = 5.25,
 	Offset = CFrame.new(0, -1.85, 0),
 
@@ -37,11 +35,9 @@ local BoneWall = {
 
 	Startup = 0.24,
 
-	-- One single PapyrusBone VFX object.
 	SpawnForwardOffset = 6.5,
 	WallHeightOffset = -2.25,
 
-	-- Rises first, waits, then fires.
 	RiseHeight = 4.4,
 	RiseTime = 0.18,
 	FireDelay = 0.18,
@@ -52,14 +48,17 @@ local BoneWall = {
 
 	FadeTime = 0.18,
 
-	-- MovementService preset knockback, like Red Slash.
+	-- Air use still spawns wall from ground.
+	GroundRootHeight = 3,
+	FloorRaycastUp = 8,
+	FloorRaycastDown = 120,
+
 	KnockbackPreset = "PresetKnockback",
 	PresetKnockbackSpeed = 78,
 	PresetKnockbackUpward = 18,
 	PresetKnockbackDuration = 0.25,
 	PresetKnockbackMaxForce = 85000,
 
-	-- Backward compatibility.
 	KnockbackSpeed = 78,
 	KnockbackUpward = 18,
 	KnockbackDuration = 0.25,
@@ -242,7 +241,6 @@ local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
 	end
 end
 
-
 local function isMoveInterrupted(ctx)
 	local character = ctx.Character
 
@@ -342,6 +340,32 @@ local function getWallCFrame(position, direction)
 	return CFrame.lookAt(position, position + flatDirection)
 end
 
+local function getGroundedSpawnPosition(ctx, root, direction)
+	local moveData = ctx.MoveData
+	local forwardOffset = moveData.SpawnForwardOffset or 6.5
+
+	local horizontalPosition = root.Position + (direction * forwardOffset)
+
+	local rayOrigin = horizontalPosition + Vector3.new(0, moveData.FloorRaycastUp or 8, 0)
+	local rayDirection = Vector3.new(0, -(moveData.FloorRaycastDown or 120), 0)
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { ctx.Character }
+
+	local result = workspace:Raycast(rayOrigin, rayDirection, params)
+
+	if result then
+		return Vector3.new(
+			horizontalPosition.X,
+			result.Position.Y + (moveData.GroundRootHeight or 3),
+			horizontalPosition.Z
+		)
+	end
+
+	return horizontalPosition
+end
+
 local function copyTable(source)
 	local copy = {}
 
@@ -355,24 +379,18 @@ end
 local function makeNoKnockbackHitData(moveData)
 	local hitData = copyTable(moveData)
 
-	-- Let ApplyStandardHit/DefaultApplyHit handle damage, block, counter, armor, stun.
-	-- Then this move manually applies MovementService knockback after a real hit.
 	hitData.KnockbackPreset = nil
-
 	hitData.PresetKnockbackSpeed = nil
 	hitData.PresetKnockbackUpward = nil
 	hitData.PresetKnockbackDuration = nil
 	hitData.PresetKnockbackMaxForce = nil
-
 	hitData.DirectionalSpeed = nil
 	hitData.DirectionalDuration = nil
 	hitData.DirectionalMaxForce = nil
 	hitData.DirectionalYHoldDuration = nil
-
 	hitData.DownForwardSpeed = nil
 	hitData.DownSpeed = nil
 	hitData.DownLaunchMaxForce = nil
-
 	hitData.Knockback = 0
 	hitData.UpwardKnockback = 0
 	hitData.KnockbackDuration = 0
@@ -385,12 +403,10 @@ local function makeManualKnockbackData(moveData)
 	local knockbackData = copyTable(moveData)
 
 	knockbackData.KnockbackPreset = "PresetKnockback"
-
 	knockbackData.PresetKnockbackSpeed = moveData.PresetKnockbackSpeed or moveData.KnockbackSpeed or 78
 	knockbackData.PresetKnockbackUpward = moveData.PresetKnockbackUpward or moveData.KnockbackUpward or 18
 	knockbackData.PresetKnockbackDuration = moveData.PresetKnockbackDuration or moveData.KnockbackDuration or 0.25
 	knockbackData.PresetKnockbackMaxForce = moveData.PresetKnockbackMaxForce or moveData.KnockbackMaxForce or 85000
-
 	knockbackData.Knockback = knockbackData.PresetKnockbackSpeed
 	knockbackData.UpwardKnockback = knockbackData.PresetKnockbackUpward
 	knockbackData.KnockbackDuration = knockbackData.PresetKnockbackDuration
@@ -423,11 +439,9 @@ local function buildHitboxData(moveData)
 		Blockable = moveData.Blockable,
 		CanBeBlocked = moveData.CanBeBlocked,
 		Unblockable = moveData.Unblockable,
-
 		Guardbreak = moveData.Guardbreak,
 		CanBeCountered = moveData.CanBeCountered,
 		HitCancelsTarget = moveData.HitCancelsTarget,
-
 		CancelableByHit = moveData.CancelableByHit,
 		HasIFrames = moveData.HasIFrames,
 		HasArmor = moveData.HasArmor,
@@ -454,7 +468,6 @@ local function spawnBoneWallVFX(ctx, startWallCFrame)
 
 	prepareVFXObject(wall)
 	setVisiblePartsTransparency(wall, 0)
-
 	wall.Parent = workspace
 
 	local finalLocalCFrame = CFrame.new(0, moveData.WallHeightOffset or -2.25, 0)
@@ -490,7 +503,6 @@ local function updateBoneWallVFX(vfxData, wallCFrame, riseAlpha)
 
 	local startLocal = vfxData.StartLocalCFrame
 	local finalLocal = vfxData.FinalLocalCFrame
-
 	local currentPosition = startLocal.Position:Lerp(finalLocal.Position, riseAlpha)
 	local currentLocalCFrame = CFrame.new(currentPosition) * finalLocal.Rotation
 
@@ -527,7 +539,6 @@ function BoneWall.Execute(ctx)
 		return
 	end
 
-
 	task.wait(moveData.Startup or 0.24)
 
 	if isMoveInterrupted(ctx) then
@@ -536,11 +547,7 @@ function BoneWall.Execute(ctx)
 	end
 
 	local fireDirection = getAimDirection(ctx)
-
-	local spawnPosition =
-		root.Position
-		+ (fireDirection * (moveData.SpawnForwardOffset or 6.5))
-
+	local spawnPosition = getGroundedSpawnPosition(ctx, root, fireDirection)
 	local wallCFrame = getWallCFrame(spawnPosition, fireDirection)
 	local vfxData = spawnBoneWallVFX(ctx, wallCFrame)
 
@@ -620,7 +627,6 @@ function BoneWall.Execute(ctx)
 
 		updateBoneWallVFX(vfxData, wallCFrame, riseAlpha)
 
-		-- Damage starts only after the wall fires.
 		if fireStartTime then
 			lastHitboxTime += deltaTime
 
@@ -632,10 +638,7 @@ function BoneWall.Execute(ctx)
 					wallCFrame,
 					hitboxData,
 					function(targetCharacter, targetHumanoid, targetRoot)
-						if alreadyHit[targetCharacter] then
-							return
-						end
-
+						if alreadyHit[targetCharacter] then return end
 						alreadyHit[targetCharacter] = true
 
 						local result
@@ -669,9 +672,7 @@ function BoneWall.Execute(ctx)
 	end)
 
 	task.delay((moveData.MaxLockTime or 1.35) + 0.35, function()
-		if finished then
-			return
-		end
+		if finished then return end
 
 		finished = true
 

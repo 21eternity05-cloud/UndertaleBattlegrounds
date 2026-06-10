@@ -87,18 +87,40 @@ function MoveService:GetMoveModule(characterName)
 	return module
 end
 
-function MoveService:GetMoveFromSlot(moveModule, moveSlot)
+function MoveService:GetSlotsForCharacter(character, moveModule)
 	if not moveModule then
-		return nil, nil
+		return nil
 	end
-	if not moveModule.Slots then
+
+	local mode = "Base"
+	if character then
+		local attrMode = character:GetAttribute("CombatMode")
+		if typeof(attrMode) == "string" and attrMode ~= "" then
+			mode = attrMode
+		end
+	end
+
+	if moveModule.SlotSets and moveModule.SlotSets[mode] then
+		return moveModule.SlotSets[mode]
+	end
+
+	return moveModule.Slots
+end
+
+function MoveService:GetMoveFromSlot(character, moveModule, moveSlot)
+	if not moveModule then
 		return nil, nil
 	end
 	if not moveModule.Moves then
 		return nil, nil
 	end
 
-	local moveId = moveModule.Slots[moveSlot]
+	local slots = self:GetSlotsForCharacter(character, moveModule)
+	if not slots then
+		return nil, nil
+	end
+
+	local moveId = slots[moveSlot]
 	if not moveId then
 		return nil, nil
 	end
@@ -809,7 +831,7 @@ function MoveService:PerformMove(player, moveRequest)
 
 	local characterName = self:GetCharacterName(character)
 	local moveModule = self:GetMoveModule(characterName)
-	local moveId, moveData = self:GetMoveFromSlot(moveModule, moveSlot)
+	local moveId, moveData = self:GetMoveFromSlot(character, moveModule, moveSlot)
 
 	if not moveId or not moveData then
 		warn("[MoveService] Missing move for slot:", characterName, moveSlot)

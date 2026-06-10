@@ -129,6 +129,18 @@ local function getCurrentCharacterName()
 	return "Chara"
 end
 
+local function getCurrentCombatMode()
+	local character = player.Character
+	if character then
+		local mode = character:GetAttribute("CombatMode")
+		if typeof(mode) == "string" and mode ~= "" then
+			return mode
+		end
+	end
+
+	return "Base"
+end
+
 local function getMoveModuleForCharacter(characterName)
 	local characterFolder = charactersFolder:FindFirstChild(characterName)
 	if not characterFolder then return nil end
@@ -181,7 +193,14 @@ local function buildMoveDisplayFromModule(characterName)
 		return display
 	end
 
-	for slot, moveId in pairs(moveModule.Slots) do
+	local mode = getCurrentCombatMode()
+	local slots = moveModule.Slots
+
+	if moveModule.SlotSets and moveModule.SlotSets[mode] then
+		slots = moveModule.SlotSets[mode]
+	end
+
+	for slot, moveId in pairs(slots) do
 		local moveData = moveModule.Moves[moveId]
 
 		if moveData then
@@ -1275,6 +1294,11 @@ local function hookCharacter(character)
 	updateUltimateBar()
 
 	character:GetAttributeChangedSignal("CharacterName"):Connect(function()
+		refreshMoveDisplay()
+		updateUltimateBar()
+	end)
+
+	character:GetAttributeChangedSignal("CombatMode"):Connect(function()
 		refreshMoveDisplay()
 		updateUltimateBar()
 	end)
