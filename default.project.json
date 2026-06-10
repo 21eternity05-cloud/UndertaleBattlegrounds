@@ -25,6 +25,10 @@
           "$className": "RemoteEvent"
         },
 
+        "AwakeningMusicRemote": {
+          "$className": "RemoteEvent"
+        },
+
         "CinematicRemote": {
           "$className": "RemoteEvent"
         },

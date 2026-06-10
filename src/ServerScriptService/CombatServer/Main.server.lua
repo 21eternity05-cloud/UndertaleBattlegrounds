@@ -31,6 +31,7 @@ local CharacterService = require(combatFolder:WaitForChild("CharacterService")).
 	CharacterMorphService
 )
 local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
+local AwakeningMusicService = require(combatFolder:WaitForChild("AwakeningMusicService")).new(Config)
 
 -- Status / utility services
 local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
@@ -138,6 +139,7 @@ M1Service.CinematicService = CinematicService
 MoveService.ProjectileService = ProjectileService
 MoveService.UltService = UltService
 MoveService.CinematicService = CinematicService
+MoveService.AwakeningMusicService = AwakeningMusicService
 MoveService.DamageNumberService = DamageNumberService
 MoveService.ProgressionService = ProgressionService
 MoveService.GrabService = GrabService
@@ -226,6 +228,7 @@ ProgressionService:Start()
 CharacterMorphService:Start()
 CharacterService:Start()
 CinematicService:Start()
+AwakeningMusicService:Start()
 LoreCinematicService:Start()
 ShopLocationService:Start()
 UltService:Start()

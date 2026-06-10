@@ -12,6 +12,10 @@ function PapyrusWeapon.new(config, characterFolder)
 	return self
 end
 
+function PapyrusWeapon:GetWeaponsFolder()
+	return self.CharacterFolder:FindFirstChild("Weapons")
+end
+
 function PapyrusWeapon:PrepareWeaponModel(model)
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
@@ -47,19 +51,36 @@ function PapyrusWeapon:WeldWeaponPartsToHandle(weaponModel, handle)
 	end
 end
 
+function PapyrusWeapon:FindHandle(weaponModel, preferredNames)
+	for _, name in ipairs(preferredNames or {}) do
+		local found = weaponModel:FindFirstChild(name, true)
+
+		if found and found:IsA("BasePart") then
+			return found
+		end
+	end
+
+	local handle = weaponModel:FindFirstChild("Handle", true)
+	if handle and handle:IsA("BasePart") then
+		return handle
+	end
+
+	return weaponModel:FindFirstChildWhichIsA("BasePart", true)
+end
+
 function PapyrusWeapon:Remove(character)
 	if not character or not character.Parent then
 		return
 	end
 
-	local oldWeapon = character:FindFirstChild("EquippedWeapon")
-	if oldWeapon then
-		oldWeapon:Destroy()
+	local equippedWeapon = character:FindFirstChild("EquippedWeapon")
+	if equippedWeapon then
+		equippedWeapon:Destroy()
 	end
 
-	local oldWeaponsFolder = character:FindFirstChild("EquippedWeapons")
-	if oldWeaponsFolder then
-		oldWeaponsFolder:Destroy()
+	local equippedWeapons = character:FindFirstChild("EquippedWeapons")
+	if equippedWeapons then
+		equippedWeapons:Destroy()
 	end
 
 	for _, descendant in ipairs(character:GetDescendants()) do
@@ -89,35 +110,9 @@ function PapyrusWeapon:GetSkinWeaponData(character)
 	return skinName, SkinModule.Skins[skinName] or SkinModule.Skins[SkinModule.DefaultSkin]
 end
 
-function PapyrusWeapon:GetWeaponsFolder()
-	return self.CharacterFolder:FindFirstChild("Weapons")
-end
-
-function PapyrusWeapon:FindHandle(weaponModel, preferredNames)
-	for _, name in ipairs(preferredNames or {}) do
-		local found = weaponModel:FindFirstChild(name, true)
-
-		if found and found:IsA("BasePart") then
-			return found
-		end
-	end
-
-	local handle = weaponModel:FindFirstChild("Handle", true)
-	if handle and handle:IsA("BasePart") then
-		return handle
-	end
-
-	return weaponModel:FindFirstChildWhichIsA("BasePart", true)
-end
-
-function PapyrusWeapon:AttachWeaponWithMotor(character, weaponModel, handle, limb, motorTemplate, motorName, originalWeaponName)
-	if not character or not character.Parent then
-		return
-	end
-
-	if not weaponModel or not handle or not limb or not motorTemplate then
-		return
-	end
+function PapyrusWeapon:AttachWithMotor(character, weaponModel, handle, limb, motorTemplate, motorName, originalWeaponName)
+	if not character or not character.Parent then return end
+	if not weaponModel or not handle or not limb or not motorTemplate then return end
 
 	self:PrepareWeaponModel(weaponModel)
 	self:WeldWeaponPartsToHandle(weaponModel, handle)
@@ -133,9 +128,7 @@ function PapyrusWeapon:AttachWeaponWithMotor(character, weaponModel, handle, lim
 end
 
 function PapyrusWeapon:EquipPhase1(character)
-	if not character or not character.Parent then
-		return
-	end
+	if not character or not character.Parent then return end
 
 	self:Remove(character)
 
@@ -156,10 +149,10 @@ function PapyrusWeapon:EquipPhase1(character)
 	local weaponName = skinData and skinData.WeaponName or "BoneStaff"
 	local motorTemplateName = skinData and skinData.MotorTemplateName or "BoneStaffMotorTemplate"
 
-	local staffTemplate = weaponsFolder:FindFirstChild(weaponName) or weaponsFolder:FindFirstChild("BoneStaff")
+	local weaponTemplate = weaponsFolder:FindFirstChild(weaponName) or weaponsFolder:FindFirstChild("BoneStaff")
 	local motorTemplate = weaponsFolder:FindFirstChild(motorTemplateName) or weaponsFolder:FindFirstChild("BoneStaffMotorTemplate")
 
-	if not staffTemplate then
+	if not weaponTemplate then
 		warn("[DisbeliefPapyrus WeaponModule] Missing BoneStaff weapon")
 		return
 	end
@@ -169,43 +162,31 @@ function PapyrusWeapon:EquipPhase1(character)
 		return
 	end
 
-	local staff = staffTemplate:Clone()
-	staff.Name = "EquippedWeapon"
-	staff:SetAttribute("CharacterWeapon", true)
-	staff:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
-	staff:SetAttribute("SelectedSkin", skinName)
-	staff:SetAttribute("OriginalWeaponName", weaponName)
-	staff.Parent = character
+	local weapon = weaponTemplate:Clone()
+	weapon.Name = "EquippedWeapon"
+	weapon:SetAttribute("CharacterWeapon", true)
+	weapon:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
+	weapon:SetAttribute("SelectedSkin", skinName)
+	weapon:SetAttribute("OriginalWeaponName", weaponName)
+	weapon.Parent = character
 
-	local handle = self:FindHandle(staff, {
+	local handle = self:FindHandle(weapon, {
 		"Handle",
 		"HandleStaff",
 		"BoneStaffHandle",
 	})
 
-	if not handle or not handle:IsA("BasePart") then
-		staff:Destroy()
-		warn("[DisbeliefPapyrus WeaponModule] BoneStaff has no handle/basepart")
+	if not handle then
+		weapon:Destroy()
+		warn("[DisbeliefPapyrus WeaponModule] BoneStaff has no handle")
 		return
 	end
 
-	self:AttachWeaponWithMotor(
-		character,
-		staff,
-		handle,
-		rightArm,
-		motorTemplate,
-		"BoneStaff",
-		weaponName
-	)
-
-	print("[DisbeliefPapyrus WeaponModule] Equipped Phase1 weapon:", weaponName)
+	self:AttachWithMotor(character, weapon, handle, rightArm, motorTemplate, "BoneStaff", weaponName)
 end
 
 function PapyrusWeapon:EquipPhase2(character)
-	if not character or not character.Parent then
-		return
-	end
+	if not character or not character.Parent then return end
 
 	self:Remove(character)
 
@@ -259,26 +240,26 @@ function PapyrusWeapon:EquipPhase2(character)
 		return
 	end
 
-	local equippedFolder = Instance.new("Folder")
-	equippedFolder.Name = "EquippedWeapons"
-	equippedFolder:SetAttribute("CharacterWeapon", true)
-	equippedFolder:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
-	equippedFolder:SetAttribute("CombatMode", "Phase2")
-	equippedFolder.Parent = character
+	local folder = Instance.new("Folder")
+	folder.Name = "EquippedWeapons"
+	folder:SetAttribute("CharacterWeapon", true)
+	folder:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
+	folder:SetAttribute("CombatMode", "Phase2")
+	folder.Parent = character
 
 	local leftBone = leftBoneTemplate:Clone()
 	leftBone.Name = "LeftBone"
 	leftBone:SetAttribute("CharacterWeapon", true)
 	leftBone:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
 	leftBone:SetAttribute("OriginalWeaponName", "LeftBone")
-	leftBone.Parent = equippedFolder
+	leftBone.Parent = folder
 
 	local rightBone = rightBoneTemplate:Clone()
 	rightBone.Name = "RightBone"
 	rightBone:SetAttribute("CharacterWeapon", true)
 	rightBone:SetAttribute("CharacterWeaponOwner", "DisbeliefPapyrus")
 	rightBone:SetAttribute("OriginalWeaponName", "RightBone")
-	rightBone.Parent = equippedFolder
+	rightBone.Parent = folder
 
 	local leftHandle = self:FindHandle(leftBone, {
 		"LeftBoneHandle",
@@ -292,45 +273,24 @@ function PapyrusWeapon:EquipPhase2(character)
 		"Handle",
 	})
 
-	if not leftHandle or not leftHandle:IsA("BasePart") then
-		equippedFolder:Destroy()
-		warn("[DisbeliefPapyrus WeaponModule] LeftBone has no handle/basepart")
+	if not leftHandle then
+		folder:Destroy()
+		warn("[DisbeliefPapyrus WeaponModule] LeftBone has no handle")
 		return
 	end
 
-	if not rightHandle or not rightHandle:IsA("BasePart") then
-		equippedFolder:Destroy()
-		warn("[DisbeliefPapyrus WeaponModule] RightBone has no handle/basepart")
+	if not rightHandle then
+		folder:Destroy()
+		warn("[DisbeliefPapyrus WeaponModule] RightBone has no handle")
 		return
 	end
 
-	self:AttachWeaponWithMotor(
-		character,
-		leftBone,
-		leftHandle,
-		leftArm,
-		leftMotorTemplate,
-		"LeftBoneMotor",
-		"LeftBone"
-	)
-
-	self:AttachWeaponWithMotor(
-		character,
-		rightBone,
-		rightHandle,
-		rightArm,
-		rightMotorTemplate,
-		"RightBoneMotor",
-		"RightBone"
-	)
-
-	print("[DisbeliefPapyrus WeaponModule] Equipped Phase2 weapons: LeftBone + RightBone")
+	self:AttachWithMotor(character, leftBone, leftHandle, leftArm, leftMotorTemplate, "LeftBoneMotor", "LeftBone")
+	self:AttachWithMotor(character, rightBone, rightHandle, rightArm, rightMotorTemplate, "RightBoneMotor", "RightBone")
 end
 
 function PapyrusWeapon:Equip(character)
-	if not character or not character.Parent then
-		return
-	end
+	if not character or not character.Parent then return end
 
 	local combatMode = character:GetAttribute("CombatMode")
 	local papyrusMode = character:GetAttribute("PapyrusMode")

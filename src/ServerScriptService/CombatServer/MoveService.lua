@@ -620,6 +620,7 @@ function MoveService:BuildContext(
 		UltService = self.UltService,
 		SoulBurstService = self.SoulBurstService,
 		CinematicService = self.CinematicService,
+		AwakeningMusicService = self.AwakeningMusicService,
 		GrabService = self.GrabService,
 		DamageNumberService = self.DamageNumberService,
 		ProgressionService = self.ProgressionService,

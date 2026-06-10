@@ -5,7 +5,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
-local TweenService = game:GetService("TweenService")
 
 local EnterDisbeliefPhase2 = {
 	DisplayName = "Enter Disbelief",
@@ -28,8 +27,6 @@ local EnterDisbeliefPhase2 = {
 	WhiffEndlag = 0.35,
 	StartupTime = 0.05,
 
-	AttackerTriggerStun = 7,
-
 	CounterAnimationName = "EnterDisbeliefPhase2Counter",
 	TransformAnimationName = "EnterDisbeliefPhase2Transform",
 
@@ -44,16 +41,32 @@ local EnterDisbeliefPhase2 = {
 	BlasterDamage = 18,
 	BlasterStun = 1.15,
 	BlasterRadius = 7,
-	BlasterRange = 28,
-	BlasterStep = 5,
 	BlasterHeight = 3,
 	BlasterSideOffset = 8,
 	BlasterBackwardOffset = 4,
-
 	BlasterChargeTime = 0.65,
-	BlasterVFXLifetime = 1.45,
-	BlasterFireLifetime = 0.35,
+	BlasterLifetime = 1.8,
 }
+
+local function contextIsActive(ctx)
+	if not ctx then return false end
+
+	if ctx.IsActive and typeof(ctx.IsActive) == "function" then
+		local success, result = pcall(function()
+			return ctx:IsActive()
+		end)
+
+		return success and result == true
+	end
+
+	return true
+end
+
+local function finishContext(ctx)
+	if ctx and ctx.FinishMove and typeof(ctx.FinishMove) == "function" then
+		ctx:FinishMove()
+	end
+end
 
 local function getScreenEffectRemote()
 	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -89,8 +102,14 @@ local function fireScreenEffect(character, effectName)
 	local player = getPlayerFromCharacter(character)
 	if not player then return end
 
-	local remote = getScreenEffectRemote()
-	remote:FireClient(player, effectName)
+	getScreenEffectRemote():FireClient(player, effectName)
+end
+
+local function zeroVelocity(root)
+	if not root or not root.Parent then return end
+
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
 end
 
 local function getOrCreateCounterAttackerValue(character)
@@ -114,88 +133,147 @@ local function clearCounterAttacker(character)
 end
 
 local function getStoredAttacker(character)
-	local storedValue = character:FindFirstChild("CounterAttacker")
+	local value = character:FindFirstChild("CounterAttacker")
 
-	if not storedValue or not storedValue:IsA("ObjectValue") then
+	if not value or not value:IsA("ObjectValue") then
 		return nil
 	end
 
-	local attackerCharacter = storedValue.Value
-
-	if attackerCharacter and attackerCharacter:IsA("Model") and attackerCharacter.Parent then
-		return attackerCharacter
+	if value.Value and value.Value:IsA("Model") and value.Value.Parent then
+		return value.Value
 	end
 
 	return nil
 end
 
 local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
+	if not ctx or not ctx.VFXService then return end
 	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
 	if not parentPart or not parentPart.Parent then return end
 
-	local played = ctx.VFXService:PlayCharacterSFXAtPart(
-		"DisbeliefPapyrus",
-		soundName,
-		parentPart,
-		lifetime or 2
-	)
+	local success, played = pcall(function()
+		return ctx.VFXService:PlayCharacterSFXAtPart("DisbeliefPapyrus", soundName, parentPart, lifetime or 2)
+	end)
 
-	if not played then
-		ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+	if not success or not played then
+		pcall(function()
+			ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+		end)
 	end
 end
 
 local function playCharacterAnimation(ctx, animationName, looped)
-	local character = ctx.Character
+	if not ctx or not ctx.Character then return nil end
+
 	local animationService = ctx.StateService and ctx.StateService.AnimationService
 
-	if not animationService then
+	if not animationService or not animationService.PlayCharacterAnimation then
 		warn("[EnterDisbeliefPhase2] Missing AnimationService")
 		return nil
 	end
 
-	local track = animationService:PlayCharacterAnimation(
-		character,
-		animationName,
-		0.05,
-		1,
-		1,
-		true
-	)
+	local success, track = pcall(function()
+		return animationService:PlayCharacterAnimation(ctx.Character, animationName, 0.05, 1, 1, true)
+	end)
 
-	if track then
-		track.Looped = looped == true
-	else
+	if not success or not track then
 		warn("[EnterDisbeliefPhase2] Failed to play animation:", animationName)
+		return nil
 	end
 
+	track.Looped = looped == true
 	return track
 end
 
-local function zeroVelocity(root)
-	if not root or not root.Parent then return end
+local function beginPapyrusIFrames(character)
+	if not character or not character.Parent then return nil end
 
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
+	local oldState = {
+		IFrameActive = character:GetAttribute("IFrameActive"),
+		ArmorActive = character:GetAttribute("ArmorActive"),
+		ArmorDamageReduction = character:GetAttribute("ArmorDamageReduction"),
+		ArmorPreventsStun = character:GetAttribute("ArmorPreventsStun"),
+		ArmorPreventsKnockback = character:GetAttribute("ArmorPreventsKnockback"),
+		ArmorPreventsHitCancel = character:GetAttribute("ArmorPreventsHitCancel"),
+	}
+
+	character:SetAttribute("IFrameActive", true)
+	character:SetAttribute("ArmorActive", true)
+	character:SetAttribute("ArmorDamageReduction", 1)
+	character:SetAttribute("ArmorPreventsStun", true)
+	character:SetAttribute("ArmorPreventsKnockback", true)
+	character:SetAttribute("ArmorPreventsHitCancel", true)
+
+	return oldState
 end
 
-local function startActionLock(character, humanoid, root)
+local function restorePapyrusIFrames(character, oldState)
+	if not oldState then return end
+	if not character or not character.Parent then return end
+
+	character:SetAttribute("IFrameActive", oldState.IFrameActive)
+	character:SetAttribute("ArmorActive", oldState.ArmorActive)
+	character:SetAttribute("ArmorDamageReduction", oldState.ArmorDamageReduction)
+	character:SetAttribute("ArmorPreventsStun", oldState.ArmorPreventsStun)
+	character:SetAttribute("ArmorPreventsKnockback", oldState.ArmorPreventsKnockback)
+	character:SetAttribute("ArmorPreventsHitCancel", oldState.ArmorPreventsHitCancel)
+end
+
+local function beginCinematicLock(character, lockToken)
+	if not character or not character.Parent then return nil end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	if not humanoid then
+		return nil
+	end
+
 	local oldState = {
+		Character = character,
+
 		WalkSpeed = humanoid.WalkSpeed,
 		JumpPower = humanoid.JumpPower,
 		JumpHeight = humanoid.JumpHeight,
 		AutoRotate = humanoid.AutoRotate,
 		JumpEnabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping),
 
+		Stunned = character:GetAttribute("Stunned"),
+		Blocking = character:GetAttribute("Blocking"),
 		DashLocked = character:GetAttribute("DashLocked"),
 		MovementLocked = character:GetAttribute("MovementLocked"),
 		M1Locked = character:GetAttribute("M1Locked"),
 		MoveLocked = character:GetAttribute("MoveLocked"),
 		BlockLocked = character:GetAttribute("BlockLocked"),
 		ActionLocked = character:GetAttribute("ActionLocked"),
+		CinematicLocked = character:GetAttribute("CinematicLocked"),
+		CinematicLockToken = character:GetAttribute("CinematicLockToken"),
 	}
 
+	character:SetAttribute("CinematicLocked", true)
+	character:SetAttribute("CinematicLockToken", lockToken)
+
+	return oldState
+end
+
+local function enforceCinematicLock(character, lockToken)
+	if not character or not character.Parent then return end
+
+	if character:GetAttribute("CinematicLockToken") ~= lockToken then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local root = character:FindFirstChild("HumanoidRootPart")
+
+	if not humanoid or humanoid.Health <= 0 then
+		return
+	end
+
+	character:SetAttribute("CinematicLocked", true)
+	character:SetAttribute("CinematicLockToken", lockToken)
+
+	character:SetAttribute("Stunned", true)
+	character:SetAttribute("Blocking", false)
 	character:SetAttribute("DashLocked", true)
 	character:SetAttribute("MovementLocked", true)
 	character:SetAttribute("M1Locked", true)
@@ -210,44 +288,35 @@ local function startActionLock(character, humanoid, root)
 	humanoid.JumpHeight = 0
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 
-	zeroVelocity(root)
-
-	return oldState
-end
-
-local function enforceActionLock(character, humanoid, root)
-	if not character or not character.Parent then return end
-	if not humanoid or not humanoid.Parent then return end
-
-	character:SetAttribute("DashLocked", true)
-	character:SetAttribute("MovementLocked", true)
-	character:SetAttribute("M1Locked", true)
-	character:SetAttribute("MoveLocked", true)
-	character:SetAttribute("BlockLocked", true)
-	character:SetAttribute("ActionLocked", true)
-
-	humanoid.WalkSpeed = 0
-	humanoid.AutoRotate = true
-	humanoid.Jump = false
-	humanoid.JumpPower = 0
-	humanoid.JumpHeight = 0
-
-	if root and root.Parent then
+	if root then
 		zeroVelocity(root)
 	end
 end
 
-local function restoreActionLock(character, humanoid, oldState)
-	if character and character.Parent and oldState then
-		character:SetAttribute("DashLocked", oldState.DashLocked)
-		character:SetAttribute("MovementLocked", oldState.MovementLocked)
-		character:SetAttribute("M1Locked", oldState.M1Locked)
-		character:SetAttribute("MoveLocked", oldState.MoveLocked)
-		character:SetAttribute("BlockLocked", oldState.BlockLocked)
-		character:SetAttribute("ActionLocked", oldState.ActionLocked)
+local function restoreCinematicLock(oldState, lockToken)
+	if not oldState then return end
+
+	local character = oldState.Character
+	if not character or not character.Parent then return end
+
+	if character:GetAttribute("CinematicLockToken") ~= lockToken then
+		return
 	end
 
-	if humanoid and humanoid.Parent and humanoid.Health > 0 and oldState then
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	character:SetAttribute("Stunned", oldState.Stunned)
+	character:SetAttribute("Blocking", oldState.Blocking)
+	character:SetAttribute("DashLocked", oldState.DashLocked)
+	character:SetAttribute("MovementLocked", oldState.MovementLocked)
+	character:SetAttribute("M1Locked", oldState.M1Locked)
+	character:SetAttribute("MoveLocked", oldState.MoveLocked)
+	character:SetAttribute("BlockLocked", oldState.BlockLocked)
+	character:SetAttribute("ActionLocked", oldState.ActionLocked)
+	character:SetAttribute("CinematicLocked", oldState.CinematicLocked)
+	character:SetAttribute("CinematicLockToken", oldState.CinematicLockToken)
+
+	if humanoid and humanoid.Parent and humanoid.Health > 0 then
 		humanoid.WalkSpeed = oldState.WalkSpeed or 16
 		humanoid.AutoRotate = oldState.AutoRotate ~= false
 		humanoid.JumpPower = oldState.JumpPower or 50
@@ -256,56 +325,13 @@ local function restoreActionLock(character, humanoid, oldState)
 	end
 end
 
-local function hardStunCharacter(ctx, targetCharacter, duration)
+local function softDamageStun(ctx, targetCharacter, duration)
 	if not targetCharacter or not targetCharacter.Parent then return end
 
-	duration = duration or 1
-
 	if ctx.StateService and ctx.StateService.StunCharacter then
-		ctx.StateService:StunCharacter(targetCharacter, duration)
-	else
-		local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
-		local root = targetCharacter:FindFirstChild("HumanoidRootPart")
-
-		if humanoid then
-			targetCharacter:SetAttribute("Stunned", true)
-			targetCharacter:SetAttribute("Blocking", false)
-			targetCharacter:SetAttribute("DashLocked", true)
-			targetCharacter:SetAttribute("MovementLocked", true)
-			targetCharacter:SetAttribute("M1Locked", true)
-			targetCharacter:SetAttribute("MoveLocked", true)
-			targetCharacter:SetAttribute("BlockLocked", true)
-			targetCharacter:SetAttribute("ActionLocked", true)
-
-			local oldWalkSpeed = humanoid.WalkSpeed
-			local oldJumpPower = humanoid.JumpPower
-			local oldJumpHeight = humanoid.JumpHeight
-
-			humanoid.WalkSpeed = 0
-			humanoid.JumpPower = 0
-			humanoid.JumpHeight = 0
-
-			if root then
-				zeroVelocity(root)
-			end
-
-			task.delay(duration, function()
-				if not targetCharacter or not targetCharacter.Parent then return end
-				if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then return end
-
-				targetCharacter:SetAttribute("Stunned", false)
-				targetCharacter:SetAttribute("DashLocked", false)
-				targetCharacter:SetAttribute("MovementLocked", false)
-				targetCharacter:SetAttribute("M1Locked", false)
-				targetCharacter:SetAttribute("MoveLocked", false)
-				targetCharacter:SetAttribute("BlockLocked", false)
-				targetCharacter:SetAttribute("ActionLocked", false)
-
-				humanoid.WalkSpeed = oldWalkSpeed
-				humanoid.JumpPower = oldJumpPower
-				humanoid.JumpHeight = oldJumpHeight
-			end)
-		end
+		pcall(function()
+			ctx.StateService:StunCharacter(targetCharacter, duration or 1)
+		end)
 	end
 end
 
@@ -321,11 +347,9 @@ local function tryCounterServiceStart(ctx, token)
 	}
 
 	for _, methodName in ipairs(methods) do
-		local method = service[methodName]
-
-		if typeof(method) == "function" then
+		if service[methodName] and typeof(service[methodName]) == "function" then
 			pcall(function()
-				method(service, ctx.Character, {
+				service[methodName](service, ctx.Character, {
 					Token = token,
 					MoveId = ctx.MoveId or "EnterDisbeliefPhase2",
 					MoveData = ctx.MoveData,
@@ -350,11 +374,9 @@ local function tryCounterServiceEnd(ctx, token)
 	}
 
 	for _, methodName in ipairs(methods) do
-		local method = service[methodName]
-
-		if typeof(method) == "function" then
+		if service[methodName] and typeof(service[methodName]) == "function" then
 			pcall(function()
-				method(service, ctx.Character, token)
+				service[methodName](service, ctx.Character, token)
 			end)
 
 			return
@@ -362,61 +384,11 @@ local function tryCounterServiceEnd(ctx, token)
 	end
 end
 
-local function equipPhase2Weapons(ctx)
-	local character = ctx.Character
-
-	if not character or not character.Parent then
-		return
-	end
-
-	local equipped = false
-
-	if ctx.WeaponService then
-		local serviceMethods = {
-			"EquipWeapon",
-			"EquipCharacterWeapon",
-			"Equip",
-		}
-
-		for _, methodName in ipairs(serviceMethods) do
-			local method = ctx.WeaponService[methodName]
-
-			if typeof(method) == "function" then
-				local success = pcall(function()
-					method(ctx.WeaponService, character, "DisbeliefPapyrus")
-				end)
-
-				if success then
-					equipped = true
-					break
-				end
-			end
-		end
-	end
-
-	if not equipped then
-		local assets = ReplicatedStorage:WaitForChild("Assets")
-		local charactersFolder = assets:WaitForChild("Characters")
-		local papyrusFolder = charactersFolder:WaitForChild("DisbeliefPapyrus")
-		local modulesFolder = papyrusFolder:WaitForChild("Modules")
-		local weaponModuleScript = modulesFolder:WaitForChild("WeaponModule")
-
-		local weaponModule = require(weaponModuleScript).new(ctx.Config or {}, papyrusFolder)
-		weaponModule:Equip(character)
-
-		equipped = true
-	end
-
-	print("[EnterDisbeliefPhase2] Equipped Phase2 weapons through WeaponModule:", equipped)
-end
-
 local function enterPhase2Attributes(ctx)
 	local character = ctx.Character
 	local moveData = ctx.MoveData
 
-	if not character or not character.Parent then
-		return
-	end
+	if not character or not character.Parent then return end
 
 	character:SetAttribute("CombatMode", "Phase2")
 	character:SetAttribute("AwakeningActive", true)
@@ -425,49 +397,52 @@ local function enterPhase2Attributes(ctx)
 	character:SetAttribute("PapyrusMode", "Phase2")
 	character:SetAttribute("DisbeliefPhase", 2)
 	character:SetAttribute("Phase2Active", true)
-
-	print("[DisbeliefPapyrus] Phase2 attributes set.")
 end
 
-local function getCharactersFolder()
-	local assets = ReplicatedStorage:WaitForChild("Assets")
-	return assets:WaitForChild("Characters")
-end
+local function equipPhase2Weapons(ctx)
+	local character = ctx.Character
+	if not character or not character.Parent then return end
 
-local function findBlasterTemplate()
-	local charactersFolder = getCharactersFolder()
+	if ctx.WeaponService and ctx.WeaponService.EquipWeapon then
+		local success = pcall(function()
+			ctx.WeaponService:EquipWeapon(character, "DisbeliefPapyrus")
+		end)
 
-	local papyrus = charactersFolder:FindFirstChild("DisbeliefPapyrus")
-	if papyrus then
-		local vfxFolder = papyrus:FindFirstChild("VFX")
-		if vfxFolder then
-			return vfxFolder:FindFirstChild("GasterBlaster")
-				or vfxFolder:FindFirstChild("BrokenBlaster")
-				or vfxFolder:FindFirstChild("Blaster")
+		if success then
+			return
 		end
 	end
 
+	local assets = ReplicatedStorage:WaitForChild("Assets")
+	local charactersFolder = assets:WaitForChild("Characters")
+	local papyrusFolder = charactersFolder:WaitForChild("DisbeliefPapyrus")
+	local weaponModuleScript = papyrusFolder:WaitForChild("Modules"):WaitForChild("WeaponModule")
+
+	local weaponModule = require(weaponModuleScript).new(ctx.Config or {}, papyrusFolder)
+	weaponModule:Equip(character)
+end
+
+local function findBlasterTemplate()
+	local assets = ReplicatedStorage:WaitForChild("Assets")
+	local charactersFolder = assets:WaitForChild("Characters")
+
+	local papyrus = charactersFolder:FindFirstChild("DisbeliefPapyrus")
+	if papyrus and papyrus:FindFirstChild("VFX") then
+		return papyrus.VFX:FindFirstChild("GasterBlaster")
+			or papyrus.VFX:FindFirstChild("BrokenBlaster")
+			or papyrus.VFX:FindFirstChild("Blaster")
+	end
+
 	local sans = charactersFolder:FindFirstChild("Sans")
-	if sans then
-		local vfxFolder = sans:FindFirstChild("VFX")
-		if vfxFolder then
-			return vfxFolder:FindFirstChild("GasterBlaster")
-				or vfxFolder:FindFirstChild("Blaster")
-		end
+	if sans and sans:FindFirstChild("VFX") then
+		return sans.VFX:FindFirstChild("GasterBlaster")
+			or sans.VFX:FindFirstChild("Blaster")
 	end
 
 	return nil
 end
 
 local function prepareVFXObject(object)
-	if object:IsA("BasePart") then
-		object.Anchored = true
-		object.CanCollide = false
-		object.CanTouch = false
-		object.CanQuery = false
-		object.Massless = true
-	end
-
 	for _, descendant in ipairs(object:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = true
@@ -477,43 +452,13 @@ local function prepareVFXObject(object)
 			descendant.Massless = true
 		end
 	end
-end
 
-local function emitParticles(object, emitName)
-	if not object then return end
-
-	for _, descendant in ipairs(object:GetDescendants()) do
-		if descendant:IsA("ParticleEmitter") then
-			local emitCount = descendant:GetAttribute("EmitCount")
-
-			if emitName == nil or descendant.Name == emitName or descendant.Parent.Name == emitName then
-				if typeof(emitCount) == "number" then
-					descendant:Emit(emitCount)
-				else
-					descendant:Emit(10)
-				end
-			end
-		elseif descendant:IsA("Beam") then
-			if emitName == nil or descendant.Name == emitName or descendant.Parent.Name == emitName then
-				descendant.Enabled = true
-			end
-		elseif descendant:IsA("Trail") then
-			if emitName == nil or descendant.Name == emitName or descendant.Parent.Name == emitName then
-				descendant.Enabled = true
-			end
-		end
-	end
-end
-
-local function setBeamState(object, enabled)
-	if not object then return end
-
-	for _, descendant in ipairs(object:GetDescendants()) do
-		if descendant:IsA("Beam") or descendant:IsA("Trail") then
-			descendant.Enabled = enabled
-		elseif descendant:IsA("ParticleEmitter") then
-			descendant.Enabled = enabled
-		end
+	if object:IsA("BasePart") then
+		object.Anchored = true
+		object.CanCollide = false
+		object.CanTouch = false
+		object.CanQuery = false
+		object.Massless = true
 	end
 end
 
@@ -525,12 +470,6 @@ local function getPrimaryPart(object)
 	if object:IsA("Model") then
 		if object.PrimaryPart then
 			return object.PrimaryPart
-		end
-
-		local primary = object:FindFirstChild("PrimaryPart", true)
-		if primary and primary:IsA("BasePart") then
-			object.PrimaryPart = primary
-			return primary
 		end
 
 		local part = object:FindFirstChildWhichIsA("BasePart", true)
@@ -545,78 +484,112 @@ end
 
 local function pivotObject(object, cframe)
 	if object:IsA("Model") then
-		if not getPrimaryPart(object) then return end
-		object:PivotTo(cframe)
+		if getPrimaryPart(object) then
+			object:PivotTo(cframe)
+		end
 	elseif object:IsA("BasePart") then
 		object.CFrame = cframe
 	end
 end
 
-local function fadeAndDestroy(object, lifetime)
-	if not object or not object.Parent then return end
+local function emitParticles(object, wantedNames, fallbackAll)
+	if not object then return end
 
-	lifetime = lifetime or 1
+	local matched = false
+	local wanted = {}
 
-	task.delay(lifetime * 0.7, function()
-		if not object or not object.Parent then return end
+	for _, name in ipairs(wantedNames or {}) do
+		wanted[name] = true
+	end
 
-		for _, descendant in ipairs(object:GetDescendants()) do
-			if descendant:IsA("BasePart") then
-				TweenService:Create(
-					descendant,
-					TweenInfo.new(lifetime * 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{ Transparency = 1 }
-				):Play()
+	for _, descendant in ipairs(object:GetDescendants()) do
+		if descendant:IsA("ParticleEmitter") then
+			if wanted[descendant.Name] or wanted[descendant.Parent.Name] then
+				matched = true
+
+				local emitCount = descendant:GetAttribute("EmitCount")
+				if typeof(emitCount) ~= "number" then
+					emitCount = 10
+				end
+
+				descendant:Emit(emitCount)
+			end
+		elseif descendant:IsA("Beam") or descendant:IsA("Trail") then
+			if wanted[descendant.Name] or wanted[descendant.Parent.Name] then
+				matched = true
+				descendant.Enabled = true
 			end
 		end
-	end)
+	end
 
-	Debris:AddItem(object, lifetime)
+	if matched or not fallbackAll then
+		return
+	end
+
+	for _, descendant in ipairs(object:GetDescendants()) do
+		if descendant:IsA("ParticleEmitter") then
+			local emitCount = descendant:GetAttribute("EmitCount")
+			if typeof(emitCount) ~= "number" then
+				emitCount = 10
+			end
+
+			descendant:Emit(emitCount)
+		end
+	end
+end
+
+local function setBeamState(object, enabled)
+	if not object then return end
+
+	for _, descendant in ipairs(object:GetDescendants()) do
+		if descendant:IsA("Beam") or descendant:IsA("Trail") then
+			descendant.Enabled = enabled
+		end
+	end
 end
 
 local function getBlasterSidePositions(ctx, targetRoot)
-	local attackerRoot = ctx.Root
 	local moveData = ctx.MoveData
+	local casterRoot = ctx.Root
 
-	local forwardDirection
+	local forward
 
-	if attackerRoot and attackerRoot.Parent then
-		forwardDirection = targetRoot.Position - attackerRoot.Position
+	if casterRoot and casterRoot.Parent then
+		forward = targetRoot.Position - casterRoot.Position
 	else
-		forwardDirection = targetRoot.CFrame.LookVector
+		forward = targetRoot.CFrame.LookVector
 	end
 
-	forwardDirection = Vector3.new(forwardDirection.X, 0, forwardDirection.Z)
+	forward = Vector3.new(forward.X, 0, forward.Z)
 
-	if forwardDirection.Magnitude < 0.05 then
-		forwardDirection = targetRoot.CFrame.LookVector
-	else
-		forwardDirection = forwardDirection.Unit
+	if forward.Magnitude < 0.05 then
+		forward = Vector3.new(targetRoot.CFrame.LookVector.X, 0, targetRoot.CFrame.LookVector.Z)
 	end
 
-	local rightDirection = forwardDirection:Cross(Vector3.yAxis)
-
-	if rightDirection.Magnitude < 0.05 then
-		rightDirection = targetRoot.CFrame.RightVector
+	if forward.Magnitude < 0.05 then
+		forward = Vector3.new(0, 0, -1)
 	else
-		rightDirection = rightDirection.Unit
+		forward = forward.Unit
 	end
 
+	local right = forward:Cross(Vector3.new(0, 1, 0))
+
+	if right.Magnitude < 0.05 then
+		right = Vector3.new(targetRoot.CFrame.RightVector.X, 0, targetRoot.CFrame.RightVector.Z)
+	end
+
+	if right.Magnitude < 0.05 then
+		right = Vector3.new(1, 0, 0)
+	else
+		right = right.Unit
+	end
+
+	local center = targetRoot.Position + Vector3.new(0, moveData.BlasterHeight or 3, 0)
 	local sideOffset = moveData.BlasterSideOffset or 8
 	local backwardOffset = moveData.BlasterBackwardOffset or 4
-	local height = moveData.BlasterHeight or 3
 
-	local center = targetRoot.Position + Vector3.new(0, height, 0)
-
-	local leftPosition =
-		center
-		- (rightDirection * sideOffset)
-		- (forwardDirection * backwardOffset)
-
-	local rightPosition =
-		center
-		+ (rightDirection * sideOffset)
-		- (forwardDirection * backwardOffset)
+	local leftPosition = center - (right * sideOffset) - (forward * backwardOffset)
+	local rightPosition = center + (right * sideOffset) - (forward * backwardOffset)
 
 	return {
 		{
@@ -632,46 +605,41 @@ local function getBlasterSidePositions(ctx, targetRoot)
 	}
 end
 
-local function spawnGasterBlasterVFX(ctx, targetRoot)
+local function spawnGasterBlasters(ctx, targetRoot)
 	if not targetRoot or not targetRoot.Parent then return {} end
 
 	local template = findBlasterTemplate()
 	if not template then
-		warn("[EnterDisbeliefPhase2] No GasterBlaster/BrokenBlaster VFX found.")
+		warn("[EnterDisbeliefPhase2] Missing GasterBlaster / BrokenBlaster VFX")
 		return {}
 	end
 
-	local blasterPositions = getBlasterSidePositions(ctx, targetRoot)
-	local spawnedBlasters = {}
+	local spawned = {}
+	local positions = getBlasterSidePositions(ctx, targetRoot)
 
-	for _, blasterData in ipairs(blasterPositions) do
-		local blasterCFrame = CFrame.lookAt(
-			blasterData.Position,
-			targetRoot.Position + Vector3.new(0, 2, 0)
-		)
-
+	for _, info in ipairs(positions) do
 		local blaster = template:Clone()
-		blaster.Name = "EnterDisbeliefPhase2_" .. blasterData.Name
+		blaster.Name = "EnterDisbeliefPhase2_" .. info.Name
 		prepareVFXObject(blaster)
 		blaster.Parent = workspace
-		pivotObject(blaster, blasterCFrame)
+
+		pivotObject(blaster, CFrame.lookAt(info.Position, targetRoot.Position + Vector3.new(0, 2, 0)))
 
 		setBeamState(blaster, false)
-		emitParticles(blaster, "Charge")
+		emitParticles(blaster, { "Charge" }, true)
 
-		table.insert(spawnedBlasters, blaster)
+		table.insert(spawned, blaster)
 	end
 
-	return spawnedBlasters
+	return spawned
 end
 
 local function fireSpawnedBlasters(ctx, blasters)
 	for _, blaster in ipairs(blasters or {}) do
 		if blaster and blaster.Parent then
 			setBeamState(blaster, true)
-			emitParticles(blaster, "Fire")
-			emitParticles(blaster, "Shoot")
-			fadeAndDestroy(blaster, ctx.MoveData.BlasterFireLifetime or 0.35)
+			emitParticles(blaster, { "Fire", "Shoot" }, true)
+			Debris:AddItem(blaster, ctx.MoveData.BlasterLifetime or 1.8)
 		end
 	end
 end
@@ -690,22 +658,38 @@ local function makeBlasterHitData(moveData)
 
 		Guardbreak = false,
 		CanBeCountered = false,
-		HitCancelsTarget = true,
-		CancelableByHit = false,
-
-		HasIFrames = false,
-		HasArmor = false,
 
 		Knockback = 0,
 		UpwardKnockback = 0,
-		KnockbackDuration = 0,
-		KnockbackMaxForce = 0,
 	}
 end
 
-local function fireGasterBlasterAtCounterAttacker(ctx, attackerCharacter)
+local function applyBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot)
+	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then return end
+
+	local hitData = makeBlasterHitData(ctx.MoveData)
+
+	if ctx.ApplyStandardHit and typeof(ctx.ApplyStandardHit) == "function" then
+		local success = pcall(function()
+			ctx:ApplyStandardHit(
+				targetCharacter,
+				targetHumanoid,
+				targetRoot,
+				hitData,
+				ctx.MoveId or "EnterDisbeliefPhase2GasterBlaster"
+			)
+		end)
+
+		if success then return end
+	end
+
+	targetHumanoid:TakeDamage(hitData.Damage or 18)
+	softDamageStun(ctx, targetCharacter, hitData.Stun or 1.15)
+end
+
+local function chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
 	if not attackerCharacter or not attackerCharacter.Parent then
-		warn("[EnterDisbeliefPhase2] GasterBlaster marker reached but no attacker was stored.")
+		warn("[EnterDisbeliefPhase2] GasterBlaster marker reached but attacker was missing")
 		return
 	end
 
@@ -716,91 +700,28 @@ local function fireGasterBlasterAtCounterAttacker(ctx, attackerCharacter)
 		return
 	end
 
-	local character = ctx.Character
 	local moveData = ctx.MoveData
+	local chargeTime = moveData.BlasterChargeTime or 0.65
 
-	hardStunCharacter(ctx, attackerCharacter, (moveData.BlasterChargeTime or 0.65) + (moveData.BlasterStun or 1.15) + 0.25)
+	enforceCinematicLock(attackerCharacter, lockToken)
 	zeroVelocity(attackerRoot)
 
-	local spawnedBlasters = spawnGasterBlasterVFX(ctx, attackerRoot)
-
+	local blasters = spawnGasterBlasters(ctx, attackerRoot)
 	playPapyrusSFX(ctx, "Ding", attackerRoot, 2)
 
-	task.delay(moveData.BlasterChargeTime or 0.65, function()
+	task.delay(chargeTime, function()
 		if not attackerCharacter or not attackerCharacter.Parent then return end
 		if not attackerHumanoid or not attackerHumanoid.Parent or attackerHumanoid.Health <= 0 then return end
 		if not attackerRoot or not attackerRoot.Parent then return end
 
-		zeroVelocity(attackerRoot)
-		fireSpawnedBlasters(ctx, spawnedBlasters)
-
+		enforceCinematicLock(attackerCharacter, lockToken)
+		fireSpawnedBlasters(ctx, blasters)
 		playPapyrusSFX(ctx, "M1", attackerRoot, 2)
 
-		local hitData = makeBlasterHitData(moveData)
-		local didHitAttacker = false
+		applyBlasterHit(ctx, attackerCharacter, attackerHumanoid, attackerRoot)
 
-		local function applyBlasterHit()
-			if didHitAttacker then return end
-			didHitAttacker = true
-
-			if ctx.ApplyStandardHit then
-				local result = ctx:ApplyStandardHit(
-					attackerCharacter,
-					attackerHumanoid,
-					attackerRoot,
-					hitData,
-					ctx.MoveId or "EnterDisbeliefPhase2GasterBlaster"
-				)
-
-				print("[EnterDisbeliefPhase2] Charged Dual GasterBlaster result:", result)
-			elseif ctx.DefaultApplyHit then
-				local result = ctx:DefaultApplyHit(attackerCharacter, attackerHumanoid, attackerRoot)
-				print("[EnterDisbeliefPhase2] Charged Dual GasterBlaster result:", result)
-			else
-				attackerHumanoid:TakeDamage(moveData.BlasterDamage or 18)
-				print("[EnterDisbeliefPhase2] Charged Dual GasterBlaster direct damage applied.")
-			end
-		end
-
-		if not ctx.HitboxService or not ctx.HitboxService.PerformSphereAtCFrame then
-			applyBlasterHit()
-			return
-		end
-
-		local blasterPositions = getBlasterSidePositions(ctx, attackerRoot)
-		local alreadyHit = {}
-
-		for _, blasterData in ipairs(blasterPositions) do
-			local direction = blasterData.Direction
-
-			for distance = 0, (moveData.BlasterRange or 28), (moveData.BlasterStep or 5) do
-				local position = blasterData.Position + (direction * distance)
-				local cframe = CFrame.lookAt(position, position + direction)
-
-				ctx.HitboxService:PerformSphereAtCFrame(
-					character,
-					cframe,
-					hitData,
-					function(targetCharacter, targetHumanoid, targetRoot)
-						if targetCharacter ~= attackerCharacter then
-							return
-						end
-
-						if alreadyHit[targetCharacter] then
-							return
-						end
-
-						alreadyHit[targetCharacter] = true
-						applyBlasterHit()
-					end
-				)
-			end
-		end
-
-		task.delay(0.05, function()
-			if not didHitAttacker and attackerHumanoid and attackerHumanoid.Parent and attackerHumanoid.Health > 0 then
-				applyBlasterHit()
-			end
+		task.defer(function()
+			enforceCinematicLock(attackerCharacter, lockToken)
 		end)
 	end)
 end
@@ -813,79 +734,59 @@ function EnterDisbeliefPhase2.Execute(context)
 	local moveData = ctx and ctx.MoveData or EnterDisbeliefPhase2
 
 	if not ctx or not character or not character.Parent then
-		if ctx and ctx.FinishMove then
-			ctx:FinishMove()
-		end
+		finishContext(ctx)
 		return
 	end
 
-	if not humanoid or humanoid.Health <= 0 then
-		ctx:FinishMove()
-		return
-	end
+	ctx.MoveData = moveData
 
-	if not root then
-		ctx:FinishMove()
+	if not humanoid or humanoid.Health <= 0 or not root then
+		finishContext(ctx)
 		return
 	end
 
 	if character:GetAttribute("CombatMode") == "Phase2" or character:GetAttribute("AwakeningActive") == true then
-		print("[DisbeliefPapyrus] Already in Phase2.")
-		ctx:FinishMove()
+		finishContext(ctx)
 		return
 	end
 
-	print("[EnterDisbeliefPhase2] Counter animation started.")
+	local lockToken = tostring(os.clock()) .. "_" .. tostring(math.random(100000, 999999))
 
-	local oldActionState = startActionLock(character, humanoid, root)
+	local casterOldState = beginCinematicLock(character, lockToken)
+	local papyrusIFrameState = nil
+
+	local attackerCharacter = nil
+	local attackerOldState = nil
 
 	local lockConnection
 	lockConnection = RunService.Heartbeat:Connect(function()
-		if not character or not character.Parent then
-			if lockConnection then
-				lockConnection:Disconnect()
-			end
-			return
+		if character and character.Parent then
+			enforceCinematicLock(character, lockToken)
 		end
 
-		if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
-			if lockConnection then
-				lockConnection:Disconnect()
-			end
-			return
+		if attackerCharacter and attackerCharacter.Parent then
+			enforceCinematicLock(attackerCharacter, lockToken)
 		end
-
-		enforceActionLock(character, humanoid, root)
 	end)
 
-	local counterTrack = playCharacterAnimation(
-		ctx,
-		moveData.CounterAnimationName or "EnterDisbeliefPhase2Counter",
-		true
-	)
-
+	local counterTrack = playCharacterAnimation(ctx, moveData.CounterAnimationName or "EnterDisbeliefPhase2Counter", true)
 	playPapyrusSFX(ctx, "Summon", root, 2)
 
 	task.wait(moveData.StartupTime or 0.05)
 
-	if not ctx:IsActive() or not character.Parent or humanoid.Health <= 0 then
-		if lockConnection then
-			lockConnection:Disconnect()
-			lockConnection = nil
-		end
+	if not contextIsActive(ctx) or not character.Parent or humanoid.Health <= 0 then
+		if lockConnection then lockConnection:Disconnect() end
+		if counterTrack and counterTrack.IsPlaying then counterTrack:Stop(0.05) end
 
-		if counterTrack and counterTrack.IsPlaying then
-			counterTrack:Stop(0.05)
-		end
-
-		restoreActionLock(character, humanoid, oldActionState)
-		ctx:FinishMove()
+		restorePapyrusIFrames(character, papyrusIFrameState)
+		restoreCinematicLock(casterOldState, lockToken)
+		finishContext(ctx)
 		return
 	end
 
 	local counterToken = (character:GetAttribute("CounterToken") or 0) + 1
-	local counterAttacker = getOrCreateCounterAttackerValue(character)
-	counterAttacker.Value = nil
+	local attackerValue = getOrCreateCounterAttackerValue(character)
+	attackerValue.Value = nil
 
 	character:SetAttribute("Countering", true)
 	character:SetAttribute("CounterTriggered", false)
@@ -897,7 +798,7 @@ function EnterDisbeliefPhase2.Execute(context)
 
 	local finished = false
 	local triggered = false
-	local counterConnection = nil
+	local counterConnection
 
 	local function cleanupCounterState()
 		if character and character.Parent and character:GetAttribute("CounterToken") == counterToken then
@@ -911,18 +812,15 @@ function EnterDisbeliefPhase2.Execute(context)
 		tryCounterServiceEnd(ctx, counterToken)
 	end
 
-	local function disconnect()
-		if counterConnection then
-			counterConnection:Disconnect()
-			counterConnection = nil
-		end
-	end
-
 	local function finish(delayTime)
 		if finished then return end
 		finished = true
 
-		disconnect()
+		if counterConnection then
+			counterConnection:Disconnect()
+			counterConnection = nil
+		end
+
 		cleanupCounterState()
 
 		task.delay(delayTime or 0, function()
@@ -931,8 +829,11 @@ function EnterDisbeliefPhase2.Execute(context)
 				lockConnection = nil
 			end
 
-			restoreActionLock(character, humanoid, oldActionState)
-			ctx:FinishMove()
+			restorePapyrusIFrames(character, papyrusIFrameState)
+			restoreCinematicLock(attackerOldState, lockToken)
+			restoreCinematicLock(casterOldState, lockToken)
+
+			finishContext(ctx)
 		end)
 	end
 
@@ -942,20 +843,22 @@ function EnterDisbeliefPhase2.Execute(context)
 
 		triggered = true
 
-		local attackerCharacter = getStoredAttacker(character)
+		attackerCharacter = getStoredAttacker(character)
 
-		print("[EnterDisbeliefPhase2] Counter triggered by:", attackerCharacter and attackerCharacter.Name or "unknown")
+		if attackerCharacter then
+			attackerOldState = beginCinematicLock(attackerCharacter, lockToken)
+		end
 
 		character:SetAttribute("Countering", false)
 		character:SetAttribute("CounterTriggered", true)
 
-		enforceActionLock(character, humanoid, root)
-
-		playPapyrusSFX(ctx, "Ding", root, 2)
+		enforceCinematicLock(character, lockToken)
 
 		if attackerCharacter then
-			hardStunCharacter(ctx, attackerCharacter, moveData.AttackerTriggerStun or 7)
+			enforceCinematicLock(attackerCharacter, lockToken)
 		end
+
+		playPapyrusSFX(ctx, "Ding", root, 2)
 
 		if counterTrack and counterTrack.IsPlaying then
 			counterTrack:Stop(0.05)
@@ -963,13 +866,9 @@ function EnterDisbeliefPhase2.Execute(context)
 
 		task.wait(0.05)
 
-		local transformTrack = playCharacterAnimation(
-			ctx,
-			moveData.TransformAnimationName or "EnterDisbeliefPhase2Transform",
-			false
-		)
+		papyrusIFrameState = beginPapyrusIFrames(character)
 
-		print("[EnterDisbeliefPhase2] Playing transform animation:", moveData.TransformAnimationName or "EnterDisbeliefPhase2Transform", transformTrack)
+		local transformTrack = playCharacterAnimation(ctx, moveData.TransformAnimationName or "EnterDisbeliefPhase2Transform", false)
 
 		local blackScreenStarted = false
 		local blackScreenEnded = false
@@ -989,18 +888,14 @@ function EnterDisbeliefPhase2.Execute(context)
 
 			setPhase2AttributesOnce()
 			equipPhase2Weapons(ctx)
-
-			print("[EnterDisbeliefPhase2] WeaponChange marker reached. Switched to LeftBone + RightBone.")
 		end
 
 		local function gasterBlasterOnce()
 			if blasterFired then return end
 			blasterFired = true
 
-			print("[EnterDisbeliefPhase2] GasterBlaster marker reached. Charging dual blasters.")
-
 			if attackerCharacter then
-				fireGasterBlasterAtCounterAttacker(ctx, attackerCharacter)
+				chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
 			end
 		end
 
@@ -1015,7 +910,6 @@ function EnterDisbeliefPhase2.Execute(context)
 			transformTrack.Looped = false
 
 			transformTrack:GetMarkerReachedSignal(moveData.BlackScreenMarkerName or "BlackScreen"):Connect(function()
-				print("[EnterDisbeliefPhase2] BlackScreen marker reached")
 				blackScreenStarted = true
 				fireScreenEffect(character, "BlackScreen")
 			end)
@@ -1029,15 +923,12 @@ function EnterDisbeliefPhase2.Execute(context)
 			end)
 
 			transformTrack:GetMarkerReachedSignal(moveData.BlackScreenEndMarkerName or "BlackScreenEnd"):Connect(function()
-				print("[EnterDisbeliefPhase2] BlackScreenEnd marker reached")
 				blackScreenEnded = true
 				fireScreenEffect(character, "BlackScreenEnd")
 				setPhase2AttributesOnce()
 			end)
 
 			transformTrack.Stopped:Connect(function()
-				print("[EnterDisbeliefPhase2] Transform animation stopped")
-
 				setPhase2AttributesOnce()
 
 				if not weaponChanged then
@@ -1049,11 +940,14 @@ function EnterDisbeliefPhase2.Execute(context)
 			end)
 
 			pcall(function()
+				if transformTrack.IsPlaying then
+					transformTrack:Stop(0)
+				end
+
+				transformTrack.TimePosition = 0
 				transformTrack:Play(0.05, 1, 1)
 			end)
 		else
-			warn("[EnterDisbeliefPhase2] Transform animation failed to load/play.")
-
 			task.delay(moveData.TransformFallbackTime or 7, function()
 				setPhase2AttributesOnce()
 
@@ -1089,8 +983,8 @@ function EnterDisbeliefPhase2.Execute(context)
 	local startTime = os.clock()
 	local counterWindow = moveData.CounterWindow or 1.45
 
-	while ctx:IsActive() and not finished and os.clock() - startTime < counterWindow do
-		enforceActionLock(character, humanoid, root)
+	while contextIsActive(ctx) and not finished and os.clock() - startTime < counterWindow do
+		enforceCinematicLock(character, lockToken)
 
 		if character:GetAttribute("CounterTriggered") == true then
 			triggerUltimate()
@@ -1101,8 +995,6 @@ function EnterDisbeliefPhase2.Execute(context)
 	end
 
 	if not finished and not triggered then
-		print("[EnterDisbeliefPhase2] Counter whiffed.")
-
 		if counterTrack and counterTrack.IsPlaying then
 			counterTrack:Stop(0.08)
 		end
