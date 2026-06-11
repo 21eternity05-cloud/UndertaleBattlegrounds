@@ -64,6 +64,43 @@ local GasterBlaster = {
 
 	BeamFadeTime = 0.12,
 	BlasterLifetime = 2,
+
+	-- Beam visual polish.
+	BeamVisualTransparency = 0.24,
+	BeamVisualSizeMultiplier = 1.15,
+
+	FinalBeamVisualTransparency = 0.02,
+	FinalBeamVisualSizeMultiplier = 2.25,
+	FinalBeamFadeTime = 0.18,
+	FinalBeamExtraLength = 8,
+
+	-- Camera polish.
+	ChargeAttackerShakeMagnitude = 0.35,
+	ChargeAttackerShakeRoughness = 6,
+	ChargeAttackerShakeDuration = 0.12,
+
+	FireAttackerShakeMagnitude = 0.75,
+	FireAttackerShakeRoughness = 10,
+	FireAttackerShakeDuration = 0.18,
+
+	HitVictimShakeMagnitude = 0.65,
+	HitVictimShakeRoughness = 9,
+	HitVictimShakeDuration = 0.12,
+
+	BlockVictimShakeMagnitude = 0.35,
+	BlockVictimShakeRoughness = 7,
+	BlockVictimShakeDuration = 0.08,
+
+	FinalBeamAttackerShakeMagnitude = 1.45,
+	FinalBeamAttackerShakeRoughness = 14,
+	FinalBeamAttackerShakeDuration = 0.28,
+
+	FinalBeamRadiusShakeMagnitude = 1.15,
+	FinalBeamRadiusShakeRoughness = 11,
+	FinalBeamRadiusShakeDuration = 0.22,
+	FinalBeamRadiusShakeRange = 65,
+
+	FinalBeamImpactFrameDuration = 0.055,
 }
 
 local function getSansVFXFolder(ctx)
@@ -85,6 +122,113 @@ local function playSansSFX(ctx, soundName, parentPart, lifetime)
 	if not parentPart or not parentPart.Parent then return end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 3)
+end
+
+local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ShakeOnce then return end
+
+	pcall(function()
+		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+	end)
+end
+
+local function impactFrame(ctx, targetCharacter, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ImpactFrame then return end
+
+	local success = pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
+	end)
+
+	if success then
+		return
+	end
+
+	pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, {
+			Duration = duration,
+		})
+	end)
+end
+
+local function playChargePolish(ctx, data)
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		data.ChargeAttackerShakeMagnitude or GasterBlaster.ChargeAttackerShakeMagnitude or 0.35,
+		data.ChargeAttackerShakeRoughness or GasterBlaster.ChargeAttackerShakeRoughness or 6,
+		data.ChargeAttackerShakeDuration or GasterBlaster.ChargeAttackerShakeDuration or 0.12
+	)
+end
+
+local function playFirePolish(ctx, data)
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		data.FireAttackerShakeMagnitude or GasterBlaster.FireAttackerShakeMagnitude or 0.75,
+		data.FireAttackerShakeRoughness or GasterBlaster.FireAttackerShakeRoughness or 10,
+		data.FireAttackerShakeDuration or GasterBlaster.FireAttackerShakeDuration or 0.18
+	)
+end
+
+local function playBeamHitPolish(ctx, data, targetCharacter, result)
+	if result == "Hit" or result == "ArmoredHit" or result == "Guardbreak" then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.HitVictimShakeMagnitude or GasterBlaster.HitVictimShakeMagnitude or 0.65,
+			data.HitVictimShakeRoughness or GasterBlaster.HitVictimShakeRoughness or 9,
+			data.HitVictimShakeDuration or GasterBlaster.HitVictimShakeDuration or 0.12
+		)
+
+		return
+	end
+
+	if result == "Blocked" then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.BlockVictimShakeMagnitude or GasterBlaster.BlockVictimShakeMagnitude or 0.35,
+			data.BlockVictimShakeRoughness or GasterBlaster.BlockVictimShakeRoughness or 7,
+			data.BlockVictimShakeDuration or GasterBlaster.BlockVictimShakeDuration or 0.08
+		)
+	end
+end
+
+local function playFinalBeamPolish(ctx, data, beamStart)
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		data.FinalBeamAttackerShakeMagnitude or GasterBlaster.FinalBeamAttackerShakeMagnitude or 1.45,
+		data.FinalBeamAttackerShakeRoughness or GasterBlaster.FinalBeamAttackerShakeRoughness or 14,
+		data.FinalBeamAttackerShakeDuration or GasterBlaster.FinalBeamAttackerShakeDuration or 0.28
+	)
+
+	impactFrame(
+		ctx,
+		ctx.Character,
+		data.FinalBeamImpactFrameDuration or GasterBlaster.FinalBeamImpactFrameDuration or 0.055
+	)
+
+	if ctx.CinematicService and ctx.CinematicService.ShakeRadius then
+		pcall(function()
+			ctx.CinematicService:ShakeRadius(
+				beamStart,
+				data.FinalBeamRadiusShakeRange or GasterBlaster.FinalBeamRadiusShakeRange or 65,
+				data.FinalBeamRadiusShakeMagnitude or GasterBlaster.FinalBeamRadiusShakeMagnitude or 1.15,
+				data.FinalBeamRadiusShakeRoughness or GasterBlaster.FinalBeamRadiusShakeRoughness or 11,
+				data.FinalBeamRadiusShakeDuration or GasterBlaster.FinalBeamRadiusShakeDuration or 0.22,
+				{
+					ExcludeCharacters = {
+						ctx.Character,
+					},
+				}
+			)
+		end)
+	end
 end
 
 local function ensurePrimaryPart(model)
@@ -374,36 +518,87 @@ local function hideRightEye(blaster)
 	end
 end
 
-local function createBeamVisual(startPosition, direction, data)
-	local length = data.BeamLength or 90
+local function createBeamVisual(startPosition, direction, data, isFinalTick)
+	local baseLength = data.BeamLength or 90
+	local length = baseLength
+
+	if isFinalTick then
+		length += data.FinalBeamExtraLength or GasterBlaster.FinalBeamExtraLength or 8
+	end
+
 	local radius = data.BeamRadius or 5.5
+	local sizeMultiplier
+
+	if isFinalTick then
+		sizeMultiplier = data.FinalBeamVisualSizeMultiplier or GasterBlaster.FinalBeamVisualSizeMultiplier or 2.25
+	else
+		sizeMultiplier = data.BeamVisualSizeMultiplier or GasterBlaster.BeamVisualSizeMultiplier or 1.15
+	end
+
+	local visualRadius = radius * sizeMultiplier
+	local fadeTime
+
+	if isFinalTick then
+		fadeTime = data.FinalBeamFadeTime or GasterBlaster.FinalBeamFadeTime or 0.18
+	else
+		fadeTime = data.BeamFadeTime or GasterBlaster.BeamFadeTime or 0.12
+	end
 
 	local beam = Instance.new("Part")
-	beam.Name = "GasterBlasterBeam"
+	beam.Name = isFinalTick and "GasterBlasterFinalBeam" or "GasterBlasterBeam"
 	beam.Anchored = true
 	beam.CanCollide = false
 	beam.CanTouch = false
 	beam.CanQuery = false
 	beam.Material = Enum.Material.Neon
-	beam.Color = Color3.fromRGB(255, 255, 255)
-	beam.Transparency = 0.2
-	beam.Size = Vector3.new(radius * 1.2, radius * 1.2, length)
+	beam.Color = isFinalTick and Color3.fromRGB(210, 245, 255) or Color3.fromRGB(255, 255, 255)
+	beam.Transparency = isFinalTick
+		and (data.FinalBeamVisualTransparency or GasterBlaster.FinalBeamVisualTransparency or 0.02)
+		or (data.BeamVisualTransparency or GasterBlaster.BeamVisualTransparency or 0.24)
+
+	beam.Size = Vector3.new(visualRadius, visualRadius, length)
 
 	local center = startPosition + (direction.Unit * (length / 2))
 	beam.CFrame = CFrame.lookAt(center, center + direction.Unit)
 
 	beam.Parent = workspace
 
+	if isFinalTick then
+		local core = Instance.new("Part")
+		core.Name = "GasterBlasterFinalBeamCore"
+		core.Anchored = true
+		core.CanCollide = false
+		core.CanTouch = false
+		core.CanQuery = false
+		core.Material = Enum.Material.Neon
+		core.Color = Color3.fromRGB(255, 255, 255)
+		core.Transparency = 0
+		core.Size = Vector3.new(visualRadius * 0.55, visualRadius * 0.55, length + 3)
+		core.CFrame = beam.CFrame
+		core.Parent = workspace
+
+		TweenService:Create(
+			core,
+			TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Transparency = 1,
+				Size = Vector3.new(visualRadius * 0.1, visualRadius * 0.1, length + 3),
+			}
+		):Play()
+
+		Debris:AddItem(core, fadeTime + 0.08)
+	end
+
 	TweenService:Create(
 		beam,
-		TweenInfo.new(data.BeamFadeTime or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{
 			Transparency = 1,
-			Size = Vector3.new(radius * 0.25, radius * 0.25, length),
+			Size = Vector3.new(visualRadius * 0.18, visualRadius * 0.18, length),
 		}
 	):Play()
 
-	Debris:AddItem(beam, (data.BeamFadeTime or 0.12) + 0.08)
+	Debris:AddItem(beam, fadeTime + 0.08)
 end
 
 function GasterBlaster.Execute(ctx)
@@ -471,6 +666,7 @@ function GasterBlaster.Execute(ctx)
 	end
 
 	playSansSFX(ctx, "GasterBlasterCharge", primary, 3)
+	playChargePolish(ctx, data)
 
 	openJaws(blaster, data)
 	forcePrimaryInvisible(blaster)
@@ -486,9 +682,19 @@ function GasterBlaster.Execute(ctx)
 	local beamStart = getWorldBeamPosition(blaster)
 
 	playSansSFX(ctx, "GasterBlasterShoot", primary, 3)
+	playFirePolish(ctx, data)
 
 	hideRightEye(blaster)
 	forcePrimaryInvisible(blaster)
+
+	local beamTickCount = 0
+	local expectedTicks = math.max(
+		1,
+		math.ceil((data.BeamActiveTime or 0.4) / math.max(data.BeamTickRate or 0.08, 0.01))
+	)
+
+	local finalBeamPolishPlayed = false
+	local hitPolishLastPlayed = {}
 
 	ctx.ProjectileService:RunBeam({
 		OwnerCharacter = character,
@@ -511,7 +717,16 @@ function GasterBlaster.Execute(ctx)
 		end,
 
 		OnBeamTick = function()
-			createBeamVisual(beamStart, direction, data)
+			beamTickCount += 1
+
+			local isFinalTick = beamTickCount >= expectedTicks
+
+			createBeamVisual(beamStart, direction, data, isFinalTick)
+
+			if isFinalTick and not finalBeamPolishPlayed then
+				finalBeamPolishPlayed = true
+				playFinalBeamPolish(ctx, data, beamStart)
+			end
 		end,
 
 		OnBeamHit = function(targetCharacter, targetHumanoid, targetRoot, result)
@@ -523,6 +738,14 @@ function GasterBlaster.Execute(ctx)
 				print("[GasterBlaster] Blocked:", targetCharacter.Name)
 			elseif result == "Countered" then
 				print("[GasterBlaster] Countered:", targetCharacter.Name)
+			end
+
+			local now = os.clock()
+			local lastPlayed = hitPolishLastPlayed[targetCharacter] or 0
+
+			if now - lastPlayed >= 0.12 then
+				hitPolishLastPlayed[targetCharacter] = now
+				playBeamHitPolish(ctx, data, targetCharacter, result)
 			end
 		end,
 	})

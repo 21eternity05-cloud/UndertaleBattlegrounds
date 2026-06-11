@@ -31,8 +31,14 @@ local KnifeDash = {
 	HasIFrames = false,
 	HasArmor = false,
 
+	-- Clean dash FOV polish.
+	-- This is NOT a punch. FOV goes up during the dash, then resets on hit/whiff/cancel.
+	DashFOVIncrease = 5,
+	DashFOVInTime = 0.12,
+	DashFOVOutTime = 0.16,
+
 	Hitbox = {
-		Radius =  6.5,
+		Radius = 6.5,
 		StartOffset = -7.5,
 		EndOffset = -22,
 	},
@@ -48,6 +54,7 @@ function KnifeDash.Execute(ctx)
 	local Debris = game:GetService("Debris")
 
 	local originalWalkSpeed = humanoid.WalkSpeed
+	local dashFOVActive = false
 
 	local function playCharaSFX(soundName, parentPart, lifetime)
 		if ctx.VFXService and ctx.VFXService.PlayCharacterSFXAtPart then
@@ -66,6 +73,41 @@ function KnifeDash.Execute(ctx)
 	local function playCharaMoveVFX(vfxName, targetCharacter, targetRoot)
 		if ctx.VFXService and ctx.VFXService.PlayCharacterMoveVFX then
 			ctx.VFXService:PlayCharacterMoveVFX(character, vfxName, targetCharacter, targetRoot)
+		end
+	end
+
+	local function setDashFOVActive(isActive)
+		if isActive == dashFOVActive then
+			return
+		end
+
+		dashFOVActive = isActive
+
+		if not ctx.CinematicService then
+			return
+		end
+		if not character or not character.Parent then
+			return
+		end
+
+		local amount = moveData.DashFOVIncrease or 5
+		local inTime = moveData.DashFOVInTime or 0.12
+		local outTime = moveData.DashFOVOutTime or 0.16
+
+		if isActive then
+			if ctx.CinematicService.SetFOVOffset then
+				pcall(function()
+					ctx.CinematicService:SetFOVOffset(character, "KnifeDash", amount, inTime)
+				end)
+			end
+
+			return
+		end
+
+		if ctx.CinematicService.ClearFOVOffset then
+			pcall(function()
+				ctx.CinematicService:ClearFOVOffset(character, "KnifeDash", outTime)
+			end)
 		end
 	end
 
@@ -96,6 +138,9 @@ function KnifeDash.Execute(ctx)
 		playCharaMoveVFX("KnifeDashTrailStop")
 		stopKnifeDashAnimation(0)
 
+		-- FOV should not be active during startup, but reset anyway for safety.
+		setDashFOVActive(false)
+
 		ctx:FinishMove(0)
 	end
 
@@ -112,11 +157,13 @@ function KnifeDash.Execute(ctx)
 	while os.clock() - startupStart < windup do
 		if not character or not character.Parent then
 			restoreStartupMovement()
+			setDashFOVActive(false)
 			return
 		end
 
 		if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
 			restoreStartupMovement()
+			setDashFOVActive(false)
 			return
 		end
 
@@ -142,11 +189,15 @@ function KnifeDash.Execute(ctx)
 	if not ctx:IsActive() then
 		restoreStartupMovement()
 		playCharaMoveVFX("KnifeDashTrailStop")
+		setDashFOVActive(false)
 		return
 	end
 
 	playCharaSFX("KnifeChargeEnd", root, 2)
 	playCharaMoveVFX("KnifeDashTrailStart")
+
+	-- Clean FOV increase starts only when the dash begins.
+	setDashFOVActive(true)
 
 	humanoid.WalkSpeed = ctx.Config.DefaultWalkSpeed
 
@@ -210,6 +261,8 @@ function KnifeDash.Execute(ctx)
 	end
 
 	local function cleanupDash()
+		setDashFOVActive(false)
+
 		if linearVelocity then
 			linearVelocity:Destroy()
 			linearVelocity = nil

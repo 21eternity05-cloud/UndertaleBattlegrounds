@@ -42,6 +42,20 @@ local BoneShot = {
 
 	SpawnScale = 0.2,
 	AutoAimLead = 1.2,
+
+	-- Light Bone Shot polish.
+	-- No FOV, no impact frames. This is a frequent Sans poke/projectile.
+	HitVictimShakeMagnitude = 0.65,
+	HitVictimShakeRoughness = 9,
+	HitVictimShakeDuration = 0.13,
+
+	BlockVictimShakeMagnitude = 0.35,
+	BlockVictimShakeRoughness = 7,
+	BlockVictimShakeDuration = 0.09,
+
+	HitAttackerShakeMagnitude = 0.25,
+	HitAttackerShakeRoughness = 6,
+	HitAttackerShakeDuration = 0.07,
 }
 
 local function getBoneTemplate(ctx)
@@ -114,6 +128,48 @@ local function playSansSFX(ctx, soundName, parentPart, lifetime)
 	if not parentPart or not parentPart.Parent then return end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+end
+
+local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ShakeOnce then return end
+
+	pcall(function()
+		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+	end)
+end
+
+local function playProjectileHitPolish(ctx, data, targetCharacter, result)
+	if result == "Hit" or result == "ArmoredHit" or result == "Guardbreak" then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.HitVictimShakeMagnitude or BoneShot.HitVictimShakeMagnitude or 0.65,
+			data.HitVictimShakeRoughness or BoneShot.HitVictimShakeRoughness or 9,
+			data.HitVictimShakeDuration or BoneShot.HitVictimShakeDuration or 0.13
+		)
+
+		shakeCharacter(
+			ctx,
+			ctx.Character,
+			data.HitAttackerShakeMagnitude or BoneShot.HitAttackerShakeMagnitude or 0.25,
+			data.HitAttackerShakeRoughness or BoneShot.HitAttackerShakeRoughness or 6,
+			data.HitAttackerShakeDuration or BoneShot.HitAttackerShakeDuration or 0.07
+		)
+
+		return
+	end
+
+	if result == "Blocked" then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.BlockVictimShakeMagnitude or BoneShot.BlockVictimShakeMagnitude or 0.35,
+			data.BlockVictimShakeRoughness or BoneShot.BlockVictimShakeRoughness or 7,
+			data.BlockVictimShakeDuration or BoneShot.BlockVictimShakeDuration or 0.09
+		)
+	end
 end
 
 local function isMoveInterrupted(ctx)
@@ -471,6 +527,7 @@ function BoneShot.Execute(ctx)
 
 				OnHit = function(targetCharacter2, targetHumanoid2, targetRoot2, result)
 					print("[BoneShot] Projectile result:", result)
+					playProjectileHitPolish(ctx, data, targetCharacter2, result)
 				end,
 
 				OnWorldHit = function(projectile)

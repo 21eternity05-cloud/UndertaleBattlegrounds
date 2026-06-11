@@ -52,6 +52,27 @@ local RedSlash = {
 	ArmorPreventsStun = true,
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
+
+	-- Polish.
+	-- Red Slash is stronger than Knife Dash / Slash Barrage, but should not feel like an ultimate.
+	HitAttackerShakeMagnitude = 0.75,
+	HitAttackerShakeRoughness = 9,
+	HitAttackerShakeDuration = 0.14,
+
+	HitVictimShakeMagnitude = 1.15,
+	HitVictimShakeRoughness = 11,
+	HitVictimShakeDuration = 0.18,
+
+	BlockVictimShakeMagnitude = 0.55,
+	BlockVictimShakeRoughness = 8,
+	BlockVictimShakeDuration = 0.11,
+
+	GuardbreakVictimShakeMagnitude = 1.45,
+	GuardbreakVictimShakeRoughness = 13,
+	GuardbreakVictimShakeDuration = 0.22,
+
+	ImpactFrameDuration = 0.055,
+	GuardbreakImpactFrameDuration = 0.075,
 }
 
 local ANIMATION_NAME = "RedSlash"
@@ -170,6 +191,90 @@ function RedSlash.Execute(context)
 		end
 	end
 
+	local function shakeCharacter(targetCharacter, magnitude, roughness, duration)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+		if not context.CinematicService.ShakeOnce then return end
+
+		pcall(function()
+			context.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+		end)
+	end
+
+	local function playImpactFrame(targetCharacter, duration)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+		if not context.CinematicService.ImpactFrame then return end
+
+		local success = pcall(function()
+			context.CinematicService:ImpactFrame(targetCharacter, duration)
+		end)
+
+		if success then
+			return
+		end
+
+		-- Fallback in case your ImpactFrame uses a config table.
+		pcall(function()
+			context.CinematicService:ImpactFrame(targetCharacter, {
+				Duration = duration,
+			})
+		end)
+	end
+
+	local function playHitPolish(result, targetCharacter)
+		if result == "Hit" or result == "ArmoredHit" then
+			shakeCharacter(
+				character,
+				moveData.HitAttackerShakeMagnitude or RedSlash.HitAttackerShakeMagnitude or 0.75,
+				moveData.HitAttackerShakeRoughness or RedSlash.HitAttackerShakeRoughness or 9,
+				moveData.HitAttackerShakeDuration or RedSlash.HitAttackerShakeDuration or 0.14
+			)
+
+			shakeCharacter(
+				targetCharacter,
+				moveData.HitVictimShakeMagnitude or RedSlash.HitVictimShakeMagnitude or 1.15,
+				moveData.HitVictimShakeRoughness or RedSlash.HitVictimShakeRoughness or 11,
+				moveData.HitVictimShakeDuration or RedSlash.HitVictimShakeDuration or 0.18
+			)
+
+			playImpactFrame(character, moveData.ImpactFrameDuration or RedSlash.ImpactFrameDuration or 0.055)
+			playImpactFrame(targetCharacter, moveData.ImpactFrameDuration or RedSlash.ImpactFrameDuration or 0.055)
+
+			return
+		end
+
+		if result == "Guardbreak" then
+			shakeCharacter(
+				character,
+				moveData.HitAttackerShakeMagnitude or RedSlash.HitAttackerShakeMagnitude or 0.75,
+				moveData.HitAttackerShakeRoughness or RedSlash.HitAttackerShakeRoughness or 9,
+				moveData.HitAttackerShakeDuration or RedSlash.HitAttackerShakeDuration or 0.14
+			)
+
+			shakeCharacter(
+				targetCharacter,
+				moveData.GuardbreakVictimShakeMagnitude or RedSlash.GuardbreakVictimShakeMagnitude or 1.45,
+				moveData.GuardbreakVictimShakeRoughness or RedSlash.GuardbreakVictimShakeRoughness or 13,
+				moveData.GuardbreakVictimShakeDuration or RedSlash.GuardbreakVictimShakeDuration or 0.22
+			)
+
+			playImpactFrame(character, moveData.GuardbreakImpactFrameDuration or RedSlash.GuardbreakImpactFrameDuration or 0.075)
+			playImpactFrame(targetCharacter, moveData.GuardbreakImpactFrameDuration or RedSlash.GuardbreakImpactFrameDuration or 0.075)
+
+			return
+		end
+
+		if result == "Blocked" then
+			shakeCharacter(
+				targetCharacter,
+				moveData.BlockVictimShakeMagnitude or RedSlash.BlockVictimShakeMagnitude or 0.55,
+				moveData.BlockVictimShakeRoughness or RedSlash.BlockVictimShakeRoughness or 8,
+				moveData.BlockVictimShakeDuration or RedSlash.BlockVictimShakeDuration or 0.11
+			)
+		end
+	end
+
 	local track = animationService:PlayCharacterAnimation(
 		character,
 		ANIMATION_NAME,
@@ -236,7 +341,7 @@ function RedSlash.Execute(context)
 			return
 		end
 
-		print("[RedSlash] Charge marker reached")
+		print("[RedSlash] Charge VFX started")
 
 		-- Uses the simple Knife Dash style VFX from Chara VFXModule.
 		playMoveVFX("RedSlashStart")
@@ -261,12 +366,12 @@ function RedSlash.Execute(context)
 		finishMove(0)
 	end)
 
-	-- Fallback in case marker is missing/wrong name.
+	-- Silent fallback in case marker is missing/wrong name/late.
+	-- No warning because the move still works fine and this fallback is intentional.
 	task.delay(WINDUP_TIME * 0.35, function()
 		if finished then return end
 		if chargeTriggered then return end
 
-		warn("[RedSlash] charge marker was not reached yet. Starting charge VFX fallback.")
 		startChargeVFX()
 	end)
 
@@ -343,6 +448,7 @@ function RedSlash.Execute(context)
 					-- Put this Sound inside:
 					-- ReplicatedStorage > Assets > Characters > Chara > SFX > RedSlashHit
 					playCharaSFX("RedSlashHit", targetRoot, 2)
+					playHitPolish(result, targetCharacter)
 				end
 
 				if shouldApplyKnockback(result)

@@ -50,6 +50,27 @@ local KillingIntent = {
 
 	CounterWindow = 0.7,
 	CounterRange = 22,
+
+	-- Counter-confirm polish.
+	-- This should only happen after Killing Intent actually counters someone.
+	VictimZoomFOVOffset = -8,
+	VictimZoomInTime = 0.12,
+	VictimZoomOutTime = 0.16,
+
+	VictimCameraDistance = 8.5,
+	VictimCameraHeight = 2.7,
+	VictimCameraLookHeight = 2.1,
+	VictimCameraTweenTime = 0.13,
+
+	HitAttackerShakeMagnitude = 1.2,
+	HitAttackerShakeRoughness = 11,
+	HitAttackerShakeDuration = 0.18,
+
+	HitVictimShakeMagnitude = 1.7,
+	HitVictimShakeRoughness = 14,
+	HitVictimShakeDuration = 0.24,
+
+	HitImpactFrameDuration = 0.075,
 }
 
 local COUNTER_ANIMATION = "KillingIntentCounter"
@@ -64,6 +85,8 @@ local DOWNSLAM_IMPACT_DELAY = 0
 
 local HIT_FINISH_DELAY = 0.35
 local ATTACKER_COUNTER_STUN = 1.65
+
+local VICTIM_ZOOM_ID = "KillingIntentVictimZoom"
 
 local function getOrCreateCounterAttackerValue(character)
 	local value = character:FindFirstChild("CounterAttacker")
@@ -255,6 +278,9 @@ function KillingIntent.Execute(context)
 	local oldAutoRotate = humanoid.AutoRotate
 	local movementLockConnection = nil
 
+	local focusedVictimCharacter = nil
+	local victimFocusActive = false
+
 	local function addActiveFrameHighlight()
 		if not character or not character.Parent then
 			return
@@ -382,6 +408,170 @@ function KillingIntent.Execute(context)
 		end
 	end
 
+	local function shakeCharacter(targetCharacter, magnitude, roughness, duration)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+		if not context.CinematicService.ShakeOnce then return end
+
+		pcall(function()
+			context.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+		end)
+	end
+
+	local function impactFrame(targetCharacter, duration)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+		if not context.CinematicService.ImpactFrame then return end
+
+		local success = pcall(function()
+			context.CinematicService:ImpactFrame(targetCharacter, duration)
+		end)
+
+		if success then
+			return
+		end
+
+		pcall(function()
+			context.CinematicService:ImpactFrame(targetCharacter, {
+				Duration = duration,
+			})
+		end)
+	end
+
+	local function setFOVOffset(targetCharacter, id, amount, tweenTime)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+		if not context.CinematicService.SetFOVOffset then return end
+
+		pcall(function()
+			context.CinematicService:SetFOVOffset(targetCharacter, id, amount, tweenTime)
+		end)
+	end
+
+	local function clearFOVOffset(targetCharacter, id, tweenTime)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+
+		if context.CinematicService.ClearFOVOffset then
+			pcall(function()
+				context.CinematicService:ClearFOVOffset(targetCharacter, id, tweenTime)
+			end)
+
+			return
+		end
+
+		if context.CinematicService.ResetFOV then
+			pcall(function()
+				context.CinematicService:ResetFOV(targetCharacter, tweenTime)
+			end)
+		end
+	end
+
+	local function setVictimCameraLookingAtChara(targetCharacter, targetRoot)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not targetRoot or not targetRoot.Parent then return end
+		if not root or not root.Parent then return end
+		if not context.CinematicService then return end
+
+		local fromVictimToChara = root.Position - targetRoot.Position
+		local flatDirection = Vector3.new(fromVictimToChara.X, 0, fromVictimToChara.Z)
+
+		if flatDirection.Magnitude < 0.05 then
+			flatDirection = -targetRoot.CFrame.LookVector
+		else
+			flatDirection = flatDirection.Unit
+		end
+
+		local cameraDistance = moveData.VictimCameraDistance or KillingIntent.VictimCameraDistance or 8.5
+		local cameraHeight = moveData.VictimCameraHeight or KillingIntent.VictimCameraHeight or 2.7
+		local lookHeight = moveData.VictimCameraLookHeight or KillingIntent.VictimCameraLookHeight or 2.1
+		local tweenTime = moveData.VictimCameraTweenTime or KillingIntent.VictimCameraTweenTime or 0.13
+
+		local cameraPosition = targetRoot.Position - (flatDirection * cameraDistance) + Vector3.new(0, cameraHeight, 0)
+		local lookPosition = root.Position + Vector3.new(0, lookHeight, 0)
+		local cameraCFrame = CFrame.lookAt(cameraPosition, lookPosition)
+
+		if context.CinematicService.TweenCamera then
+			pcall(function()
+				context.CinematicService:TweenCamera(targetCharacter, cameraCFrame, tweenTime)
+			end)
+
+			return
+		end
+
+		if context.CinematicService.SetCamera then
+			pcall(function()
+				context.CinematicService:SetCamera(targetCharacter, cameraCFrame)
+			end)
+		end
+	end
+
+	local function startVictimFocus(targetCharacter, targetRoot)
+		if victimFocusActive then
+			return
+		end
+
+		if not targetCharacter or not targetCharacter.Parent then
+			return
+		end
+
+		victimFocusActive = true
+		focusedVictimCharacter = targetCharacter
+
+		setFOVOffset(
+			targetCharacter,
+			VICTIM_ZOOM_ID,
+			moveData.VictimZoomFOVOffset or KillingIntent.VictimZoomFOVOffset or -8,
+			moveData.VictimZoomInTime or KillingIntent.VictimZoomInTime or 0.12
+		)
+
+		setVictimCameraLookingAtChara(targetCharacter, targetRoot)
+	end
+
+	local function stopVictimFocus(targetCharacter)
+		local victimToClear = targetCharacter or focusedVictimCharacter
+
+		if not victimToClear then
+			return
+		end
+
+		clearFOVOffset(
+			victimToClear,
+			VICTIM_ZOOM_ID,
+			moveData.VictimZoomOutTime or KillingIntent.VictimZoomOutTime or 0.16
+		)
+
+		if context.CinematicService and context.CinematicService.ResetCamera then
+			pcall(function()
+				context.CinematicService:ResetCamera(victimToClear)
+			end)
+		end
+
+		if victimToClear == focusedVictimCharacter then
+			focusedVictimCharacter = nil
+			victimFocusActive = false
+		end
+	end
+
+	local function playCounterHitPolish(targetCharacter)
+		shakeCharacter(
+			character,
+			moveData.HitAttackerShakeMagnitude or KillingIntent.HitAttackerShakeMagnitude or 1.2,
+			moveData.HitAttackerShakeRoughness or KillingIntent.HitAttackerShakeRoughness or 11,
+			moveData.HitAttackerShakeDuration or KillingIntent.HitAttackerShakeDuration or 0.18
+		)
+
+		shakeCharacter(
+			targetCharacter,
+			moveData.HitVictimShakeMagnitude or KillingIntent.HitVictimShakeMagnitude or 1.7,
+			moveData.HitVictimShakeRoughness or KillingIntent.HitVictimShakeRoughness or 14,
+			moveData.HitVictimShakeDuration or KillingIntent.HitVictimShakeDuration or 0.24
+		)
+
+		impactFrame(character, moveData.HitImpactFrameDuration or KillingIntent.HitImpactFrameDuration or 0.075)
+		impactFrame(targetCharacter, moveData.HitImpactFrameDuration or KillingIntent.HitImpactFrameDuration or 0.075)
+	end
+
 	startHardMovementLock()
 
 	local counterTrack = animationService:PlayCharacterAnimation(character, COUNTER_ANIMATION, 0.04, 1, 1, true)
@@ -406,6 +596,7 @@ function KillingIntent.Execute(context)
 			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
+			stopVictimFocus()
 			context:FinishMove(0)
 			return
 		end
@@ -428,6 +619,7 @@ function KillingIntent.Execute(context)
 			removeActiveFrameHighlight()
 			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
+			stopVictimFocus()
 			context:FinishMove(0)
 
 			return
@@ -437,6 +629,7 @@ function KillingIntent.Execute(context)
 			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
+			stopVictimFocus()
 			context:FinishMove(0)
 			return
 		end
@@ -505,6 +698,7 @@ function KillingIntent.Execute(context)
 			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
+			stopVictimFocus()
 			context:FinishMove(0)
 		end)
 	end
@@ -568,6 +762,7 @@ function KillingIntent.Execute(context)
 		if targetCharacter and targetHumanoid and targetRoot and targetHumanoid.Health > 0 then
 			stunAttacker(targetCharacter, ATTACKER_COUNTER_STUN)
 			zeroHorizontalVelocity(targetRoot)
+			startVictimFocus(targetCharacter, targetRoot)
 		end
 
 		task.wait(HIT_FREEZE_TIME)
@@ -577,8 +772,13 @@ function KillingIntent.Execute(context)
 		end
 
 		if targetCharacter and targetHumanoid and targetRoot and targetHumanoid.Health > 0 then
+			-- Return victim FOV/camera right when Chara's actual hit comes out.
+			stopVictimFocus(targetCharacter)
+
 			-- KillingIntentHit SFX now plays exactly when the downslam comes out.
 			playCharaSFX("KillingIntentHit", targetRoot, 2)
+
+			playCounterHitPolish(targetCharacter)
 
 			local counterHitData = {}
 
@@ -642,6 +842,7 @@ function KillingIntent.Execute(context)
 
 			print("[KillingIntent] Counter hit:", targetCharacter.Name, "Downslam")
 		else
+			stopVictimFocus(targetCharacter)
 			warn("[KillingIntent] Counter triggered but attacker was invalid")
 		end
 

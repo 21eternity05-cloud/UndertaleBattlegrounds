@@ -117,6 +117,35 @@ function CinematicService:FOVPunch(character, targetFOV, inTime, outTime)
 	})
 end
 
+function CinematicService:SetFOVOffset(character, id, amount, tweenTime)
+	if typeof(id) ~= "string" or id == "" then return end
+	if typeof(amount) ~= "number" then return end
+
+	self:FireCamera(character, {
+		Action = "SetFOVOffset",
+		Id = id,
+		Amount = amount,
+		TweenTime = tweenTime or 0.12,
+	})
+end
+
+function CinematicService:ClearFOVOffset(character, id, tweenTime)
+	if typeof(id) ~= "string" or id == "" then return end
+
+	self:FireCamera(character, {
+		Action = "ClearFOVOffset",
+		Id = id,
+		TweenTime = tweenTime or 0.16,
+	})
+end
+
+function CinematicService:ResetFOV(character, tweenTime)
+	self:FireCamera(character, {
+		Action = "ResetFOV",
+		TweenTime = tweenTime or 0.16,
+	})
+end
+
 function CinematicService:ShakeRadius(originPosition, radius, intensity, roughness, duration, excludeCharacters)
 	if typeof(originPosition) ~= "Vector3" then return end
 

@@ -44,6 +44,31 @@ local BoneZone = {
 	BonesFadeTime = 0.18,
 
 	WarningTransparency = 0.35,
+
+	-- Bone Zone polish.
+	-- Keep this readable. It is area denial, not an ultimate.
+	EruptionAttackerShakeMagnitude = 0.55,
+	EruptionAttackerShakeRoughness = 8,
+	EruptionAttackerShakeDuration = 0.12,
+
+	EruptionRadiusShakeMagnitude = 0.9,
+	EruptionRadiusShakeRoughness = 9,
+	EruptionRadiusShakeDuration = 0.16,
+	EruptionRadiusShakeRange = 45,
+
+	HitVictimShakeMagnitude = 1.15,
+	HitVictimShakeRoughness = 12,
+	HitVictimShakeDuration = 0.2,
+
+	HitAttackerShakeMagnitude = 0.35,
+	HitAttackerShakeRoughness = 7,
+	HitAttackerShakeDuration = 0.08,
+
+	BlockVictimShakeMagnitude = 0.45,
+	BlockVictimShakeRoughness = 7,
+	BlockVictimShakeDuration = 0.1,
+
+	HitImpactFrameDuration = 0.045,
 }
 
 local function getSansVFXFolder(ctx)
@@ -63,6 +88,105 @@ local function playSansSFX(ctx, soundName, parentPart, lifetime)
 	if not parentPart or not parentPart.Parent then return end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+end
+
+local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ShakeOnce then return end
+
+	pcall(function()
+		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+	end)
+end
+
+local function impactFrame(ctx, targetCharacter, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ImpactFrame then return end
+
+	local success = pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
+	end)
+
+	if success then
+		return
+	end
+
+	pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, {
+			Duration = duration,
+		})
+	end)
+end
+
+local function playEruptionPolish(ctx, hitPosition, data)
+	if not ctx.CinematicService then
+		return
+	end
+
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		data.EruptionAttackerShakeMagnitude or BoneZone.EruptionAttackerShakeMagnitude or 0.55,
+		data.EruptionAttackerShakeRoughness or BoneZone.EruptionAttackerShakeRoughness or 8,
+		data.EruptionAttackerShakeDuration or BoneZone.EruptionAttackerShakeDuration or 0.12
+	)
+
+	if ctx.CinematicService.ShakeRadius then
+		pcall(function()
+			ctx.CinematicService:ShakeRadius(
+				hitPosition,
+				data.EruptionRadiusShakeRange or BoneZone.EruptionRadiusShakeRange or 45,
+				data.EruptionRadiusShakeMagnitude or BoneZone.EruptionRadiusShakeMagnitude or 0.9,
+				data.EruptionRadiusShakeRoughness or BoneZone.EruptionRadiusShakeRoughness or 9,
+				data.EruptionRadiusShakeDuration or BoneZone.EruptionRadiusShakeDuration or 0.16,
+				{
+					ExcludeCharacters = {
+						ctx.Character,
+					},
+				}
+			)
+		end)
+	end
+end
+
+local function playHitPolish(ctx, data, targetCharacter, result)
+	if result == "Hit" or result == "ArmoredHit" or result == "Guardbreak" then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.HitVictimShakeMagnitude or BoneZone.HitVictimShakeMagnitude or 1.15,
+			data.HitVictimShakeRoughness or BoneZone.HitVictimShakeRoughness or 12,
+			data.HitVictimShakeDuration or BoneZone.HitVictimShakeDuration or 0.2
+		)
+
+		shakeCharacter(
+			ctx,
+			ctx.Character,
+			data.HitAttackerShakeMagnitude or BoneZone.HitAttackerShakeMagnitude or 0.35,
+			data.HitAttackerShakeRoughness or BoneZone.HitAttackerShakeRoughness or 7,
+			data.HitAttackerShakeDuration or BoneZone.HitAttackerShakeDuration or 0.08
+		)
+
+		impactFrame(
+			ctx,
+			targetCharacter,
+			data.HitImpactFrameDuration or BoneZone.HitImpactFrameDuration or 0.045
+		)
+
+		return
+	end
+
+	if result == "Blocked" then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.BlockVictimShakeMagnitude or BoneZone.BlockVictimShakeMagnitude or 0.45,
+			data.BlockVictimShakeRoughness or BoneZone.BlockVictimShakeRoughness or 7,
+			data.BlockVictimShakeDuration or BoneZone.BlockVictimShakeDuration or 0.1
+		)
+	end
 end
 
 local function isMoveInterrupted(ctx)
@@ -434,6 +558,7 @@ local function doBoneZoneHitbox(ctx, hitPosition, data)
 
 			local result = applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoid, targetRoot, data)
 			print("[BoneZone] Hit result:", result)
+			playHitPolish(ctx, data, targetCharacter, result)
 		end
 	)
 end
@@ -515,6 +640,8 @@ function BoneZone.Execute(ctx)
 	forceImportantPrimaryPartsInvisible(zoneModel, bonesModel)
 
 	tweenBonesUp(zoneModel, bonesModel, bonesStartCFrame, bonesEndCFrame, data)
+
+	playEruptionPolish(ctx, hitPosition, data)
 
 	if isMoveInterrupted(ctx) then
 		if zoneModel and zoneModel.Parent then

@@ -902,6 +902,9 @@ end)
 --   Temporary FOV zoom.
 --   Use VERY sparingly. Best for movement moves or very specific cinematic punish moments.
 --   Example: Knife Dash speed burst, Killing Intent confirmed punish.
+--
+-- SetFOVOffset / ClearFOVOffset / ResetFOV:
+--   Sustained FOV offsets keyed by id. Use for clean speed FOV while a move is active.
 --============================================================
 
 local activeCinematicCamera = false
@@ -920,8 +923,118 @@ local fovPunchInTween = nil
 local fovPunchOutTween = nil
 local fovPunchBaseFOV = nil
 
+local activeFOVOffsets = {}
+local fovOffsetTween = nil
+local fovOffsetTweenToken = 0
+local fovOffsetBaseFOV = nil
+local fovOffsetCamera = nil
+
 local function getCamera()
 	return workspace.CurrentCamera
+end
+
+local function ensureFOVBase(camera)
+	if not camera then return nil end
+
+	if fovOffsetCamera ~= camera then
+		fovOffsetCamera = camera
+		fovOffsetBaseFOV = camera.FieldOfView
+	end
+
+	if typeof(fovOffsetBaseFOV) ~= "number" then
+		fovOffsetBaseFOV = camera.FieldOfView
+	end
+
+	return fovOffsetBaseFOV
+end
+
+local function getFOVOffsetTotal()
+	local total = 0
+
+	for _, amount in pairs(activeFOVOffsets) do
+		if typeof(amount) == "number" then
+			total += amount
+		end
+	end
+
+	return total
+end
+
+local function getSustainedFOVTarget(camera)
+	local baseFOV = ensureFOVBase(camera)
+	if not baseFOV then return nil end
+
+	return math.clamp(baseFOV + getFOVOffsetTotal(), 1, 120)
+end
+
+local function cancelFOVPunch()
+	fovPunchToken += 1
+
+	if fovPunchInTween then
+		fovPunchInTween:Cancel()
+		fovPunchInTween = nil
+	end
+
+	if fovPunchOutTween then
+		fovPunchOutTween:Cancel()
+		fovPunchOutTween = nil
+	end
+
+	fovPunchBaseFOV = nil
+end
+
+local function tweenToSustainedFOV(tweenTime)
+	local camera = getCamera()
+	if not camera then return end
+
+	cancelFOVPunch()
+	fovOffsetTweenToken += 1
+	local token = fovOffsetTweenToken
+
+	local targetFOV = getSustainedFOVTarget(camera)
+	if not targetFOV then return end
+
+	if fovOffsetTween then
+		fovOffsetTween:Cancel()
+		fovOffsetTween = nil
+	end
+
+	tweenTime = typeof(tweenTime) == "number" and math.max(0, tweenTime) or 0.16
+
+	fovOffsetTween = TweenService:Create(
+		camera,
+		TweenInfo.new(tweenTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			FieldOfView = targetFOV,
+		}
+	)
+
+	fovOffsetTween.Completed:Connect(function()
+		if token ~= fovOffsetTweenToken then return end
+		fovOffsetTween = nil
+	end)
+
+	fovOffsetTween:Play()
+end
+
+local function setFOVOffset(id, amount, tweenTime)
+	if typeof(id) ~= "string" or id == "" then return end
+	if typeof(amount) ~= "number" then return end
+
+	activeFOVOffsets[id] = amount
+	tweenToSustainedFOV(tweenTime or 0.12)
+end
+
+local function clearFOVOffset(id, tweenTime)
+	if typeof(id) ~= "string" or id == "" then return end
+
+	activeFOVOffsets[id] = nil
+	tweenToSustainedFOV(tweenTime or 0.16)
+end
+
+local function resetFOV(tweenTime)
+	table.clear(activeFOVOffsets)
+	tweenToSustainedFOV(tweenTime or 0.16)
 end
 
 local function beginCinematicCamera()
@@ -1114,7 +1227,12 @@ local function playFOVPunch(targetFOV, inTime, outTime, holdTime)
 	fovPunchToken += 1
 	local token = fovPunchToken
 
-	local originalFOV = fovPunchBaseFOV or camera.FieldOfView
+	if fovOffsetTween then
+		fovOffsetTween:Cancel()
+		fovOffsetTween = nil
+	end
+
+	local originalFOV = fovPunchBaseFOV or getSustainedFOVTarget(camera) or camera.FieldOfView
 	fovPunchBaseFOV = originalFOV
 
 	if fovPunchInTween then
@@ -1151,14 +1269,14 @@ local function playFOVPunch(targetFOV, inTime, outTime, holdTime)
 				camera,
 				TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 				{
-					FieldOfView = originalFOV,
+					FieldOfView = getSustainedFOVTarget(camera) or originalFOV,
 				}
 			)
 
 			fovPunchOutTween.Completed:Connect(function()
 				if token ~= fovPunchToken then return end
 				if camera and camera.Parent then
-					camera.FieldOfView = originalFOV
+					camera.FieldOfView = getSustainedFOVTarget(camera) or originalFOV
 				end
 
 				fovPunchBaseFOV = nil
@@ -1235,6 +1353,15 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 
 	elseif payload.Action == "FOVPunch" then
 		playFOVPunch(payload.TargetFOV, payload.InTime, payload.OutTime, payload.HoldTime)
+
+	elseif payload.Action == "SetFOVOffset" then
+		setFOVOffset(payload.Id, payload.Amount, payload.TweenTime)
+
+	elseif payload.Action == "ClearFOVOffset" then
+		clearFOVOffset(payload.Id, payload.TweenTime)
+
+	elseif payload.Action == "ResetFOV" then
+		resetFOV(payload.TweenTime)
 	end
 end)
 

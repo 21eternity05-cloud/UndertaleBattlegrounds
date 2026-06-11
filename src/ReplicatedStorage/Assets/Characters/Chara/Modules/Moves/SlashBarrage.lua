@@ -33,13 +33,19 @@ local SlashBarrage = {
 
 	HitCancelsTarget = true,
 	CancelableByHit = true,
-	
+
 	PlayMoveHitVFX = false,
 
 	HasIFrames = false,
 	HasArmor = false,
 
 	SlashEffectName = "SlashBarrage",
+
+	-- Light polish.
+	-- This move is a frequent combo starter/extender, so keep it clean.
+	VictimShakeMagnitude = 0.45,
+	VictimShakeRoughness = 8,
+	VictimShakeDuration = 0.11,
 }
 
 local ANIMATION_NAME = "SlashBarrage"
@@ -99,6 +105,21 @@ function SlashBarrage.Execute(context)
 				targetRoot
 			)
 		end
+	end
+
+	local function playVictimHitShake(targetCharacter)
+		if not targetCharacter or not targetCharacter.Parent then return end
+		if not context.CinematicService then return end
+		if not context.CinematicService.ShakeOnce then return end
+
+		pcall(function()
+			context.CinematicService:ShakeOnce(
+				targetCharacter,
+				moveData.VictimShakeMagnitude or SlashBarrage.VictimShakeMagnitude or 0.45,
+				moveData.VictimShakeRoughness or SlashBarrage.VictimShakeRoughness or 8,
+				moveData.VictimShakeDuration or SlashBarrage.VictimShakeDuration or 0.11
+			)
+		end)
 	end
 
 	local track = animationService:PlayCharacterAnimation(
@@ -236,6 +257,7 @@ function SlashBarrage.Execute(context)
 
 				if result == "Hit" or result == "ArmoredHit" or result == "Guardbreak" then
 					playCharaM1HitSFX(targetRoot)
+					playVictimHitShake(targetCharacter)
 				end
 			end
 		)

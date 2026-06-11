@@ -54,10 +54,27 @@ local SpecialHell = {
 	ArmorPreventsKnockback = true,
 	ArmorPreventsHitCancel = true,
 
-	HellWarningSize = Vector3.new(23, 0.18, 23),
-	HellBeamStartSize = Vector3.new(9, 1, 9),
-	HellBeamFinalSize = Vector3.new(18, 95, 18),
-	HellBeamHeight = 47.5,
+	-- Bigger Special Hell pillar polish.
+	HellWarningSize = Vector3.new(30, 0.18, 30),
+	HellBeamStartSize = Vector3.new(13, 1, 13),
+	HellBeamFinalSize = Vector3.new(27, 120, 27),
+	HellBeamHeight = 60,
+
+	-- Impact polish.
+	HellAttackerShakeMagnitude = 4.2,
+	HellAttackerShakeRoughness = 20,
+	HellAttackerShakeDuration = 0.65,
+
+	HellVictimShakeMagnitude = 5.2,
+	HellVictimShakeRoughness = 24,
+	HellVictimShakeDuration = 0.75,
+
+	HellRadiusShakeMagnitude = 2.8,
+	HellRadiusShakeRoughness = 16,
+	HellRadiusShakeDuration = 0.55,
+	HellRadiusShakeRange = 95,
+
+	HellImpactFrameDuration = 0.12,
 }
 
 local STARTUP_ANIMATIONS = { "SpecialHellGrab", "UltGrab" }
@@ -512,6 +529,81 @@ local function unlockGrabVictim(victimCharacter, victimHumanoid, oldVictimState)
 	end
 end
 
+local function playImpactFrame(ctx, targetCharacter, duration)
+	if not ctx.CinematicService then
+		return
+	end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
+	if not ctx.CinematicService.ImpactFrame then
+		return
+	end
+
+	local success = pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, "RedBlack", nil, nil, nil, duration)
+	end)
+
+	if success then
+		return
+	end
+
+	pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
+	end)
+end
+
+local function playHellScreenShake(ctx, victimCharacter, groundPosition)
+	local character = ctx.Character
+	local moveData = ctx.MoveData
+
+	if not ctx.CinematicService then
+		return
+	end
+
+	if ctx.CinematicService.ShakeOnce then
+		if character and character.Parent then
+			pcall(function()
+				ctx.CinematicService:ShakeOnce(
+					character,
+					moveData.HellAttackerShakeMagnitude or 4.2,
+					moveData.HellAttackerShakeRoughness or 20,
+					moveData.HellAttackerShakeDuration or 0.65
+				)
+			end)
+		end
+
+		if victimCharacter and victimCharacter.Parent then
+			pcall(function()
+				ctx.CinematicService:ShakeOnce(
+					victimCharacter,
+					moveData.HellVictimShakeMagnitude or 5.2,
+					moveData.HellVictimShakeRoughness or 24,
+					moveData.HellVictimShakeDuration or 0.75
+				)
+			end)
+		end
+	end
+
+	if ctx.CinematicService.ShakeRadius and typeof(groundPosition) == "Vector3" then
+		pcall(function()
+			ctx.CinematicService:ShakeRadius(
+				groundPosition,
+				moveData.HellRadiusShakeRange or 95,
+				moveData.HellRadiusShakeMagnitude or 2.8,
+				moveData.HellRadiusShakeRoughness or 16,
+				moveData.HellRadiusShakeDuration or 0.55,
+				{
+					ExcludeCharacters = {
+						character,
+						victimCharacter,
+					},
+				}
+			)
+		end)
+	end
+end
+
 local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 	local character = ctx.Character
 	local root = ctx.Root
@@ -534,7 +626,7 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 	warning.Parent = workspace
 
 	TweenService:Create(warning, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = moveData.HellWarningSize or Vector3.new(23, 0.18, 23),
+		Size = moveData.HellWarningSize or Vector3.new(30, 0.18, 30),
 		Transparency = 0.18,
 	}):Play()
 
@@ -543,7 +635,7 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 			return
 		end
 
-		local beamFinalSize = moveData.HellBeamFinalSize or Vector3.new(18, 95, 18)
+		local beamFinalSize = moveData.HellBeamFinalSize or Vector3.new(27, 120, 27)
 		local beamHeight = moveData.HellBeamHeight or (beamFinalSize.Y / 2)
 
 		local beam = Instance.new("Part")
@@ -555,7 +647,7 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 		beam.Material = Enum.Material.Neon
 		beam.Color = Color3.fromRGB(255, 0, 0)
 		beam.Transparency = 0.08
-		beam.Size = moveData.HellBeamStartSize or Vector3.new(9, 1, 9)
+		beam.Size = moveData.HellBeamStartSize or Vector3.new(13, 1, 13)
 		beam.CFrame = CFrame.new(groundPosition + Vector3.new(0, 0.5, 0))
 		beam.Parent = workspace
 
@@ -580,7 +672,7 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 			if beam and beam.Parent then
 				TweenService:Create(beam, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 					Transparency = 1,
-					Size = Vector3.new(4, beamFinalSize.Y, 4),
+					Size = Vector3.new(5, beamFinalSize.Y, 5),
 				}):Play()
 			end
 		end)
@@ -589,6 +681,8 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 	end)
 
 	Debris:AddItem(warning, 0.95)
+
+	return groundPosition
 end
 
 function SpecialHell.Execute(ctx)
@@ -733,13 +827,15 @@ function SpecialHell.Execute(ctx)
 
 		print("[SpecialHell] Hell marker")
 
-		playSpecialHellVFX(ctx, victimCharacter, victimRoot)
+		local groundPosition = playSpecialHellVFX(ctx, victimCharacter, victimRoot)
+
+		playHellScreenShake(ctx, victimCharacter, groundPosition)
 
 		if ctx.CinematicService then
-			ctx.CinematicService:ShakeOnce(character, 2.4, 10, 0.35)
-			ctx.CinematicService:ShakeOnce(victimCharacter, 2.4, 10, 0.35)
-			ctx.CinematicService:ImpactFrame(character, "RedBlack", nil, nil, nil, 0.08)
-			ctx.CinematicService:ImpactFrame(victimCharacter, "RedBlack", nil, nil, nil, 0.08)
+			local impactDuration = moveData.HellImpactFrameDuration or 0.12
+
+			playImpactFrame(ctx, character, impactDuration)
+			playImpactFrame(ctx, victimCharacter, impactDuration)
 		end
 
 		local damage = moveData.Damage or 999

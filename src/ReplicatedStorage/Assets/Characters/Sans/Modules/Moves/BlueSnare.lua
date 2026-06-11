@@ -58,6 +58,30 @@ local BlueSnare = {
 	HasIFrames = false,
 
 	PlayMoveHitVFX = false,
+
+	-- Blue Snare polish.
+	-- Catch should feel magical/control-based, final slam should feel heavier.
+	CatchVictimShakeMagnitude = 0.85,
+	CatchVictimShakeRoughness = 10,
+	CatchVictimShakeDuration = 0.16,
+
+	CatchAttackerShakeMagnitude = 0.25,
+	CatchAttackerShakeRoughness = 6,
+	CatchAttackerShakeDuration = 0.08,
+
+	BlockVictimShakeMagnitude = 0.4,
+	BlockVictimShakeRoughness = 7,
+	BlockVictimShakeDuration = 0.09,
+
+	FinalAttackerShakeMagnitude = 1.15,
+	FinalAttackerShakeRoughness = 11,
+	FinalAttackerShakeDuration = 0.18,
+
+	FinalVictimShakeMagnitude = 2.05,
+	FinalVictimShakeRoughness = 16,
+	FinalVictimShakeDuration = 0.3,
+
+	FinalImpactFrameDuration = 0.07,
 }
 
 local function playSansSFX(ctx, soundName, part, lifetime)
@@ -78,6 +102,92 @@ local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
 		targetCharacter,
 		targetRoot
 	)
+end
+
+local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ShakeOnce then return end
+
+	pcall(function()
+		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+	end)
+end
+
+local function playImpactFrame(ctx, targetCharacter, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ImpactFrame then return end
+
+	local success = pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
+	end)
+
+	if success then
+		return
+	end
+
+	pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, {
+			Duration = duration,
+		})
+	end)
+end
+
+local function playCatchPolish(ctx, targetCharacter)
+	local moveData = ctx.MoveData or BlueSnare
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		moveData.CatchVictimShakeMagnitude or BlueSnare.CatchVictimShakeMagnitude or 0.85,
+		moveData.CatchVictimShakeRoughness or BlueSnare.CatchVictimShakeRoughness or 10,
+		moveData.CatchVictimShakeDuration or BlueSnare.CatchVictimShakeDuration or 0.16
+	)
+
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		moveData.CatchAttackerShakeMagnitude or BlueSnare.CatchAttackerShakeMagnitude or 0.25,
+		moveData.CatchAttackerShakeRoughness or BlueSnare.CatchAttackerShakeRoughness or 6,
+		moveData.CatchAttackerShakeDuration or BlueSnare.CatchAttackerShakeDuration or 0.08
+	)
+end
+
+local function playBlockPolish(ctx, targetCharacter)
+	local moveData = ctx.MoveData or BlueSnare
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		moveData.BlockVictimShakeMagnitude or BlueSnare.BlockVictimShakeMagnitude or 0.4,
+		moveData.BlockVictimShakeRoughness or BlueSnare.BlockVictimShakeRoughness or 7,
+		moveData.BlockVictimShakeDuration or BlueSnare.BlockVictimShakeDuration or 0.09
+	)
+end
+
+local function playFinalSlamPolish(ctx, targetCharacter)
+	local moveData = ctx.MoveData or BlueSnare
+
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		moveData.FinalAttackerShakeMagnitude or BlueSnare.FinalAttackerShakeMagnitude or 1.15,
+		moveData.FinalAttackerShakeRoughness or BlueSnare.FinalAttackerShakeRoughness or 11,
+		moveData.FinalAttackerShakeDuration or BlueSnare.FinalAttackerShakeDuration or 0.18
+	)
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		moveData.FinalVictimShakeMagnitude or BlueSnare.FinalVictimShakeMagnitude or 2.05,
+		moveData.FinalVictimShakeRoughness or BlueSnare.FinalVictimShakeRoughness or 16,
+		moveData.FinalVictimShakeDuration or BlueSnare.FinalVictimShakeDuration or 0.3
+	)
+
+	local impactDuration = moveData.FinalImpactFrameDuration or BlueSnare.FinalImpactFrameDuration or 0.07
+	playImpactFrame(ctx, ctx.Character, impactDuration)
+	playImpactFrame(ctx, targetCharacter, impactDuration)
 end
 
 local function playHitAnimation(ctx)
@@ -289,6 +399,8 @@ local function applyFinalHit(ctx, targetCharacter, targetHumanoid, targetRoot)
 	targetRoot.AssemblyLinearVelocity = Vector3.zero
 	targetRoot.AssemblyAngularVelocity = Vector3.zero
 
+	playFinalSlamPolish(ctx, targetCharacter)
+
 	-- IMPORTANT:
 	-- Start downslam first so ground splat VFX still happens even if the damage kills.
 	if ctx.MovementService and ctx.MovementService.ApplyGroundSplatDownslam then
@@ -411,6 +523,7 @@ function BlueSnare.Execute(ctx)
 				victimRoot = targetRoot
 			elseif result == "Blocked" then
 				print("[BlueSnare] Blocked")
+				playBlockPolish(ctx, targetCharacter)
 			elseif result == "Countered" then
 				print("[BlueSnare] Countered")
 			elseif result == "DamageLocked" then
@@ -431,6 +544,7 @@ function BlueSnare.Execute(ctx)
 
 	playSansSFX(ctx, "Ding", victimRoot, 2)
 	playSansMoveVFX(ctx, "BlueHeart", victimCharacter, victimRoot)
+	playCatchPolish(ctx, victimCharacter)
 
 	stopCombatMovement(ctx, root, victimRoot)
 

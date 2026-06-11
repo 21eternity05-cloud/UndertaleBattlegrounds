@@ -10,15 +10,15 @@ local BadTime = {
 	DisplayName = "Bad Time",
 	AnimationName = "BadTime",
 
-	Cooldown = 1, 
-	Duration =  25,
+	Cooldown = 1,
+	Duration = 25,
 	LockTime = 25,
 	MaxLockTime = 25,
 
 	RequiresTarget = true,
 	RequiresAim = false,
 
-	WarningTime = .8,
+	WarningTime = 0.8,
 	ConfirmRange = 80,
 
 	SequenceTime = 25,
@@ -89,6 +89,76 @@ local BadTime = {
 	GravitySpamTotalDamage = 10,
 	FinalSlamDamage = 35,
 
+	-- Bad Time transition cut timing.
+	-- Undertale-style: instant black, teleport cue, instant unblack, teleport cue.
+	TransitionBlackTime = 0.14,
+
+	-- Consistent Sans polish.
+	SequenceHitVictimShakeMagnitude = 0.45,
+	SequenceHitVictimShakeRoughness = 8,
+	SequenceHitVictimShakeDuration = 0.09,
+
+	SequenceBlockVictimShakeMagnitude = 0.3,
+	SequenceBlockVictimShakeRoughness = 6,
+	SequenceBlockVictimShakeDuration = 0.07,
+
+	BoneZoneEruptionShakeMagnitude = 0.85,
+	BoneZoneEruptionShakeRoughness = 9,
+	BoneZoneEruptionShakeDuration = 0.14,
+
+	BoneWallHitVictimShakeMagnitude = 0.6,
+	BoneWallHitVictimShakeRoughness = 9,
+	BoneWallHitVictimShakeDuration = 0.11,
+
+	BlasterChargeAttackerShakeMagnitude = 0.25,
+	BlasterChargeAttackerShakeRoughness = 6,
+	BlasterChargeAttackerShakeDuration = 0.08,
+
+	BlasterFireVictimShakeMagnitude = 0.55,
+	BlasterFireVictimShakeRoughness = 8,
+	BlasterFireVictimShakeDuration = 0.1,
+
+	GiantBlasterFireVictimShakeMagnitude = 1.05,
+	GiantBlasterFireVictimShakeRoughness = 12,
+	GiantBlasterFireVictimShakeDuration = 0.18,
+
+	BeamVisualTransparency = 0.18,
+	BeamVisualSizeMultiplier = 1.25,
+	BeamFadeTime = 0.18,
+
+	GiantBeamVisualTransparency = 0.06,
+	GiantBeamVisualSizeMultiplier = 1.85,
+	GiantBeamFadeTime = 0.22,
+
+	FinalRingBeamVisualTransparency = 0.015,
+	FinalRingBeamVisualSizeMultiplier = 2.5,
+	FinalRingBeamFadeTime = 0.25,
+	FinalRingBeamExtraLength = 10,
+
+	FinalRingBeamAttackerShakeMagnitude = 1.35,
+	FinalRingBeamAttackerShakeRoughness = 14,
+	FinalRingBeamAttackerShakeDuration = 0.24,
+
+	FinalRingBeamVictimShakeMagnitude = 1.8,
+	FinalRingBeamVictimShakeRoughness = 16,
+	FinalRingBeamVictimShakeDuration = 0.28,
+
+	FinalRingBeamImpactFrameDuration = 0.06,
+
+	GravitySpamShakeMagnitude = 0.7,
+	GravitySpamShakeRoughness = 9,
+	GravitySpamShakeDuration = 0.12,
+
+	FinalSlamAttackerShakeMagnitude = 2.2,
+	FinalSlamAttackerShakeRoughness = 16,
+	FinalSlamAttackerShakeDuration = 0.35,
+
+	FinalSlamVictimShakeMagnitude = 3.2,
+	FinalSlamVictimShakeRoughness = 20,
+	FinalSlamVictimShakeDuration = 0.45,
+
+	FinalSlamImpactFrameDuration = 0.09,
+
 	AwardsUlt = false,
 }
 
@@ -110,6 +180,45 @@ local function getVFXTemplate(ctx, name)
 	end
 
 	return template
+end
+
+local function getScreenEffectRemote()
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "Remotes"
+		remotes.Parent = ReplicatedStorage
+	end
+
+	local remote = remotes:FindFirstChild("ScreenEffectRemote")
+
+	if not remote then
+		remote = Instance.new("RemoteEvent")
+		remote.Name = "ScreenEffectRemote"
+		remote.Parent = remotes
+	end
+
+	return remote
+end
+
+local function getPlayerFromCharacter(character)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character == character then
+			return player
+		end
+	end
+
+	return nil
+end
+
+local function fireScreenEffect(character, effectName)
+	local player = getPlayerFromCharacter(character)
+	if not player then
+		return
+	end
+
+	getScreenEffectRemote():FireClient(player, effectName)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
@@ -135,6 +244,172 @@ local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
 	end
 
 	ctx.VFXService:PlayCharacterMoveVFX(ctx.Character, moveName, targetCharacter, targetRoot)
+end
+
+local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ShakeOnce then return end
+
+	pcall(function()
+		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
+	end)
+end
+
+local function impactFrame(ctx, targetCharacter, duration)
+	if not targetCharacter or not targetCharacter.Parent then return end
+	if not ctx.CinematicService then return end
+	if not ctx.CinematicService.ImpactFrame then return end
+
+	local success = pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
+	end)
+
+	if success then
+		return
+	end
+
+	pcall(function()
+		ctx.CinematicService:ImpactFrame(targetCharacter, {
+			Duration = duration,
+		})
+	end)
+end
+
+local function playSequenceDamagePolish(ctx, targetCharacter, blockMode)
+	local data = ctx.MoveData or BadTime
+
+	local magnitude = data.SequenceHitVictimShakeMagnitude or BadTime.SequenceHitVictimShakeMagnitude or 0.45
+	local roughness = data.SequenceHitVictimShakeRoughness or BadTime.SequenceHitVictimShakeRoughness or 8
+	local duration = data.SequenceHitVictimShakeDuration or BadTime.SequenceHitVictimShakeDuration or 0.09
+
+	if blockMode == BLOCK_MODE_ALL_ROUND then
+		magnitude *= 1.1
+		duration *= 1.1
+	end
+
+	shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
+end
+
+local function playSequenceBlockPolish(ctx, targetCharacter)
+	local data = ctx.MoveData or BadTime
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		data.SequenceBlockVictimShakeMagnitude or BadTime.SequenceBlockVictimShakeMagnitude or 0.3,
+		data.SequenceBlockVictimShakeRoughness or BadTime.SequenceBlockVictimShakeRoughness or 6,
+		data.SequenceBlockVictimShakeDuration or BadTime.SequenceBlockVictimShakeDuration or 0.07
+	)
+end
+
+local function playBoneZoneEruptionPolish(ctx, targetCharacter)
+	local data = ctx.MoveData or BadTime
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		data.BoneZoneEruptionShakeMagnitude or BadTime.BoneZoneEruptionShakeMagnitude or 0.85,
+		data.BoneZoneEruptionShakeRoughness or BadTime.BoneZoneEruptionShakeRoughness or 9,
+		data.BoneZoneEruptionShakeDuration or BadTime.BoneZoneEruptionShakeDuration or 0.14
+	)
+end
+
+local function playBlasterChargePolish(ctx, giant)
+	local data = ctx.MoveData or BadTime
+
+	local magnitude = data.BlasterChargeAttackerShakeMagnitude or BadTime.BlasterChargeAttackerShakeMagnitude or 0.25
+	local roughness = data.BlasterChargeAttackerShakeRoughness or BadTime.BlasterChargeAttackerShakeRoughness or 6
+	local duration = data.BlasterChargeAttackerShakeDuration or BadTime.BlasterChargeAttackerShakeDuration or 0.08
+
+	if giant then
+		magnitude *= 1.7
+		duration *= 1.35
+	end
+
+	shakeCharacter(ctx, ctx.Character, magnitude, roughness, duration)
+end
+
+local function playBlasterHitPolish(ctx, targetCharacter, giant, finalPulse)
+	local data = ctx.MoveData or BadTime
+
+	if finalPulse then
+		shakeCharacter(
+			ctx,
+			ctx.Character,
+			data.FinalRingBeamAttackerShakeMagnitude or BadTime.FinalRingBeamAttackerShakeMagnitude or 1.35,
+			data.FinalRingBeamAttackerShakeRoughness or BadTime.FinalRingBeamAttackerShakeRoughness or 14,
+			data.FinalRingBeamAttackerShakeDuration or BadTime.FinalRingBeamAttackerShakeDuration or 0.24
+		)
+
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.FinalRingBeamVictimShakeMagnitude or BadTime.FinalRingBeamVictimShakeMagnitude or 1.8,
+			data.FinalRingBeamVictimShakeRoughness or BadTime.FinalRingBeamVictimShakeRoughness or 16,
+			data.FinalRingBeamVictimShakeDuration or BadTime.FinalRingBeamVictimShakeDuration or 0.28
+		)
+
+		impactFrame(ctx, ctx.Character, data.FinalRingBeamImpactFrameDuration or BadTime.FinalRingBeamImpactFrameDuration or 0.06)
+		impactFrame(ctx, targetCharacter, data.FinalRingBeamImpactFrameDuration or BadTime.FinalRingBeamImpactFrameDuration or 0.06)
+
+		return
+	end
+
+	if giant then
+		shakeCharacter(
+			ctx,
+			targetCharacter,
+			data.GiantBlasterFireVictimShakeMagnitude or BadTime.GiantBlasterFireVictimShakeMagnitude or 1.05,
+			data.GiantBlasterFireVictimShakeRoughness or BadTime.GiantBlasterFireVictimShakeRoughness or 12,
+			data.GiantBlasterFireVictimShakeDuration or BadTime.GiantBlasterFireVictimShakeDuration or 0.18
+		)
+
+		return
+	end
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		data.BlasterFireVictimShakeMagnitude or BadTime.BlasterFireVictimShakeMagnitude or 0.55,
+		data.BlasterFireVictimShakeRoughness or BadTime.BlasterFireVictimShakeRoughness or 8,
+		data.BlasterFireVictimShakeDuration or BadTime.BlasterFireVictimShakeDuration or 0.1
+	)
+end
+
+local function playGravitySpamPolish(ctx, targetCharacter)
+	local data = ctx.MoveData or BadTime
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		data.GravitySpamShakeMagnitude or BadTime.GravitySpamShakeMagnitude or 0.7,
+		data.GravitySpamShakeRoughness or BadTime.GravitySpamShakeRoughness or 9,
+		data.GravitySpamShakeDuration or BadTime.GravitySpamShakeDuration or 0.12
+	)
+end
+
+local function playFinalSlamPolish(ctx, targetCharacter)
+	local data = ctx.MoveData or BadTime
+
+	shakeCharacter(
+		ctx,
+		ctx.Character,
+		data.FinalSlamAttackerShakeMagnitude or BadTime.FinalSlamAttackerShakeMagnitude or 2.2,
+		data.FinalSlamAttackerShakeRoughness or BadTime.FinalSlamAttackerShakeRoughness or 16,
+		data.FinalSlamAttackerShakeDuration or BadTime.FinalSlamAttackerShakeDuration or 0.35
+	)
+
+	shakeCharacter(
+		ctx,
+		targetCharacter,
+		data.FinalSlamVictimShakeMagnitude or BadTime.FinalSlamVictimShakeMagnitude or 3.2,
+		data.FinalSlamVictimShakeRoughness or BadTime.FinalSlamVictimShakeRoughness or 20,
+		data.FinalSlamVictimShakeDuration or BadTime.FinalSlamVictimShakeDuration or 0.45
+	)
+
+	impactFrame(ctx, ctx.Character, data.FinalSlamImpactFrameDuration or BadTime.FinalSlamImpactFrameDuration or 0.09)
+	impactFrame(ctx, targetCharacter, data.FinalSlamImpactFrameDuration or BadTime.FinalSlamImpactFrameDuration or 0.09)
 end
 
 local function setReservedVictim(character, victimCharacter)
@@ -647,6 +922,7 @@ local function blockableSequenceDamage(
 	end
 
 	if wouldBlockFromPosition(ctx, targetCharacter, targetRoot, sourcePosition, attackData) then
+		playSequenceBlockPolish(ctx, targetCharacter)
 		return false
 	end
 
@@ -656,6 +932,8 @@ local function blockableSequenceDamage(
 		ctx.VFXService:EmitHitVFXOnVictim(targetRoot, ctx.Character)
 	end
 
+	playSequenceDamagePolish(ctx, targetCharacter, blockMode)
+
 	return true
 end
 
@@ -664,10 +942,38 @@ local function teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 		return
 	end
 
+	local targetCharacter = targetRoot.Parent
+	local transitionTime = 0.14
+
+	if ctx and ctx.MoveData and typeof(ctx.MoveData.TransitionBlackTime) == "number" then
+		transitionTime = math.max(0, ctx.MoveData.TransitionBlackTime)
+	end
+
+	-- Bad Time / Undertale-style transition:
+	-- instant black screen + Teleport sound,
+	-- move victim while black,
+	-- instant unblack + same Teleport sound.
+	fireScreenEffect(targetCharacter, "BlackScreen")
+	playSansSFX(ctx, "Teleport", targetRoot, 2)
+
+	task.wait(transitionTime)
+
+	if not ctx:IsActive() then
+		fireScreenEffect(targetCharacter, "BlackScreenEnd")
+		playSansSFX(ctx, "Teleport", targetRoot, 2)
+		return
+	end
+
+	if not targetRoot or not targetRoot.Parent then
+		fireScreenEffect(targetCharacter, "BlackScreenEnd")
+		return
+	end
+
 	targetRoot.AssemblyLinearVelocity = Vector3.zero
 	targetRoot.AssemblyAngularVelocity = Vector3.zero
 	targetRoot.CFrame = victimSpotCFrame
 
+	fireScreenEffect(targetCharacter, "BlackScreenEnd")
 	playSansSFX(ctx, "Teleport", targetRoot, 2)
 end
 
@@ -833,6 +1139,7 @@ local function spawnBoneZoneAtVictim(ctx, data)
 	end
 
 	playSansSFX(ctx, "BoneUp", targetRoot, 2)
+	playBoneZoneEruptionPolish(ctx, targetCharacter)
 
 	local bones = zoneModel:FindFirstChild("Bones", true)
 
@@ -993,6 +1300,14 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 						data.BoneWallDamage or 4,
 						BLOCK_MODE_NORMAL
 					)
+
+					shakeCharacter(
+						ctx,
+						hitCharacter,
+						data.BoneWallHitVictimShakeMagnitude or BadTime.BoneWallHitVictimShakeMagnitude or 0.6,
+						data.BoneWallHitVictimShakeRoughness or BadTime.BoneWallHitVictimShakeRoughness or 9,
+						data.BoneWallHitVictimShakeDuration or BadTime.BoneWallHitVictimShakeDuration or 0.11
+					)
 				end
 			)
 		end
@@ -1086,31 +1401,80 @@ local function hideBlasterRightEye(blaster)
 	end
 end
 
-local function createBeamVisual(startPosition, direction, length, radius, fadeTime)
+local function createBeamVisual(startPosition, direction, length, radius, fadeTime, giant, finalPulse)
+	local visualLength = length
+
+	if finalPulse then
+		visualLength += BadTime.FinalRingBeamExtraLength or 10
+	end
+
+	local sizeMultiplier = BadTime.BeamVisualSizeMultiplier or 1.25
+	local transparency = BadTime.BeamVisualTransparency or 0.18
+	local finalFadeTime = fadeTime or BadTime.BeamFadeTime or 0.18
+	local beamColor = Color3.fromRGB(255, 255, 255)
+
+	if giant then
+		sizeMultiplier = BadTime.GiantBeamVisualSizeMultiplier or 1.85
+		transparency = BadTime.GiantBeamVisualTransparency or 0.06
+		finalFadeTime = fadeTime or BadTime.GiantBeamFadeTime or 0.22
+		beamColor = Color3.fromRGB(220, 245, 255)
+	end
+
+	if finalPulse then
+		sizeMultiplier = BadTime.FinalRingBeamVisualSizeMultiplier or 2.5
+		transparency = BadTime.FinalRingBeamVisualTransparency or 0.015
+		finalFadeTime = BadTime.FinalRingBeamFadeTime or 0.25
+		beamColor = Color3.fromRGB(200, 245, 255)
+	end
+
+	local visualRadius = radius * sizeMultiplier
+
 	local beam = Instance.new("Part")
-	beam.Name = "BadTimeGasterBeam"
+	beam.Name = finalPulse and "BadTimeFinalRingBeam" or (giant and "BadTimeGiantGasterBeam" or "BadTimeGasterBeam")
 	beam.Anchored = true
 	beam.CanCollide = false
 	beam.CanTouch = false
 	beam.CanQuery = false
 	beam.Material = Enum.Material.Neon
-	beam.Color = Color3.fromRGB(255, 255, 255)
-	beam.Transparency = 0.12
-	beam.Size = Vector3.new(radius * 1.35, radius * 1.35, length)
+	beam.Color = beamColor
+	beam.Transparency = transparency
+	beam.Size = Vector3.new(visualRadius, visualRadius, visualLength)
 
-	local center = startPosition + direction.Unit * (length / 2)
+	local center = startPosition + direction.Unit * (visualLength / 2)
 	beam.CFrame = CFrame.lookAt(center, center + direction.Unit)
 	beam.Parent = workspace
 
-	TweenService:Create(beam, TweenInfo.new(fadeTime or 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+	if finalPulse then
+		local core = Instance.new("Part")
+		core.Name = "BadTimeFinalRingBeamCore"
+		core.Anchored = true
+		core.CanCollide = false
+		core.CanTouch = false
+		core.CanQuery = false
+		core.Material = Enum.Material.Neon
+		core.Color = Color3.fromRGB(255, 255, 255)
+		core.Transparency = 0
+		core.Size = Vector3.new(visualRadius * 0.55, visualRadius * 0.55, visualLength + 4)
+		core.CFrame = beam.CFrame
+		core.Parent = workspace
+
+		TweenService:Create(core, TweenInfo.new(finalFadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+			Size = Vector3.new(visualRadius * 0.08, visualRadius * 0.08, visualLength + 4),
+		}):Play()
+
+		Debris:AddItem(core, finalFadeTime + 0.08)
+	end
+
+	TweenService:Create(beam, TweenInfo.new(finalFadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Transparency = 1,
-		Size = Vector3.new(radius * 0.25, radius * 0.25, length),
+		Size = Vector3.new(visualRadius * 0.2, visualRadius * 0.2, visualLength),
 	}):Play()
 
-	Debris:AddItem(beam, (fadeTime or 0.18) + 0.08)
+	Debris:AddItem(beam, finalFadeTime + 0.08)
 end
 
-local function hitVictimWithBeam(ctx, data, startPosition, direction, length, radius, damage, blockable)
+local function hitVictimWithBeam(ctx, data, startPosition, direction, length, radius, damage, blockable, giant, finalPulse)
 	if not ctx:IsActive() then
 		return
 	end
@@ -1141,13 +1505,18 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 			hitOnce = true
 
 			if blockable ~= false then
-				blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, startPosition, damage, BLOCK_MODE_NORMAL)
+				local didDamage = blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, startPosition, damage, BLOCK_MODE_NORMAL)
+				if didDamage then
+					playBlasterHitPolish(ctx, hitCharacter, giant == true, finalPulse == true)
+				end
 			else
 				nonlethalDamage(ctx, hitCharacter, hitHumanoid, hitRoot, damage)
 
 				if ctx.VFXService then
 					ctx.VFXService:EmitHitVFXOnVictim(hitRoot, ctx.Character)
 				end
+
+				playBlasterHitPolish(ctx, hitCharacter, giant == true, finalPulse == true)
 			end
 		end
 	)
@@ -1266,7 +1635,8 @@ local function spawnGasterBlasterAtVictim(
 	beamLength,
 	beamRadius,
 	beamStep,
-	giant
+	giant,
+	finalPulse
 )
 	if not ctx:IsActive() then
 		return
@@ -1349,6 +1719,8 @@ local function spawnGasterBlasterAtVictim(
 	end
 
 	playSansSFX(ctx, "GasterBlasterCharge", primary, 3)
+	playBlasterChargePolish(ctx, giant == true or finalPulse == true)
+
 	openBlasterJaws(blaster)
 
 	task.wait(chargeTime or 0.75)
@@ -1404,12 +1776,31 @@ local function spawnGasterBlasterAtVictim(
 		return
 	end
 
-	createBeamVisual(beamStart, beamDirection, beamLength or 78, beamRadius or 5.5, giant and 0.24 or 0.18)
+	createBeamVisual(
+		beamStart,
+		beamDirection,
+		beamLength or 78,
+		beamRadius or 5.5,
+		giant and 0.24 or 0.18,
+		giant == true,
+		finalPulse == true
+	)
 
 	local oldStep = data.BlasterBeamStep
 	data.BlasterBeamStep = beamStep or oldStep or 6
 
-	hitVictimWithBeam(ctx, data, beamStart, beamDirection, beamLength or 78, beamRadius or 5.5, damage, true)
+	hitVictimWithBeam(
+		ctx,
+		data,
+		beamStart,
+		beamDirection,
+		beamLength or 78,
+		beamRadius or 5.5,
+		damage,
+		true,
+		giant == true,
+		finalPulse == true
+	)
 
 	data.BlasterBeamStep = oldStep
 
@@ -1488,6 +1879,7 @@ local function runBlasterRing(ctx, data)
 
 			local angleOffset = (round - 1) * (math.pi / count)
 			local angle = math.rad((360 / count) * index) + angleOffset
+			local isFinalPulse = round == rounds and index == count
 
 			task.spawn(function()
 				if not ctx:IsActive() then
@@ -1504,7 +1896,8 @@ local function runBlasterRing(ctx, data)
 					data.BlasterBeamLength or 78,
 					data.BlasterBeamRadius or 5.2,
 					data.BlasterBeamStep or 6,
-					false
+					false,
+					isFinalPulse
 				)
 			end)
 
@@ -1545,7 +1938,8 @@ local function runGiantBlasters(ctx, data)
 				data.GiantBlasterBeamLength or 120,
 				data.GiantBlasterBeamRadius or 9,
 				data.GiantBlasterBeamStep or 7,
-				true
+				true,
+				false
 			)
 		end)
 
@@ -1586,6 +1980,7 @@ local function runBlueGravityFinale(ctx, data)
 		targetRoot.AssemblyLinearVelocity = velocity
 
 		nonlethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, perHit)
+		playGravitySpamPolish(ctx, targetCharacter)
 
 		playSansMoveVFX(ctx, "BlueHeart", targetCharacter, targetRoot)
 		playSansSFX(ctx, "Teleport", targetRoot, 2)
@@ -1625,6 +2020,8 @@ local function finalSlam(ctx, data)
 	slamData.AirAnimationName = "DownslamAir"
 	slamData.SplatAnimationName = "DownslamSplat"
 
+	playFinalSlamPolish(ctx, targetCharacter)
+
 	if ctx.MovementService and ctx.MovementService.ApplyGroundSplatDownslam then
 		ctx.MovementService:ApplyGroundSplatDownslam(ctx.Root, targetCharacter, targetHumanoid, targetRoot, slamData, {
 			StateService = ctx.StateService,
@@ -1641,11 +2038,6 @@ local function finalSlam(ctx, data)
 
 	if targetHumanoid.Health > 0 then
 		lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 35)
-	end
-
-	if ctx.CinematicService then
-		ctx.CinematicService:ShakeOnce(ctx.Character, 2, 10, 0.3)
-		ctx.CinematicService:ShakeOnce(targetCharacter, 2, 10, 0.3)
 	end
 end
 
