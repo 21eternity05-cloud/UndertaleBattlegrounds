@@ -20,11 +20,53 @@ function ProgressionService.new(config)
 	self.ProfileLoaded = {}
 	self.Remote = nil
 	self.KillAwarded = setmetatable({}, { __mode = "k" })
+	self.DataStoreWarnings = {}
 
 	self.DataStoreName = config.DataStoreName or "UTBG_PlayerData_v1"
-	self.DataStore = DataStoreService:GetDataStore(self.DataStoreName)
+	local success, dataStore = pcall(function()
+		return DataStoreService:GetDataStore(self.DataStoreName)
+	end)
+
+	if success then
+		self.DataStore = dataStore
+	else
+		self.DataStore = nil
+		self:WarnDataStoreFailure(nil, "GetDataStore", dataStore)
+	end
 
 	return self
+end
+
+function ProgressionService:WarnDataStoreFailure(player, action, err)
+	local playerKey = player and tostring(player.UserId) or "Server"
+	local warningKey = playerKey .. ":" .. tostring(action)
+
+	if self.DataStoreWarnings[warningKey] then
+		return
+	end
+
+	self.DataStoreWarnings[warningKey] = true
+
+	local playerName = player and player.Name or "server"
+	warn("[DataStore]", action, "failed for", playerName, "-", tostring(err))
+	warn("[DataStore] DataStores require the experience to be published. In Studio, enable Game Settings > Security > Enable Studio Access to API Services.")
+	warn("[DataStore] Roblox DataStores can fail temporarily; gameplay will continue with default/session data.")
+end
+
+function ProgressionService:SafeDataStoreCall(player, action, callback)
+	if not self.DataStore then
+		self:WarnDataStoreFailure(player, action, "DataStore unavailable")
+		return false, nil
+	end
+
+	local success, result = pcall(callback)
+
+	if not success then
+		self:WarnDataStoreFailure(player, action, result)
+		return false, nil
+	end
+
+	return true, result
 end
 
 function ProgressionService:GetRemotesFolder()
@@ -239,12 +281,11 @@ function ProgressionService:LoadProfile(player)
 	local key = self:GetDataKey(player)
 	local defaultProfile = self:MakeDefaultProfile()
 
-	local success, result = pcall(function()
+	local success, result = self:SafeDataStoreCall(player, "GetAsync", function()
 		return self.DataStore:GetAsync(key)
 	end)
 
 	if not success then
-		warn("[ProgressionService] Failed to load profile for", player.Name, result)
 		self.Profiles[player] = defaultProfile
 		self.ProfileLoaded[player] = false
 		return defaultProfile
@@ -270,14 +311,13 @@ function ProgressionService:SaveProfile(player)
 	local key = self:GetDataKey(player)
 	local payload = self:GetSavePayload(profile)
 
-	local success, result = pcall(function()
+	local success = self:SafeDataStoreCall(player, "UpdateAsync", function()
 		self.DataStore:UpdateAsync(key, function()
 			return payload
 		end)
 	end)
 
 	if not success then
-		warn("[ProgressionService] Failed to save profile for", player.Name, result)
 		return false
 	end
 

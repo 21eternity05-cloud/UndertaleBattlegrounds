@@ -14,6 +14,7 @@ function CharacterService.new(config, weaponService, progressionService, charact
 	self.ProgressionService = progressionService
 	self.CharacterMorphService = characterMorphService
 	self.CombatStatusService = nil
+	self.CharacterIntroService = nil
 
 	return self
 end
@@ -221,6 +222,17 @@ function CharacterService:GetCurrentOptions(player, characterName)
 	})
 end
 
+function CharacterService:PlayCharacterIntro(player, character, characterName)
+	if not self.CharacterIntroService then
+		return
+	end
+	if not self.CharacterIntroService.PlayCharacterSwitchIntro then
+		return
+	end
+
+	self.CharacterIntroService:PlayCharacterSwitchIntro(player, characterName, character)
+end
+
 function CharacterService:SetCharacter(player, characterName, options)
 	if typeof(characterName) ~= "string" then return end
 	if not self:IsValidCharacter(characterName) then
@@ -271,6 +283,8 @@ function CharacterService:SetCharacter(player, characterName, options)
 		if self.WeaponService then
 			self.WeaponService:EquipWeapon(character, characterName)
 		end
+
+		self:PlayCharacterIntro(player, character, characterName)
 	end
 
 	print(player.Name .. " changed character to " .. characterName)
@@ -315,6 +329,8 @@ function CharacterService:SetupPlayer(player)
 		if self.WeaponService then
 			self.WeaponService:EquipWeapon(character, characterName)
 		end
+
+		self:PlayCharacterIntro(player, character, characterName)
 	end)
 end
 
@@ -358,6 +374,8 @@ function CharacterService:Start()
 			if self.WeaponService then
 				self.WeaponService:EquipWeapon(player.Character, characterName)
 			end
+
+			self:PlayCharacterIntro(player, player.Character, characterName)
 		end
 	end
 end

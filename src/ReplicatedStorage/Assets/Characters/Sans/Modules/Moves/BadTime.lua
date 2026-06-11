@@ -212,13 +212,13 @@ local function getPlayerFromCharacter(character)
 	return nil
 end
 
-local function fireScreenEffect(character, effectName)
+local function fireScreenEffect(character, effectNameOrPayload)
 	local player = getPlayerFromCharacter(character)
 	if not player then
 		return
 	end
 
-	getScreenEffectRemote():FireClient(player, effectName)
+	getScreenEffectRemote():FireClient(player, effectNameOrPayload)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)

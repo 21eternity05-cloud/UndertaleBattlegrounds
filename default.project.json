@@ -39,6 +39,14 @@
 
         "LoreRemote": {
           "$className": "RemoteEvent"
+        },
+
+        "ScreenEffectRemote": {
+          "$className": "RemoteEvent"
+        },
+
+        "InteractableRemote": {
+          "$className": "RemoteEvent"
         }
       },
 
@@ -100,6 +108,10 @@
 
       "World": {
         "$path": "src/ServerScriptService/World"
+      },
+
+      "Systems": {
+        "$path": "src/ServerScriptService/Systems"
       }
     },
 

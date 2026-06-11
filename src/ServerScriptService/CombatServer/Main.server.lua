@@ -36,6 +36,12 @@ local AwakeningMusicService = require(combatFolder:WaitForChild("AwakeningMusicS
 -- Status / utility services
 local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
 local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
+local CharacterIntroService = require(combatFolder:WaitForChild("CharacterIntroService")).new(
+	Config,
+	AnimationService,
+	VFXService,
+	CinematicService
+)
 local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
 local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
 local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
@@ -127,6 +133,7 @@ StateService.KillCreditService = KillCreditService
 CombatStatusService.KillCreditService = KillCreditService
 CharacterService.CombatStatusService = CombatStatusService
 CharacterService.SpawnService = SpawnService
+CharacterService.CharacterIntroService = CharacterIntroService
 BlockService.SpawnService = SpawnService
 
 M1Service.UltService = UltService

@@ -1,5 +1,6 @@
 local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local CharaVFX = {}
 CharaVFX.__index = CharaVFX
@@ -254,6 +255,220 @@ function CharaVFX:CloneWorldVFX(vfxName, cframe, lifetime)
 	Debris:AddItem(clone, lifetime or 2)
 
 	return clone
+end
+
+function CharaVFX:GetVFXTemplate(vfxName)
+	local vfxFolder = self:GetCharaVFXFolder()
+	if not vfxFolder then
+		return nil
+	end
+
+	local template = vfxFolder:FindFirstChild(vfxName)
+	if not template then
+		warn("[CharaVFX] Missing VFX:", vfxName)
+		return nil
+	end
+
+	return template
+end
+
+function CharaVFX:GetSaveScreenAssetRotation(saveScreen)
+	if saveScreen:IsA("Model") then
+		local pivot = saveScreen:GetPivot()
+		return pivot - pivot.Position
+	end
+
+	if saveScreen:IsA("BasePart") then
+		return saveScreen.CFrame - saveScreen.CFrame.Position
+	end
+
+	return CFrame.new()
+end
+
+function CharaVFX:GetSaveScreenTargetCFrame(root, offset, assetRotation)
+	local _, rootYaw, _ = root.CFrame:ToOrientation()
+	local yawCFrame = CFrame.Angles(0, rootYaw, 0)
+	local targetPosition = root.Position + offset
+
+	return CFrame.new(targetPosition) * yawCFrame * (assetRotation or CFrame.new())
+end
+
+function CharaVFX:PivotSaveScreenAboveRoot(saveScreen, root, offset, assetRotation)
+	if not saveScreen or not saveScreen.Parent then
+		return
+	end
+	if not root or not root.Parent then
+		return
+	end
+
+	local targetCFrame = self:GetSaveScreenTargetCFrame(root, offset, assetRotation)
+	self:PivotVFX(saveScreen, targetCFrame)
+end
+
+function CharaVFX:PlayCharacterSwitchIntro(context)
+	context = context or {}
+
+	local character = context.Character
+	local root = context.Root or self:GetRoot(character)
+
+	if not character or not character.Parent then
+		return nil
+	end
+	if not root or not root.Parent then
+		return nil
+	end
+
+	if self.VFXService and self.VFXService.PlayCharacterSFXAtPart then
+		self.VFXService:PlayCharacterSFXAtPart("Chara", "Spawn", root, 3)
+	end
+
+	local template = self:GetVFXTemplate("SaveScreen")
+	if not template then
+		return nil
+	end
+
+	local saveScreen = template:Clone()
+	saveScreen.Name = "ActiveCharacterSwitchSaveScreen"
+
+	local offset = context.SaveScreenOffset or Vector3.new(0, 10, 0)
+	local assetRotation = self:GetSaveScreenAssetRotation(saveScreen)
+	local originalPartSize = nil
+	local originalScale = 1
+	local supportsScale = false
+
+	self:PrepareVFXInstance(saveScreen)
+	saveScreen.Parent = workspace
+
+	if saveScreen:IsA("Model") then
+		local scaleSuccess, currentScale = pcall(function()
+			return saveScreen:GetScale()
+		end)
+
+		if scaleSuccess and typeof(currentScale) == "number" then
+			originalScale = currentScale
+			supportsScale = true
+		end
+	elseif saveScreen:IsA("BasePart") then
+		originalPartSize = saveScreen.Size
+	end
+
+	self:PivotSaveScreenAboveRoot(saveScreen, root, offset, assetRotation)
+
+	local cleanedUp = false
+	local scaleValue = Instance.new("NumberValue")
+	scaleValue.Name = "SaveScreenScale"
+	local smallScale = math.max(originalScale * 0.08, 0.01)
+	scaleValue.Value = smallScale
+
+	local scaleConnection = nil
+	local heartbeatConnection = nil
+
+	local function applyScale(value)
+		if not saveScreen or not saveScreen.Parent then
+			return
+		end
+
+		if supportsScale and saveScreen:IsA("Model") then
+			pcall(function()
+				saveScreen:ScaleTo(value)
+			end)
+		elseif saveScreen:IsA("BasePart") and originalPartSize then
+			saveScreen.Size = originalPartSize * math.max(value / originalScale, 0.01)
+		end
+
+		self:PivotSaveScreenAboveRoot(saveScreen, root, offset, assetRotation)
+	end
+
+	scaleConnection = scaleValue:GetPropertyChangedSignal("Value"):Connect(function()
+		applyScale(scaleValue.Value)
+	end)
+
+	heartbeatConnection = RunService.Heartbeat:Connect(function()
+		if not saveScreen or not saveScreen.Parent then
+			if heartbeatConnection then
+				heartbeatConnection:Disconnect()
+				heartbeatConnection = nil
+			end
+			return
+		end
+
+		self:PivotSaveScreenAboveRoot(saveScreen, root, offset, assetRotation)
+	end)
+
+	applyScale(smallScale)
+
+	local scaleUpTween = TweenService:Create(
+		scaleValue,
+		TweenInfo.new(0.35, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
+		{
+			Value = originalScale,
+		}
+	)
+
+	scaleUpTween:Play()
+
+	local function destroyNow()
+		if heartbeatConnection then
+			heartbeatConnection:Disconnect()
+			heartbeatConnection = nil
+		end
+
+		if scaleConnection then
+			scaleConnection:Disconnect()
+			scaleConnection = nil
+		end
+
+		if scaleValue then
+			scaleValue:Destroy()
+			scaleValue = nil
+		end
+
+		if saveScreen and saveScreen.Parent then
+			saveScreen:Destroy()
+		end
+	end
+
+	return function()
+		if cleanedUp then
+			return
+		end
+
+		cleanedUp = true
+
+		if not saveScreen or not saveScreen.Parent then
+			destroyNow()
+			return
+		end
+
+		if not scaleValue then
+			destroyNow()
+			return
+		end
+
+		local scaleDownTween = TweenService:Create(
+			scaleValue,
+			TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Value = smallScale,
+			}
+		)
+
+		local finishedScaleDown = false
+
+		scaleDownTween.Completed:Connect(function()
+			finishedScaleDown = true
+			destroyNow()
+		end)
+
+		scaleDownTween:Play()
+
+		task.delay(0.35, destroyNow)
+
+		local waitStart = os.clock()
+		while not finishedScaleDown and os.clock() - waitStart < 0.35 do
+			task.wait()
+		end
+	end
 end
 
 function CharaVFX:GetForwardVFXCFrame(character, distance, height)
