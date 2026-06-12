@@ -294,7 +294,7 @@ local function getKnifePart(character)
 	return nil
 end
 
-local function setKnifeCollision(character, enabled)
+local function setKnifeCollision(character, _enabled)
 	if not character then
 		return
 	end
@@ -306,7 +306,7 @@ local function setKnifeCollision(character, enabled)
 
 		if object:IsA("BasePart") then
 			object.Anchored = false
-			object.CanCollide = enabled == true
+			object.CanCollide = false
 			object.CanTouch = false
 			object.CanQuery = false
 			object.Massless = true
@@ -316,7 +316,7 @@ local function setKnifeCollision(character, enabled)
 		for _, descendant in ipairs(object:GetDescendants()) do
 			if descendant:IsA("BasePart") then
 				descendant.Anchored = false
-				descendant.CanCollide = enabled == true
+				descendant.CanCollide = false
 				descendant.CanTouch = false
 				descendant.CanQuery = false
 				descendant.Massless = true

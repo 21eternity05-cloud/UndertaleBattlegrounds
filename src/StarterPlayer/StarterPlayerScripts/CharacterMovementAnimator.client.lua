@@ -11,11 +11,26 @@ local ANIMATION_NAMES = {
 	Run = "Run",
 }
 
+local AWAKEN_ANIMATION_NAMES = {
+	Idle = "AwakenIdle",
+}
+
 local activeTracks = {}
+
 local runningConnection = nil
 local diedConnection = nil
-local attributeConnection = nil
+local attributeConnections = {}
 local setupToken = 0
+
+local function disconnectAttributeConnections()
+	for _, connection in ipairs(attributeConnections) do
+		if connection then
+			connection:Disconnect()
+		end
+	end
+
+	table.clear(attributeConnections)
+end
 
 local function stopTracks()
 	for _, track in pairs(activeTracks) do
@@ -35,15 +50,19 @@ local function stopTracks()
 		diedConnection:Disconnect()
 		diedConnection = nil
 	end
+
+	disconnectAttributeConnections()
 end
 
 local function getCharacterName(character)
 	local characterName = character and character:GetAttribute("CharacterName")
+
 	if typeof(characterName) == "string" and characterName ~= "" then
 		return characterName
 	end
 
 	local playerName = player:GetAttribute("CharacterName")
+
 	if typeof(playerName) == "string" and playerName ~= "" then
 		return playerName
 	end
@@ -51,14 +70,41 @@ local function getCharacterName(character)
 	return "Chara"
 end
 
+local function isDisbeliefPapyrusAwakened(character)
+	if not character then
+		return false
+	end
+
+	local characterName = getCharacterName(character)
+
+	if characterName ~= "DisbeliefPapyrus" then
+		return false
+	end
+
+	return character:GetAttribute("CombatMode") == "Phase2"
+		or character:GetAttribute("PapyrusMode") == "Phase2"
+		or character:GetAttribute("DisbeliefPhase") == 2
+		or character:GetAttribute("Phase2Active") == true
+end
+
+local function getMovementAnimationName(character, animationType)
+	if animationType == "Idle" and isDisbeliefPapyrusAwakened(character) then
+		return AWAKEN_ANIMATION_NAMES.Idle
+	end
+
+	return ANIMATION_NAMES[animationType]
+end
+
 local function getAnimationsFolder(characterName)
 	local characterFolder = charactersFolder:FindFirstChild(characterName)
+
 	if not characterFolder then
 		warn("[CharacterMovementAnimator] Missing character folder:", characterName)
 		return nil
 	end
 
 	local animationsFolder = characterFolder:FindFirstChild("Animations")
+
 	if not animationsFolder then
 		warn("[CharacterMovementAnimator] Missing Animations folder for:", characterName)
 		return nil
@@ -138,6 +184,7 @@ end
 
 local function setupCharacter(character)
 	setupToken += 1
+
 	local myToken = setupToken
 
 	stopTracks()
@@ -147,6 +194,7 @@ local function setupCharacter(character)
 	end
 
 	local humanoid = character:WaitForChild("Humanoid", 5)
+
 	if not humanoid then
 		return
 	end
@@ -169,23 +217,27 @@ local function setupCharacter(character)
 		return
 	end
 
+	local idleName = getMovementAnimationName(character, "Idle")
+	local walkName = getMovementAnimationName(character, "Walk")
+	local runName = getMovementAnimationName(character, "Run")
+
 	activeTracks.Idle = loadTrack(
 		animator,
-		findAnimation(animationsFolder, ANIMATION_NAMES.Idle),
+		findAnimation(animationsFolder, idleName),
 		Enum.AnimationPriority.Idle,
 		true
 	)
 
 	activeTracks.Walk = loadTrack(
 		animator,
-		findAnimation(animationsFolder, ANIMATION_NAMES.Walk),
+		findAnimation(animationsFolder, walkName),
 		Enum.AnimationPriority.Movement,
 		true
 	)
 
 	activeTracks.Run = loadTrack(
 		animator,
-		findAnimation(animationsFolder, ANIMATION_NAMES.Run),
+		findAnimation(animationsFolder, runName),
 		Enum.AnimationPriority.Movement,
 		true
 	)
@@ -202,6 +254,24 @@ local function setupCharacter(character)
 	end)
 
 	diedConnection = humanoid.Died:Connect(stopTracks)
+
+	local function refreshForAwakenChange()
+		if myToken ~= setupToken then
+			return
+		end
+
+		task.defer(function()
+			if myToken == setupToken and character and character.Parent then
+				setupCharacter(character)
+			end
+		end)
+	end
+
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("CharacterName"):Connect(refreshForAwakenChange))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("CombatMode"):Connect(refreshForAwakenChange))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("PapyrusMode"):Connect(refreshForAwakenChange))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("DisbeliefPhase"):Connect(refreshForAwakenChange))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("Phase2Active"):Connect(refreshForAwakenChange))
 
 	task.defer(function()
 		if myToken == setupToken then
@@ -224,11 +294,6 @@ player.CharacterAdded:Connect(function(character)
 end)
 
 player:GetAttributeChangedSignal("CharacterName"):Connect(refresh)
-
-if attributeConnection then
-	attributeConnection:Disconnect()
-	attributeConnection = nil
-end
 
 if player.Character then
 	task.defer(refresh)

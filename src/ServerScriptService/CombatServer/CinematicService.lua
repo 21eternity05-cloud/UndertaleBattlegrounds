@@ -203,11 +203,25 @@ function CinematicService:ZeroHorizontalVelocity(root)
 	root.AssemblyAngularVelocity = Vector3.zero
 end
 
+function CinematicService:IsWeaponRelated(instance)
+	if not instance then
+		return false
+	end
+
+	return instance:GetAttribute("WeaponVisual") == true
+		or instance:GetAttribute("EquippedWeapon") == true
+		or instance:GetAttribute("CharacterWeapon") == true
+		or instance:FindFirstAncestor("RealKnife") ~= nil
+		or instance:FindFirstAncestor("EquippedKnife") ~= nil
+		or instance:FindFirstAncestor("EquippedWeapon") ~= nil
+		or instance:FindFirstAncestor("EquippedWeapons") ~= nil
+end
+
 function CinematicService:SetCharacterCollision(character, canCollide)
 	if not character then return end
 
 	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and not self:IsWeaponRelated(descendant) then
 			descendant.CanCollide = canCollide == true
 		end
 	end
@@ -531,9 +545,16 @@ function CinematicService:EraseCharacter(character, restoreDelay)
 			if instance and instance.Parent then
 				if instance:IsA("BasePart") then
 					instance.Transparency = data.Transparency
-					instance.CanCollide = data.CanCollide
-					instance.CanTouch = data.CanTouch
-					instance.CanQuery = data.CanQuery
+					if self:IsWeaponRelated(instance) then
+						instance.CanCollide = false
+						instance.CanTouch = false
+						instance.CanQuery = false
+						instance.Massless = true
+					else
+						instance.CanCollide = data.CanCollide
+						instance.CanTouch = data.CanTouch
+						instance.CanQuery = data.CanQuery
+					end
 				elseif instance:IsA("Decal") or instance:IsA("Texture") then
 					instance.Transparency = data.Transparency
 				elseif instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") then

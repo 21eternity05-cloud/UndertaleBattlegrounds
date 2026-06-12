@@ -54,7 +54,10 @@ function WeaponService:IsWeaponContainer(instance)
 		return false
 	end
 
-	if instance:GetAttribute("CharacterWeapon") == true then
+	if instance:GetAttribute("CharacterWeapon") == true
+		or instance:GetAttribute("WeaponVisual") == true
+		or instance:GetAttribute("EquippedWeapon") == true
+	then
 		return true
 	end
 
@@ -62,11 +65,28 @@ function WeaponService:IsWeaponContainer(instance)
 		or instance.Name == "EquippedSword"
 		or instance.Name == "EquippedShield"
 		or instance.Name == "EquippedStaff"
+		or instance.Name == "EquippedKnife"
+		or instance.Name == "RealKnife"
+		or instance.Name == "Knife"
 	then
 		return true
 	end
 
 	return false
+end
+
+function WeaponService:IsWeaponRelated(instance)
+	if not instance then
+		return false
+	end
+
+	return instance:GetAttribute("WeaponVisual") == true
+		or instance:GetAttribute("EquippedWeapon") == true
+		or instance:GetAttribute("CharacterWeapon") == true
+		or instance:FindFirstAncestor("RealKnife") ~= nil
+		or instance:FindFirstAncestor("EquippedKnife") ~= nil
+		or instance:FindFirstAncestor("EquippedWeapon") ~= nil
+		or instance:FindFirstAncestor("EquippedWeapons") ~= nil
 end
 
 function WeaponService:IsWeaponMotor(instance)
@@ -88,6 +108,57 @@ function WeaponService:IsWeaponMotor(instance)
 	end
 
 	return false
+end
+
+function WeaponService:ApplyWeaponPartSettings(instance)
+	if not instance then
+		return
+	end
+
+	instance:SetAttribute("CharacterWeapon", true)
+	instance:SetAttribute("WeaponVisual", true)
+	instance:SetAttribute("EquippedWeapon", true)
+
+	if instance:IsA("BasePart") then
+		instance.CanCollide = false
+		instance.CanTouch = false
+		instance.CanQuery = false
+		instance.Massless = true
+	end
+end
+
+function WeaponService:MakeWeaponNonCollidable(weapon)
+	if not weapon then
+		return
+	end
+
+	self:ApplyWeaponPartSettings(weapon)
+
+	for _, descendant in ipairs(weapon:GetDescendants()) do
+		self:ApplyWeaponPartSettings(descendant)
+	end
+
+	weapon.DescendantAdded:Connect(function(descendant)
+		self:ApplyWeaponPartSettings(descendant)
+	end)
+end
+
+function WeaponService:SanitizeEquippedWeapons(character)
+	if not character then
+		return
+	end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if self:IsWeaponContainer(child) or child.Name == "EquippedWeapons" then
+			self:MakeWeaponNonCollidable(child)
+		end
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if self:IsWeaponRelated(descendant) then
+			self:ApplyWeaponPartSettings(descendant)
+		end
+	end
 end
 
 function WeaponService:RemoveCurrentWeapon(character)
@@ -126,6 +197,7 @@ function WeaponService:EquipWeapon(character, characterName)
 	if not module then return end
 
 	module:Equip(character)
+	self:SanitizeEquippedWeapons(character)
 end
 
 return WeaponService

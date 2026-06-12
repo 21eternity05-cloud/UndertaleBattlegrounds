@@ -3,12 +3,30 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local AnimationService = {}
 AnimationService.__index = AnimationService
 
+local function isDisbeliefPapyrusAwakened(character)
+	if not character then
+		return false
+	end
+
+	local characterName = character:GetAttribute("CharacterName")
+
+	if characterName ~= "DisbeliefPapyrus" then
+		return false
+	end
+
+	return character:GetAttribute("CombatMode") == "Phase2"
+		or character:GetAttribute("PapyrusMode") == "Phase2"
+		or character:GetAttribute("DisbeliefPhase") == 2
+		or character:GetAttribute("Phase2Active") == true
+end
+
 function AnimationService.new(config)
 	local self = setmetatable({}, AnimationService)
 
 	self.Config = config
 
 	local assetsFolder = ReplicatedStorage:FindFirstChild(config.AssetsFolderName or "Assets")
+
 	self.AssetsFolder = assetsFolder
 
 	if assetsFolder then
@@ -130,6 +148,13 @@ function AnimationService:StopM1LikeTracks(animator, fadeTime)
 			or trackName == "M5"
 			or trackName == "Uptilt"
 			or trackName == "Downslam"
+			or trackName == "AwakenM1"
+			or trackName == "AwakenM2"
+			or trackName == "AwakenM3"
+			or trackName == "AwakenM4"
+			or trackName == "AwakenM5"
+			or trackName == "AwakenUptilt"
+			or trackName == "AwakenDownslam"
 		then
 			track:Stop(fadeTime or 0.03)
 		end
@@ -198,8 +223,8 @@ function AnimationService:PlayCharacterAnimation(character, animationName, fadeT
 
 	-- Important:
 	-- If the selected character owns this animation object but its AnimationId is empty,
-	-- intentionally play nothing. Do NOT fallback to Chara.
-	-- This lets Sans have blank M1 animations without using Chara's M1s.
+	-- intentionally play nothing.
+	-- This lets Sans/Papyrus have blank animations without falling back to Chara.
 	if animation then
 		if not self:IsAnimationUsable(animation) then
 			return nil
@@ -222,8 +247,32 @@ function AnimationService:PlayCharacterAnimation(character, animationName, fadeT
 	return nil
 end
 
+function AnimationService:GetM1AnimationName(character, combo)
+	if isDisbeliefPapyrusAwakened(character) then
+		return "AwakenM" .. tostring(combo)
+	end
+
+	return self.Config.M1Animations and self.Config.M1Animations[combo]
+end
+
+function AnimationService:GetUptiltAnimationName(character)
+	if isDisbeliefPapyrusAwakened(character) then
+		return "AwakenUptilt"
+	end
+
+	return self.Config.M1Animations and self.Config.M1Animations.Uptilt
+end
+
+function AnimationService:GetDownslamAnimationName(character)
+	if isDisbeliefPapyrusAwakened(character) then
+		return "AwakenDownslam"
+	end
+
+	return self.Config.M1Animations and self.Config.M1Animations.Downslam
+end
+
 function AnimationService:PlayM1Animation(character, combo)
-	local animationName = self.Config.M1Animations and self.Config.M1Animations[combo]
+	local animationName = self:GetM1AnimationName(character, combo)
 
 	if not animationName then
 		return nil
@@ -233,7 +282,7 @@ function AnimationService:PlayM1Animation(character, combo)
 end
 
 function AnimationService:PlayUptiltAnimation(character)
-	local animationName = self.Config.M1Animations and self.Config.M1Animations.Uptilt
+	local animationName = self:GetUptiltAnimationName(character)
 
 	if not animationName then
 		return nil
@@ -243,7 +292,7 @@ function AnimationService:PlayUptiltAnimation(character)
 end
 
 function AnimationService:PlayDownslamAnimation(character)
-	local animationName = self.Config.M1Animations and self.Config.M1Animations.Downslam
+	local animationName = self:GetDownslamAnimationName(character)
 
 	if not animationName then
 		return nil
@@ -292,10 +341,7 @@ function AnimationService:StopUniversalAnimation(character, animationKey, fadeTi
 	if not animationKey then return end
 
 	local animationName = self.Config.UniversalAnimations and self.Config.UniversalAnimations[animationKey]
-
-	if not animationName then
-		return
-	end
+	if not animationName then return end
 
 	local namesToStop = {}
 

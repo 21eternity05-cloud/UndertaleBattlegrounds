@@ -12,16 +12,37 @@ function CharaWeapon.new(config, characterFolder)
 	return self
 end
 
-function CharaWeapon:PrepareWeaponModel(model)
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			descendant.Anchored = false
-			descendant.CanCollide = false
-			descendant.CanTouch = false
-			descendant.CanQuery = false
-			descendant.Massless = true
-		end
+function CharaWeapon:ApplyWeaponPartSettings(instance)
+	instance:SetAttribute("WeaponVisual", true)
+	instance:SetAttribute("EquippedWeapon", true)
+	instance:SetAttribute("CharacterWeapon", true)
+	instance:SetAttribute("CharacterWeaponOwner", "Chara")
+
+	if instance:IsA("BasePart") then
+		instance.Anchored = false
+		instance.CanCollide = false
+		instance.CanTouch = false
+		instance.CanQuery = false
+		instance.Massless = true
 	end
+end
+
+function CharaWeapon:PrepareWeaponModel(model)
+	self:ApplyWeaponPartSettings(model)
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		self:ApplyWeaponPartSettings(descendant)
+	end
+end
+
+function CharaWeapon:WatchWeaponDescendants(weapon)
+	if not weapon then
+		return
+	end
+
+	weapon.DescendantAdded:Connect(function(descendant)
+		self:ApplyWeaponPartSettings(descendant)
+	end)
 end
 
 function CharaWeapon:WeldWeaponPartsToHandle(weaponModel, handle)
@@ -90,9 +111,13 @@ function CharaWeapon:Equip(character)
 	local knife = knifeTemplate:Clone()
 	knife.Name = "EquippedWeapon"
 	knife:SetAttribute("CharacterWeapon", true)
+	knife:SetAttribute("WeaponVisual", true)
+	knife:SetAttribute("EquippedWeapon", true)
 	knife:SetAttribute("CharacterWeaponOwner", "Chara")
 	knife:SetAttribute("SelectedSkin", skinName)
 	knife:SetAttribute("OriginalWeaponName", weaponName)
+	self:PrepareWeaponModel(knife)
+	self:WatchWeaponDescendants(knife)
 	knife.Parent = character
 
 	local handle = knife:FindFirstChild("HandleKnife", true)
@@ -101,7 +126,6 @@ function CharaWeapon:Equip(character)
 		return
 	end
 
-	self:PrepareWeaponModel(knife)
 	self:WeldWeaponPartsToHandle(knife, handle)
 
 	local oldMotor = rightArm:FindFirstChild("HandleKnife")

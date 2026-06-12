@@ -246,6 +246,10 @@ function CharacterService:ApplyEquippedTitleAfterCharacterVisuals(player, charac
 
 		if character and character.Parent and player.Character == character then
 			self.ProgressionService:ApplyEquippedTitleToCharacter(player, character)
+
+			if self.WeaponService and self.WeaponService.SanitizeEquippedWeapons then
+				self.WeaponService:SanitizeEquippedWeapons(character)
+			end
 		end
 	end)
 end

@@ -39,7 +39,7 @@ local function getPromptPart(instance)
 		return instance
 	end
 
-	if not instance:IsA("Model") then
+	if not instance:IsA("Model") and not instance:IsA("Folder") then
 		return nil
 	end
 
@@ -48,7 +48,7 @@ local function getPromptPart(instance)
 		return displayPart
 	end
 
-	if instance.PrimaryPart then
+	if instance:IsA("Model") and instance.PrimaryPart and instance.PrimaryPart:IsA("BasePart") then
 		return instance.PrimaryPart
 	end
 
@@ -58,7 +58,7 @@ local function getPromptPart(instance)
 		end
 	end
 
-	return nil
+	return instance:FindFirstChildWhichIsA("BasePart", true)
 end
 
 local function setAttributeIfMissing(instance, name, value)

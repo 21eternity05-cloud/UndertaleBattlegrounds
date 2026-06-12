@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -280,11 +281,7 @@ local function playSound(soundTemplate)
 		sound:Destroy()
 	end)
 
-	task.delay(3, function()
-		if sound and sound.Parent then
-			sound:Destroy()
-		end
-	end)
+	Debris:AddItem(sound, 3)
 
 	return sound
 end

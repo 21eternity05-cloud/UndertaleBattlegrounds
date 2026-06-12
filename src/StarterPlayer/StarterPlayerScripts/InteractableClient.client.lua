@@ -6,32 +6,37 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
-local camera = workspace.CurrentCamera
 local interactableRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("InteractableRemote")
 local LoreFragmentData = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Interactables"):WaitForChild("LoreFragmentData"))
 
 local INTERACTABLE_TAG = "Interactable"
 local DEFAULT_DISTANCE = 12
-local PROMPT_UPDATE_INTERVAL = 0.05
-local DEBUG_PERF = false
+local INTERACT_DEBOUNCE = 0.25
+local DEBUG_INTERACTABLE_PROMPT = false
 local SILKSCREEN_FONT = Font.new("rbxassetid://12187371840")
-local trackedInteractables = {}
-local interactableInfo = {}
-local promptDebugCount = 0
-local lastPromptDebugPrint = 0
-local lastPromptUpdate = 0
 
-local function debugRate(label)
-	if not DEBUG_PERF then
+local interactableInfo = {}
+local currentTarget = nil
+local currentPromptText = nil
+local lastInteractTime = 0
+local lastDebugPrint = 0
+
+local function debugPromptFailure(reason, interactable, distance, maxDistance)
+	if not DEBUG_INTERACTABLE_PROMPT then
 		return
 	end
 
-	promptDebugCount += 1
-	if os.clock() - lastPromptDebugPrint >= 5 then
-		lastPromptDebugPrint = os.clock()
-		print("[PERF]", label, "ran", promptDebugCount, "times in 5 seconds")
-		promptDebugCount = 0
+	if not interactable or interactable.Name ~= "Lore_SaveStar_001" then
+		return
 	end
+
+	local now = os.clock()
+	if now - lastDebugPrint < 1 then
+		return
+	end
+	lastDebugPrint = now
+
+	print("[InteractableClient] Lore_SaveStar_001 prompt fail:", reason, "distance:", distance, "max:", maxDistance)
 end
 
 local function applyPromptFont(textObject)
@@ -105,17 +110,13 @@ promptText.BackgroundTransparency = 1
 promptText.Position = UDim2.fromOffset(40, 0)
 promptText.Size = UDim2.new(1, -48, 1, 0)
 promptText.Font = Enum.Font.Arcade
-promptText.Text = "..."
+promptText.Text = ""
 promptText.TextColor3 = Color3.fromRGB(255, 255, 255)
 promptText.TextSize = 15
 promptText.TextWrapped = true
 promptText.TextXAlignment = Enum.TextXAlignment.Left
 promptText.Parent = prompt
 applyPromptFont(promptText)
-
-local currentInteractable = nil
-local currentPromptText = nil
-local lastInteractTime = 0
 
 local function getCharacterRoot()
 	local character = player.Character
@@ -124,37 +125,6 @@ local function getCharacterRoot()
 	end
 
 	return character:FindFirstChild("HumanoidRootPart")
-end
-
-local function getPromptPart(instance)
-	if not instance then
-		return nil
-	end
-
-	if instance:IsA("BasePart") then
-		return instance
-	end
-
-	if not instance:IsA("Model") then
-		return nil
-	end
-
-	local displayPart = instance:FindFirstChild("DisplayPart")
-	if displayPart and displayPart:IsA("BasePart") then
-		return displayPart
-	end
-
-	if instance.PrimaryPart then
-		return instance.PrimaryPart
-	end
-
-	for _, child in ipairs(instance:GetChildren()) do
-		if child:IsA("BasePart") then
-			return child
-		end
-	end
-
-	return nil
 end
 
 local function getNumberAttribute(instance, name, defaultValue)
@@ -166,72 +136,139 @@ local function getNumberAttribute(instance, name, defaultValue)
 	return defaultValue
 end
 
-local function isDialogueOpen()
-	return player:GetAttribute("LoreDialogueOpen") == true
+local function getPromptPart(instance)
+	if not instance then
+		return nil
+	end
+
+	if instance:IsA("BasePart") then
+		return instance
+	end
+
+	if not instance:IsA("Model") and not instance:IsA("Folder") then
+		return nil
+	end
+
+	local displayPart = instance:FindFirstChild("DisplayPart")
+	if displayPart and displayPart:IsA("BasePart") then
+		return displayPart
+	end
+
+	if instance:IsA("Model") and instance.PrimaryPart and instance.PrimaryPart:IsA("BasePart") then
+		return instance.PrimaryPart
+	end
+
+	for _, child in ipairs(instance:GetChildren()) do
+		if child:IsA("BasePart") then
+			return child
+		end
+	end
+
+	return instance:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getPromptText(interactable)
+	local interactableId = interactable:GetAttribute("InteractableId")
+	if typeof(interactableId) == "string" and interactableId ~= "" then
+		local fragment = LoreFragmentData[interactableId]
+		if typeof(fragment) == "table"
+			and typeof(fragment.DisplayPromptText) == "string"
+			and fragment.DisplayPromptText ~= ""
+		then
+			return fragment.DisplayPromptText
+		end
+	end
+
+	local displayPromptText = interactable:GetAttribute("DisplayPromptText")
+	if typeof(displayPromptText) == "string" and displayPromptText ~= "" then
+		return displayPromptText
+	end
+
+	local promptAttribute = interactable:GetAttribute("PromptText")
+	if typeof(promptAttribute) == "string" and promptAttribute ~= "" then
+		promptAttribute = string.gsub(promptAttribute, "^%s*[Ee]%s*%-?%s*", " - ")
+		return promptAttribute
+	end
+
+	return " - INTERACT"
 end
 
 local function cacheInteractable(instance)
-	if not instance or trackedInteractables[instance] then
+	if not instance then
 		return
 	end
 
 	local promptPart = getPromptPart(instance)
 	if not promptPart then
+		debugPromptFailure("missing prompt part", instance, nil, nil)
 		return
 	end
 
-	trackedInteractables[instance] = true
 	interactableInfo[instance] = {
 		PromptPart = promptPart,
 		InteractDistance = getNumberAttribute(instance, "InteractDistance", DEFAULT_DISTANCE),
 		LookRequired = instance:GetAttribute("LookRequired") == true,
-		LookDot = getNumberAttribute(instance, "LookDot", 0.82),
+		LookDot = math.min(getNumberAttribute(instance, "LookDot", 0.65), 0.75),
+		PromptText = getPromptText(instance),
 	}
+
+	if DEBUG_INTERACTABLE_PROMPT then
+		print("[InteractableClient] Cached", instance:GetFullName(), "PromptPart:", promptPart:GetFullName())
+	end
 end
 
 local function uncacheInteractable(instance)
-	trackedInteractables[instance] = nil
 	interactableInfo[instance] = nil
+
+	if currentTarget == instance then
+		currentTarget = nil
+		currentPromptText = nil
+		prompt.Visible = false
+	end
 end
 
-local function isLookingAt(part, info)
+local function isDialogueOpen()
+	return player:GetAttribute("LoreDialogueOpen") == true
+end
+
+local function passesLookCheck(camera, promptPart, info)
 	if not info.LookRequired then
 		return true
 	end
 
-	local activeCamera = workspace.CurrentCamera
-	if not activeCamera then
+	local viewportPosition, onScreen = camera:WorldToViewportPoint(promptPart.Position)
+	if not onScreen or viewportPosition.Z <= 0 then
 		return false
 	end
 
-	local offset = part.Position - activeCamera.CFrame.Position
-	if offset.Magnitude < 0.05 then
+	local viewportSize = camera.ViewportSize
+	local screenCenter = viewportSize / 2
+	local point2D = Vector2.new(viewportPosition.X, viewportPosition.Y)
+
+	local distanceFromCenter = (point2D - screenCenter).Magnitude
+	local allowedRadius = math.min(viewportSize.X, viewportSize.Y) * 0.28
+
+	if distanceFromCenter <= allowedRadius then
 		return true
 	end
 
-	return activeCamera.CFrame.LookVector:Dot(offset.Unit) >= info.LookDot
-end
-
-local function getPromptText(interactable)
-	local interactableId = interactable:GetAttribute("InteractableId")
-	if typeof(interactableId) == "string" then
-		local fragment = LoreFragmentData[interactableId]
-		if typeof(fragment) == "table" and typeof(fragment.DisplayPromptText) == "string" and fragment.DisplayPromptText ~= "" then
-			return fragment.DisplayPromptText
-		end
+	local directionToPart = promptPart.Position - camera.CFrame.Position
+	if directionToPart.Magnitude <= 0.05 then
+		return true
 	end
 
-	local attributeText = interactable:GetAttribute("PromptText")
-	if typeof(attributeText) == "string" and attributeText ~= "" then
-		return attributeText
-	end
+	local requestedDot = info.LookDot or 0.65
+	local forgivingDot = math.min(requestedDot, 0.65)
 
-	return "E"
+	return camera.CFrame.LookVector:Dot(directionToPart.Unit) >= forgivingDot
 end
 
-local function getBestInteractable()
+local function getBestInteractable(camera)
 	local root = getCharacterRoot()
 	if not root then
+		for interactable in pairs(interactableInfo) do
+			debugPromptFailure("missing root", interactable, nil, nil)
+		end
 		return nil, nil
 	end
 
@@ -242,11 +279,15 @@ local function getBestInteractable()
 	for interactable, info in pairs(interactableInfo) do
 		local promptPart = info.PromptPart
 		if not interactable:IsDescendantOf(workspace) or not promptPart or not promptPart:IsDescendantOf(workspace) then
+			debugPromptFailure("not in workspace", interactable, nil, info.InteractDistance)
 			uncacheInteractable(interactable)
 		else
 			local distance = (root.Position - promptPart.Position).Magnitude
-
-			if distance <= info.InteractDistance and distance < bestDistance and isLookingAt(promptPart, info) then
+			if distance > info.InteractDistance then
+				debugPromptFailure("too far", interactable, distance, info.InteractDistance)
+			elseif not passesLookCheck(camera, promptPart, info) then
+				debugPromptFailure("failed look check", interactable, distance, info.InteractDistance)
+			elseif distance < bestDistance then
 				bestInteractable = interactable
 				bestPart = promptPart
 				bestDistance = distance
@@ -257,56 +298,62 @@ local function getBestInteractable()
 	return bestInteractable, bestPart
 end
 
+local function hidePrompt()
+	currentTarget = nil
+	currentPromptText = nil
+	prompt.Visible = false
+end
+
 local function updatePrompt()
-	debugRate("InteractableClient.updatePrompt")
-
-	camera = workspace.CurrentCamera
-
+	local camera = workspace.CurrentCamera
 	if isDialogueOpen() or not camera then
-		currentInteractable = nil
-		currentPromptText = nil
-		prompt.Visible = false
+		if not camera then
+			for interactable in pairs(interactableInfo) do
+				debugPromptFailure("missing camera", interactable, nil, nil)
+			end
+		end
+
+		hidePrompt()
 		return
 	end
 
-	local previousInteractable = currentInteractable
-	local interactable, part = getBestInteractable()
-	currentInteractable = interactable
-
-	if not interactable or not part then
-		currentPromptText = nil
-		prompt.Visible = false
+	local target, promptPart = getBestInteractable(camera)
+	if not target or not promptPart then
+		hidePrompt()
 		return
 	end
 
-	local viewportPosition, onScreen = camera:WorldToViewportPoint(part.Position)
-	if not onScreen then
-		currentPromptText = nil
-		prompt.Visible = false
+	local viewportPosition, onScreen = camera:WorldToViewportPoint(promptPart.Position)
+	if not onScreen or viewportPosition.Z <= 0 then
+		debugPromptFailure("offscreen", target, nil, nil)
+		hidePrompt()
 		return
 	end
 
-	if currentPromptText == nil or previousInteractable ~= interactable then
-		currentPromptText = getPromptText(interactable)
-		promptText.Text = currentPromptText
+	local info = interactableInfo[target]
+	local nextPromptText = info and info.PromptText or getPromptText(target)
+	if currentTarget ~= target or currentPromptText ~= nextPromptText then
+		currentPromptText = nextPromptText
+		promptText.Text = nextPromptText
 	end
 
+	currentTarget = target
 	prompt.Position = UDim2.fromOffset(viewportPosition.X, viewportPosition.Y)
 	prompt.Visible = true
 end
 
 local function requestInteract()
-	if isDialogueOpen() or not currentInteractable then
+	if isDialogueOpen() or not currentTarget then
 		return
 	end
 
 	local now = os.clock()
-	if now - lastInteractTime < 0.25 then
+	if now - lastInteractTime < INTERACT_DEBOUNCE then
 		return
 	end
 	lastInteractTime = now
 
-	interactableRemote:FireServer("Interact", currentInteractable)
+	interactableRemote:FireServer("Interact", currentTarget)
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -323,15 +370,38 @@ for _, instance in ipairs(CollectionService:GetTagged(INTERACTABLE_TAG)) do
 	cacheInteractable(instance)
 end
 
-CollectionService:GetInstanceAddedSignal(INTERACTABLE_TAG):Connect(cacheInteractable)
-CollectionService:GetInstanceRemovedSignal(INTERACTABLE_TAG):Connect(uncacheInteractable)
+local function scanInteractablesFolder()
+	local mapRoot = workspace:FindFirstChild("BattlegroundsMap")
+	local hollowSnowdin = mapRoot and mapRoot:FindFirstChild("HollowSnowdin")
+	local folder = hollowSnowdin and hollowSnowdin:FindFirstChild("Interactables")
 
-RunService.RenderStepped:Connect(function()
-	local now = os.clock()
-	if now - lastPromptUpdate < PROMPT_UPDATE_INTERVAL then
+	if not folder then
 		return
 	end
 
-	lastPromptUpdate = now
-	updatePrompt()
+	for _, child in ipairs(folder:GetChildren()) do
+		cacheInteractable(child)
+	end
+end
+
+scanInteractablesFolder()
+
+CollectionService:GetInstanceAddedSignal(INTERACTABLE_TAG):Connect(cacheInteractable)
+CollectionService:GetInstanceRemovedSignal(INTERACTABLE_TAG):Connect(uncacheInteractable)
+
+workspace.DescendantAdded:Connect(function(instance)
+	if instance.Name == "Interactables" then
+		task.defer(scanInteractablesFolder)
+	elseif instance.Name == "Lore_SaveStar_001" then
+		task.defer(cacheInteractable, instance)
+	elseif instance.Name == "DisplayPart" and instance.Parent then
+		task.defer(cacheInteractable, instance.Parent)
+	elseif instance:IsA("BasePart") and instance.Parent and interactableInfo[instance.Parent] == nil then
+		local parent = instance.Parent
+		if parent.Name == "Lore_SaveStar_001" or parent:GetAttribute("InteractableType") ~= nil then
+			task.defer(cacheInteractable, parent)
+		end
+	end
 end)
+
+RunService.RenderStepped:Connect(updatePrompt)
