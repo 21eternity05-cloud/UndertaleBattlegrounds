@@ -7,6 +7,28 @@ local playerGui = player:WaitForChild("PlayerGui")
 local interactableRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("InteractableRemote")
 
 local TYPE_DELAY = 0.026
+local SILKSCREEN_FONT = Font.new("rbxassetid://12187371840")
+
+local function applyDialogueFont(textObject)
+	if not textObject then
+		return
+	end
+
+	if not textObject:IsA("TextLabel")
+		and not textObject:IsA("TextButton")
+		and not textObject:IsA("TextBox")
+	then
+		return
+	end
+
+	local success = pcall(function()
+		textObject.FontFace = SILKSCREEN_FONT
+	end)
+
+	if not success then
+		textObject.Font = Enum.Font.Arcade
+	end
+end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "LoreDialogueGui"
@@ -54,18 +76,19 @@ portraitStroke.Parent = portraitFrame
 local speakerLabel = Instance.new("TextLabel")
 speakerLabel.Name = "Speaker"
 speakerLabel.BackgroundTransparency = 1
-speakerLabel.Font = Enum.Font.Silkscreen
+speakerLabel.Font = Enum.Font.Arcade
 speakerLabel.Position = UDim2.fromOffset(154, 18)
 speakerLabel.Size = UDim2.new(1, -188, 0, 24)
 speakerLabel.TextColor3 = Color3.fromRGB(255, 226, 126)
 speakerLabel.TextSize = 18
 speakerLabel.TextXAlignment = Enum.TextXAlignment.Left
 speakerLabel.Parent = dialogueBox
+applyDialogueFont(speakerLabel)
 
 local textLabel = Instance.new("TextLabel")
 textLabel.Name = "Text"
 textLabel.BackgroundTransparency = 1
-textLabel.Font = Enum.Font.Silkscreen
+textLabel.Font = Enum.Font.Arcade
 textLabel.Position = UDim2.fromOffset(154, 50)
 textLabel.Size = UDim2.new(1, -188, 0, 82)
 textLabel.TextColor3 = Color3.fromRGB(245, 245, 248)
@@ -74,12 +97,13 @@ textLabel.TextWrapped = true
 textLabel.TextXAlignment = Enum.TextXAlignment.Left
 textLabel.TextYAlignment = Enum.TextYAlignment.Top
 textLabel.Parent = dialogueBox
+applyDialogueFont(textLabel)
 
 local continueLabel = Instance.new("TextLabel")
 continueLabel.Name = "Continue"
 continueLabel.AnchorPoint = Vector2.new(1, 1)
 continueLabel.BackgroundTransparency = 1
-continueLabel.Font = Enum.Font.GothamBold
+continueLabel.Font = Enum.Font.Arcade
 continueLabel.Position = UDim2.new(1, -18, 1, -12)
 continueLabel.Size = UDim2.fromOffset(36, 24)
 continueLabel.Text = "..."
@@ -87,6 +111,7 @@ continueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 continueLabel.TextSize = 18
 continueLabel.Visible = false
 continueLabel.Parent = dialogueBox
+applyDialogueFont(continueLabel)
 
 local portraitWorld = nil
 local portraitCamera = nil

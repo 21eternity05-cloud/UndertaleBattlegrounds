@@ -507,8 +507,12 @@ local function applySettingsSnapshot(snapshot)
 
 	for settingName in pairs(settings) do
 		if typeof(snapshot[settingName]) == "boolean" then
-			settings[settingName] = snapshot[settingName]
-			player:SetAttribute("Setting_" .. settingName, snapshot[settingName])
+			local value = snapshot[settingName]
+			settings[settingName] = value
+
+			if player:GetAttribute("Setting_" .. settingName) ~= value then
+				player:SetAttribute("Setting_" .. settingName, value)
+			end
 		end
 	end
 end
@@ -518,11 +522,19 @@ local function setLocalSetting(settingName, value)
 		return
 	end
 
-	settings[settingName] = value == true
-	player:SetAttribute("Setting_" .. settingName, settings[settingName])
+	local enabled = value == true
+	settings[settingName] = enabled
+
+	if player:GetAttribute("Setting_" .. settingName) ~= enabled then
+		player:SetAttribute("Setting_" .. settingName, enabled)
+	end
 end
 
 local function sendSetting(settingName, value)
+	if settings[settingName] == (value == true) then
+		return
+	end
+
 	setLocalSetting(settingName, value)
 
 	settingsRemote:FireServer({

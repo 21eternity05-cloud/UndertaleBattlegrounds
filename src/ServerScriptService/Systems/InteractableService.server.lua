@@ -43,7 +43,7 @@ local function getPromptPart(instance)
 		return nil
 	end
 
-	local displayPart = instance:FindFirstChild("DisplayPart", true)
+	local displayPart = instance:FindFirstChild("DisplayPart")
 	if displayPart and displayPart:IsA("BasePart") then
 		return displayPart
 	end
@@ -52,7 +52,13 @@ local function getPromptPart(instance)
 		return instance.PrimaryPart
 	end
 
-	return instance:FindFirstChildWhichIsA("BasePart", true)
+	for _, child in ipairs(instance:GetChildren()) do
+		if child:IsA("BasePart") then
+			return child
+		end
+	end
+
+	return nil
 end
 
 local function setAttributeIfMissing(instance, name, value)

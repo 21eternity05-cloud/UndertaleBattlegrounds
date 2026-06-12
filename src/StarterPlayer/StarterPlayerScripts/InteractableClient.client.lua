@@ -12,6 +12,48 @@ local LoreFragmentData = require(ReplicatedStorage:WaitForChild("Shared"):WaitFo
 
 local INTERACTABLE_TAG = "Interactable"
 local DEFAULT_DISTANCE = 12
+local PROMPT_UPDATE_INTERVAL = 0.05
+local DEBUG_PERF = false
+local SILKSCREEN_FONT = Font.new("rbxassetid://12187371840")
+local trackedInteractables = {}
+local interactableInfo = {}
+local promptDebugCount = 0
+local lastPromptDebugPrint = 0
+local lastPromptUpdate = 0
+
+local function debugRate(label)
+	if not DEBUG_PERF then
+		return
+	end
+
+	promptDebugCount += 1
+	if os.clock() - lastPromptDebugPrint >= 5 then
+		lastPromptDebugPrint = os.clock()
+		print("[PERF]", label, "ran", promptDebugCount, "times in 5 seconds")
+		promptDebugCount = 0
+	end
+end
+
+local function applyPromptFont(textObject)
+	if not textObject then
+		return
+	end
+
+	if not textObject:IsA("TextLabel")
+		and not textObject:IsA("TextButton")
+		and not textObject:IsA("TextBox")
+	then
+		return
+	end
+
+	local success = pcall(function()
+		textObject.FontFace = SILKSCREEN_FONT
+	end)
+
+	if not success then
+		textObject.Font = Enum.Font.Arcade
+	end
+end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "InteractablePromptGui"
@@ -46,11 +88,12 @@ keyBox.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
 keyBox.BorderSizePixel = 0
 keyBox.Position = UDim2.fromOffset(8, 7)
 keyBox.Size = UDim2.fromOffset(24, 24)
-keyBox.Font = Enum.Font.GothamBold
+keyBox.Font = Enum.Font.Arcade
 keyBox.Text = "E"
 keyBox.TextColor3 = Color3.fromRGB(10, 10, 12)
 keyBox.TextSize = 15
 keyBox.Parent = prompt
+applyPromptFont(keyBox)
 
 local keyCorner = Instance.new("UICorner")
 keyCorner.CornerRadius = UDim.new(0, 4)
@@ -61,15 +104,17 @@ promptText.Name = "PromptText"
 promptText.BackgroundTransparency = 1
 promptText.Position = UDim2.fromOffset(40, 0)
 promptText.Size = UDim2.new(1, -48, 1, 0)
-promptText.Font = Enum.Font.GothamMedium
+promptText.Font = Enum.Font.Arcade
 promptText.Text = "..."
 promptText.TextColor3 = Color3.fromRGB(255, 255, 255)
 promptText.TextSize = 15
 promptText.TextWrapped = true
 promptText.TextXAlignment = Enum.TextXAlignment.Left
 promptText.Parent = prompt
+applyPromptFont(promptText)
 
 local currentInteractable = nil
+local currentPromptText = nil
 local lastInteractTime = 0
 
 local function getCharacterRoot()
@@ -94,7 +139,7 @@ local function getPromptPart(instance)
 		return nil
 	end
 
-	local displayPart = instance:FindFirstChild("DisplayPart", true)
+	local displayPart = instance:FindFirstChild("DisplayPart")
 	if displayPart and displayPart:IsA("BasePart") then
 		return displayPart
 	end
@@ -103,7 +148,13 @@ local function getPromptPart(instance)
 		return instance.PrimaryPart
 	end
 
-	return instance:FindFirstChildWhichIsA("BasePart", true)
+	for _, child in ipairs(instance:GetChildren()) do
+		if child:IsA("BasePart") then
+			return child
+		end
+	end
+
+	return nil
 end
 
 local function getNumberAttribute(instance, name, defaultValue)
@@ -119,9 +170,32 @@ local function isDialogueOpen()
 	return player:GetAttribute("LoreDialogueOpen") == true
 end
 
-local function isLookingAt(part, interactable)
-	local lookRequired = interactable:GetAttribute("LookRequired") == true
-	if not lookRequired then
+local function cacheInteractable(instance)
+	if not instance or trackedInteractables[instance] then
+		return
+	end
+
+	local promptPart = getPromptPart(instance)
+	if not promptPart then
+		return
+	end
+
+	trackedInteractables[instance] = true
+	interactableInfo[instance] = {
+		PromptPart = promptPart,
+		InteractDistance = getNumberAttribute(instance, "InteractDistance", DEFAULT_DISTANCE),
+		LookRequired = instance:GetAttribute("LookRequired") == true,
+		LookDot = getNumberAttribute(instance, "LookDot", 0.82),
+	}
+end
+
+local function uncacheInteractable(instance)
+	trackedInteractables[instance] = nil
+	interactableInfo[instance] = nil
+end
+
+local function isLookingAt(part, info)
+	if not info.LookRequired then
 		return true
 	end
 
@@ -135,8 +209,7 @@ local function isLookingAt(part, interactable)
 		return true
 	end
 
-	local lookDot = getNumberAttribute(interactable, "LookDot", 0.82)
-	return activeCamera.CFrame.LookVector:Dot(offset.Unit) >= lookDot
+	return activeCamera.CFrame.LookVector:Dot(offset.Unit) >= info.LookDot
 end
 
 local function getPromptText(interactable)
@@ -166,18 +239,17 @@ local function getBestInteractable()
 	local bestPart = nil
 	local bestDistance = math.huge
 
-	for _, interactable in ipairs(CollectionService:GetTagged(INTERACTABLE_TAG)) do
-		if interactable:IsDescendantOf(workspace) then
-			local promptPart = getPromptPart(interactable)
-			if promptPart then
-				local interactDistance = getNumberAttribute(interactable, "InteractDistance", DEFAULT_DISTANCE)
-				local distance = (root.Position - promptPart.Position).Magnitude
+	for interactable, info in pairs(interactableInfo) do
+		local promptPart = info.PromptPart
+		if not interactable:IsDescendantOf(workspace) or not promptPart or not promptPart:IsDescendantOf(workspace) then
+			uncacheInteractable(interactable)
+		else
+			local distance = (root.Position - promptPart.Position).Magnitude
 
-				if distance <= interactDistance and distance < bestDistance and isLookingAt(promptPart, interactable) then
-					bestInteractable = interactable
-					bestPart = promptPart
-					bestDistance = distance
-				end
+			if distance <= info.InteractDistance and distance < bestDistance and isLookingAt(promptPart, info) then
+				bestInteractable = interactable
+				bestPart = promptPart
+				bestDistance = distance
 			end
 		end
 	end
@@ -186,29 +258,39 @@ local function getBestInteractable()
 end
 
 local function updatePrompt()
+	debugRate("InteractableClient.updatePrompt")
+
 	camera = workspace.CurrentCamera
 
 	if isDialogueOpen() or not camera then
 		currentInteractable = nil
+		currentPromptText = nil
 		prompt.Visible = false
 		return
 	end
 
+	local previousInteractable = currentInteractable
 	local interactable, part = getBestInteractable()
 	currentInteractable = interactable
 
 	if not interactable or not part then
+		currentPromptText = nil
 		prompt.Visible = false
 		return
 	end
 
 	local viewportPosition, onScreen = camera:WorldToViewportPoint(part.Position)
 	if not onScreen then
+		currentPromptText = nil
 		prompt.Visible = false
 		return
 	end
 
-	promptText.Text = getPromptText(interactable)
+	if currentPromptText == nil or previousInteractable ~= interactable then
+		currentPromptText = getPromptText(interactable)
+		promptText.Text = currentPromptText
+	end
+
 	prompt.Position = UDim2.fromOffset(viewportPosition.X, viewportPosition.Y)
 	prompt.Visible = true
 end
@@ -237,4 +319,19 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-RunService.RenderStepped:Connect(updatePrompt)
+for _, instance in ipairs(CollectionService:GetTagged(INTERACTABLE_TAG)) do
+	cacheInteractable(instance)
+end
+
+CollectionService:GetInstanceAddedSignal(INTERACTABLE_TAG):Connect(cacheInteractable)
+CollectionService:GetInstanceRemovedSignal(INTERACTABLE_TAG):Connect(uncacheInteractable)
+
+RunService.RenderStepped:Connect(function()
+	local now = os.clock()
+	if now - lastPromptUpdate < PROMPT_UPDATE_INTERVAL then
+		return
+	end
+
+	lastPromptUpdate = now
+	updatePrompt()
+end)

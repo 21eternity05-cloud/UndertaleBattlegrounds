@@ -891,15 +891,20 @@ function ProgressionService:ClearTitleVisuals(character)
 		return
 	end
 
-	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:GetAttribute("TitleVisual") == true then
-			descendant:Destroy()
-		end
-	end
-
 	for _, child in ipairs(character:GetChildren()) do
 		if child:GetAttribute("TitleVisual") == true then
 			child:Destroy()
+		end
+	end
+
+	for _, bodyPartName in ipairs(BODY_PART_NAMES) do
+		local bodyPart = character:FindFirstChild(bodyPartName)
+		if bodyPart then
+			for _, child in ipairs(bodyPart:GetChildren()) do
+				if child:GetAttribute("TitleVisual") == true then
+					child:Destroy()
+				end
+			end
 		end
 	end
 
@@ -907,21 +912,32 @@ function ProgressionService:ClearTitleVisuals(character)
 	if folder then
 		folder:Destroy()
 	end
+
+	character:SetAttribute("AppliedTitleId", nil)
 end
 
-function ProgressionService:ApplyEquippedTitleToCharacter(player, character)
+function ProgressionService:ApplyEquippedTitleToCharacter(player, character, force)
 	if not player or not character or not character.Parent then
 		return
 	end
 
-	self:ClearTitleVisuals(character)
+	local titleId = self:GetSafeEquippedTitle(player)
 
 	if player:GetAttribute("Setting_Titles") == false then
+		if character:GetAttribute("AppliedTitleId") ~= nil then
+			self:ClearTitleVisuals(character)
+		end
 		return
 	end
 
-	local titleId = self:GetSafeEquippedTitle(player)
 	if titleId == NONE_TITLE_ID then
+		if character:GetAttribute("AppliedTitleId") ~= nil then
+			self:ClearTitleVisuals(character)
+		end
+		return
+	end
+
+	if force ~= true and character:GetAttribute("AppliedTitleId") == titleId then
 		return
 	end
 
@@ -948,6 +964,8 @@ function ProgressionService:ApplyEquippedTitleToCharacter(player, character)
 		return
 	end
 
+	self:ClearTitleVisuals(character)
+
 	for _, bodyPartName in ipairs(BODY_PART_NAMES) do
 		local selectedBodyPart = titleModel:FindFirstChild(bodyPartName)
 		local noneBodyPart = noneModel:FindFirstChild(bodyPartName)
@@ -964,6 +982,8 @@ function ProgressionService:ApplyEquippedTitleToCharacter(player, character)
 			end
 		end
 	end
+
+	character:SetAttribute("AppliedTitleId", titleId)
 end
 
 function ProgressionService:EquipTitle(player, titleId)
@@ -1038,12 +1058,16 @@ function ProgressionService:SetSetting(player, settingName, enabled)
 	end
 
 	profile.Settings = profile.Settings or table.clone(DEFAULT_SETTINGS)
+	if profile.Settings[settingName] == enabled then
+		return true, "Unchanged"
+	end
+
 	profile.Settings[settingName] = enabled
 	player:SetAttribute("Setting_" .. settingName, enabled)
 
 	if settingName == "Titles" then
 		if enabled then
-			self:ApplyEquippedTitleToCharacter(player, player.Character)
+			self:ApplyEquippedTitleToCharacter(player, player.Character, true)
 		elseif player.Character then
 			self:ClearTitleVisuals(player.Character)
 		end
@@ -1055,8 +1079,6 @@ function ProgressionService:SetSetting(player, settingName, enabled)
 		Value = enabled,
 		Settings = table.clone(profile.Settings),
 	})
-
-	self:SendSnapshot(player)
 
 	task.defer(function()
 		self:SaveProfile(player)
