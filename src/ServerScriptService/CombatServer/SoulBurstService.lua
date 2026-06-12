@@ -250,6 +250,7 @@ function SoulBurstService:CanSoulBurstCharacter(character)
 	if self:GetSoulBurst(character) < self:GetCost() then return false, "NotReady" end
 	if os.clock() < (character:GetAttribute("SoulBurstCooldownUntil") or 0) then return false, "Cooldown" end
 	if character:GetAttribute("SoulBursting") == true then return false, "AlreadyBursting" end
+	if character:GetAttribute("Emoting") == true then return false, "Emoting" end
 	if character:GetAttribute("Stunned") ~= true then return false, "NotStunned" end
 	if character:GetAttribute("Guardbroken") == true then return false, "Guardbroken" end
 	if character:GetAttribute("Grabbed") == true then return false, "Grabbed" end
@@ -314,6 +315,7 @@ function SoulBurstService:CanSoulBurst(player, character)
 		return false, "Cooldown"
 	end
 	if character:GetAttribute("SoulBursting") == true then return false, "AlreadyBursting" end
+	if character:GetAttribute("Emoting") == true then return false, "Emoting" end
 	if character:GetAttribute("Stunned") ~= true then return false, "NotStunned" end
 	if character:GetAttribute("Guardbroken") == true then return false, "Guardbroken" end
 	if character:GetAttribute("Grabbed") == true then return false, "Grabbed" end

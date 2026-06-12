@@ -4,6 +4,28 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CharacterMorphService = {}
 CharacterMorphService.__index = CharacterMorphService
 
+local COLLIDABLE_PARTS = {
+	Torso = true,
+	Head = true,
+	HumanoidRootPart = true,
+}
+
+local function applySimpleCharacterCollision(character)
+	if not character then
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.CanCollide = COLLIDABLE_PARTS[descendant.Name] == true
+
+			if descendant.CanCollide == false then
+				descendant.Massless = true
+			end
+		end
+	end
+end
+
 function CharacterMorphService.new(config)
 	local self = setmetatable({}, CharacterMorphService)
 
@@ -106,6 +128,10 @@ function CharacterMorphService:IsMorphItem(instance)
 			or instance:GetAttribute("MorphSkinName") ~= nil
 			or instance:GetAttribute("MorphCharacterName") ~= nil
 		)
+end
+
+function CharacterMorphService:ApplyCharacterCollisionRules(character)
+	applySimpleCharacterCollision(character)
 end
 
 function CharacterMorphService:IsHeadMeshItem(instance)
@@ -400,6 +426,7 @@ function CharacterMorphService:RestoreWithHumanoidDescription(player, character)
 	end
 
 	self:ClearMorphItemsOnly(character)
+	self:ApplyCharacterCollisionRules(character)
 end
 
 function CharacterMorphService:RestoreOriginalAppearance(player, character)
@@ -467,6 +494,8 @@ function CharacterMorphService:RestoreOriginalAppearance(player, character)
 	if not restoredVisibleItem then
 		warn("[CharacterMorphService] OriginalAppearanceBackup had no visible appearance items for", player.Name)
 	end
+
+	self:ApplyCharacterCollisionRules(character)
 end
 
 function CharacterMorphService:ApplyMorph(player, character, characterName, skinName)
@@ -513,6 +542,7 @@ function CharacterMorphService:ApplyMorph(player, character, characterName, skin
 
 	self:CopyFace(character, sourceModel, characterName, resolvedSkinName)
 	self:CopyHeadMeshes(character, sourceModel, characterName, resolvedSkinName)
+	self:ApplyCharacterCollisionRules(character)
 end
 
 function CharacterMorphService:ApplyCharacterMorph(player, character, characterName, skinName, morphEnabled)
@@ -523,6 +553,8 @@ function CharacterMorphService:ApplyCharacterMorph(player, character, characterN
 	else
 		self:RestoreOriginalAppearance(player, character)
 	end
+
+	self:ApplyCharacterCollisionRules(character)
 end
 
 function CharacterMorphService:SetupPlayer(player)

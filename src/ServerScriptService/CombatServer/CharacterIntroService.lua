@@ -5,15 +5,42 @@ local INTRO_ANIMATION_NAME = "CharacterSwitch"
 local INTRO_FALLBACK_DURATION = 1.6
 local INTRO_TIMEOUT_PADDING = 0.4
 
-function CharacterIntroService.new(config, animationService, vfxService, cinematicService)
+function CharacterIntroService.new(config, animationService, vfxService, cinematicService, characterMorphService)
 	local self = setmetatable({}, CharacterIntroService)
 
 	self.Config = config
 	self.AnimationService = animationService
 	self.VFXService = vfxService
 	self.CinematicService = cinematicService
+	self.CharacterMorphService = characterMorphService
 
 	return self
+end
+
+function CharacterIntroService:ReapplyCollisionRules(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	if self.CharacterMorphService and self.CharacterMorphService.ApplyCharacterCollisionRules then
+		self.CharacterMorphService:ApplyCharacterCollisionRules(character)
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local shouldCollide =
+				descendant.Name == "Torso"
+				or descendant.Name == "Head"
+				or descendant.Name == "HumanoidRootPart"
+
+			descendant.CanCollide = shouldCollide
+
+			if not shouldCollide then
+				descendant.Massless = true
+			end
+		end
+	end
 end
 
 function CharacterIntroService:GetHumanoidAndRoot(character)
@@ -158,6 +185,20 @@ function CharacterIntroService:UnlockCharacter(character, humanoid, savedState, 
 		currentHumanoid.JumpHeight = self.Config.DefaultJumpHeight
 		currentHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 	end
+
+	self:ReapplyCollisionRules(character)
+
+	task.delay(0.1, function()
+		self:ReapplyCollisionRules(character)
+	end)
+
+	task.delay(0.5, function()
+		self:ReapplyCollisionRules(character)
+	end)
+
+	task.delay(1, function()
+		self:ReapplyCollisionRules(character)
+	end)
 end
 
 function CharacterIntroService:PlayCharacterSwitchIntro(player, characterName, character)

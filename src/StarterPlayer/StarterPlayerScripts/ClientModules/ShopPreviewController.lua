@@ -10,6 +10,50 @@ local PREVIEW_NAME_PREFIX = "ClientShopPreview_"
 local PREVIEW_CAMERA_DISTANCE = 7.25
 local PREVIEW_CAMERA_HEIGHT = 1.85
 local PREVIEW_FOCUS_HEIGHT = 1.35
+local NONE_TITLE_ID = "None"
+local BODY_PART_NAMES = {
+	"Head",
+	"Torso",
+	"UpperTorso",
+	"LowerTorso",
+	"Left Arm",
+	"Right Arm",
+	"Left Leg",
+	"Right Leg",
+	"LeftUpperArm",
+	"LeftLowerArm",
+	"LeftHand",
+	"RightUpperArm",
+	"RightLowerArm",
+	"RightHand",
+	"LeftUpperLeg",
+	"LeftLowerLeg",
+	"LeftFoot",
+	"RightUpperLeg",
+	"RightLowerLeg",
+	"RightFoot",
+}
+local COLLIDABLE_PARTS = {
+	Torso = true,
+	Head = true,
+	HumanoidRootPart = true,
+}
+
+local function applySimpleCharacterCollision(character)
+	if not character then
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.CanCollide = COLLIDABLE_PARTS[descendant.Name] == true
+
+			if descendant.CanCollide == false then
+				descendant.Massless = true
+			end
+		end
+	end
+end
 
 function ShopPreviewController.new(player, replicatedStorage)
 	local self = setmetatable({}, ShopPreviewController)
@@ -117,6 +161,14 @@ end
 function ShopPreviewController:Start()
 	task.defer(function()
 		self:RequestShopStream()
+	end)
+
+	self.Player:GetAttributeChangedSignal("EquippedTitle"):Connect(function()
+		self:ApplyTitleToActivePreview(true)
+	end)
+
+	self.Player:GetAttributeChangedSignal("Setting_Titles"):Connect(function()
+		self:ApplyTitleToActivePreview(true)
 	end)
 end
 
@@ -284,10 +336,6 @@ function ShopPreviewController:MakePreviewModelSafe(model)
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = false
-			descendant.CanCollide = false
-			descendant.CanTouch = false
-			descendant.CanQuery = false
-			descendant.Massless = true
 		elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
 			descendant.Disabled = true
 		end
@@ -298,6 +346,12 @@ function ShopPreviewController:MakePreviewModelSafe(model)
 	if root and root:IsA("BasePart") then
 		root.Anchored = true
 	end
+
+	self:ApplyPreviewCollisionRules(model)
+end
+
+function ShopPreviewController:ApplyPreviewCollisionRules(model)
+	applySimpleCharacterCollision(model)
 end
 
 function ShopPreviewController:PreparePreviewWeapon(model)
@@ -475,6 +529,102 @@ function ShopPreviewController:EquipPreviewWeapons(previewModel, characterName, 
 	}, 1)
 end
 
+function ShopPreviewController:GetTitlesFolder()
+	local assets = self.ReplicatedStorage:FindFirstChild("Assets")
+	return assets and assets:FindFirstChild("Titles") or nil
+end
+
+function ShopPreviewController:ClearTitleVisuals(model)
+	if not model then
+		return
+	end
+
+	for _, child in ipairs(model:GetChildren()) do
+		if child:GetAttribute("TitleVisual") == true then
+			child:Destroy()
+		end
+	end
+
+	for _, bodyPartName in ipairs(BODY_PART_NAMES) do
+		local bodyPart = model:FindFirstChild(bodyPartName, true)
+		if bodyPart then
+			for _, child in ipairs(bodyPart:GetChildren()) do
+				if child:GetAttribute("TitleVisual") == true then
+					child:Destroy()
+				end
+			end
+		end
+	end
+
+	local folder = model:FindFirstChild("ActiveTitleVisuals")
+	if folder then
+		folder:Destroy()
+	end
+
+	model:SetAttribute("AppliedTitleId", nil)
+end
+
+function ShopPreviewController:ApplyTitleVisualsToModel(model, titleId, force)
+	if not model or not model.Parent then
+		return
+	end
+
+	if self.Player:GetAttribute("Setting_Titles") == false then
+		self:ClearTitleVisuals(model)
+		return
+	end
+
+	if typeof(titleId) ~= "string" or titleId == "" or titleId == NONE_TITLE_ID then
+		self:ClearTitleVisuals(model)
+		return
+	end
+
+	if force ~= true and model:GetAttribute("AppliedTitleId") == titleId then
+		return
+	end
+
+	local titlesFolder = self:GetTitlesFolder()
+	local noneModel = titlesFolder and titlesFolder:FindFirstChild(NONE_TITLE_ID)
+	local titleModel = titlesFolder and titlesFolder:FindFirstChild(titleId)
+
+	if not titlesFolder or not noneModel or not titleModel then
+		self:ClearTitleVisuals(model)
+		return
+	end
+
+	self:ClearTitleVisuals(model)
+
+	for _, bodyPartName in ipairs(BODY_PART_NAMES) do
+		local selectedBodyPart = titleModel:FindFirstChild(bodyPartName)
+		local noneBodyPart = noneModel:FindFirstChild(bodyPartName)
+		local previewBodyPart = model:FindFirstChild(bodyPartName, true)
+
+		if selectedBodyPart and noneBodyPart and previewBodyPart then
+			for _, selectedChild in ipairs(selectedBodyPart:GetChildren()) do
+				if not noneBodyPart:FindFirstChild(selectedChild.Name) then
+					local clone = selectedChild:Clone()
+					clone:SetAttribute("TitleVisual", true)
+					clone:SetAttribute("TitleId", titleId)
+					clone.Parent = previewBodyPart
+				end
+			end
+		end
+	end
+
+	model:SetAttribute("AppliedTitleId", titleId)
+	self:ApplyPreviewCollisionRules(model)
+end
+
+function ShopPreviewController:ApplyTitleToActivePreview(force)
+	local model = self.ActivePreviewModel
+	if not model or not model.Parent then
+		return
+	end
+
+	local titleId = self.Player:GetAttribute("EquippedTitle")
+	self:ApplyTitleVisualsToModel(model, titleId, force)
+end
+
 function ShopPreviewController:DestroyActivePreview()
 	if self.ActivePreviewIdleTrack then
 		pcall(function()
@@ -559,6 +709,8 @@ function ShopPreviewController:SetupPreviewModel(characterName, skinName)
 		clone:PivotTo(previewCFrame)
 		self:EquipPreviewWeapons(clone, characterName, skinName)
 		self.ActivePreviewModel = clone
+		self:ApplyTitleToActivePreview(true)
+		self:ApplyPreviewCollisionRules(clone)
 		self:PlayPreviewIdle(characterName, clone)
 	else
 		local fallback = Instance.new("Model")
@@ -578,6 +730,7 @@ function ShopPreviewController:SetupPreviewModel(characterName, skinName)
 		fallback.PrimaryPart = body
 		fallback.Parent = previewFolder
 		self.ActivePreviewModel = fallback
+		self:ApplyTitleToActivePreview(true)
 	end
 end
 

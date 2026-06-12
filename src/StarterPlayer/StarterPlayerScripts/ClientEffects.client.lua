@@ -9,12 +9,12 @@ local modules = script.Parent:WaitForChild("ClientModules")
 local CameraShake = require(modules:WaitForChild("CameraShake"))
 local ImpactFrame = require(modules:WaitForChild("ImpactFrame"))
 
-local cameraShakeEnabled = player:GetAttribute("Setting_CameraShake") ~= false
+local function isCameraShakeEnabled()
+	return player:GetAttribute("Setting_CameraShake") ~= false
+end
 
 local function refreshCameraShakeSetting()
-	cameraShakeEnabled = player:GetAttribute("Setting_CameraShake") ~= false
-
-	if not cameraShakeEnabled then
+	if not isCameraShakeEnabled() then
 		CameraShake:StopAll()
 	end
 end
@@ -31,13 +31,13 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 	if typeof(payload) ~= "table" then return end
 
 	if payload.Action == "CameraShakeOnce" then
-		if not cameraShakeEnabled then
+		if not isCameraShakeEnabled() then
 			return
 		end
 
 		CameraShake:ShakeOnce(payload.Intensity, payload.Roughness, payload.Duration)
 	elseif payload.Action == "CameraShakeSustain" then
-		if not cameraShakeEnabled then
+		if not isCameraShakeEnabled() then
 			return
 		end
 

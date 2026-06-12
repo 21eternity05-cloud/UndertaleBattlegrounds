@@ -68,6 +68,7 @@ function BlockService:CanBlockNow(character)
 	local allowBlockWhileDamageLocked = character:GetAttribute("AllowBlockWhileDamageLocked") == true
 
 	if character:GetAttribute("Blocking") then return false end
+	if character:GetAttribute("Emoting") then return false end
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
@@ -145,6 +146,7 @@ function BlockService:HookBlockWakeSignals(player, character)
 		"SoulBursting",
 		"UsingMove",
 		"Attacking",
+		"Emoting",
 		"BlockLockedUntil",
 	}
 
@@ -268,6 +270,7 @@ function BlockService:SetCharacterBlocking(character, isBlocking)
 		if not character:GetAttribute("Stunned")
 			and not character:GetAttribute("Guardbroken")
 			and not character:GetAttribute("UsingMove")
+			and not character:GetAttribute("Emoting")
 		then
 			humanoid.WalkSpeed = self.Config.DefaultWalkSpeed
 			humanoid.JumpPower = self.Config.DefaultJumpPower
@@ -304,6 +307,7 @@ function BlockService:SetBlocking(player, isBlocking)
 		if not character:GetAttribute("Stunned")
 			and not character:GetAttribute("Guardbroken")
 			and not character:GetAttribute("UsingMove")
+			and not character:GetAttribute("Emoting")
 		then
 			humanoid.WalkSpeed = self.Config.DefaultWalkSpeed
 			humanoid.JumpPower = self.Config.DefaultJumpPower

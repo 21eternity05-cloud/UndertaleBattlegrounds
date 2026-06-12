@@ -32,6 +32,27 @@ local ALLOWED_SETTINGS = {
 	MorphAlways = true,
 	Titles = true,
 }
+local COLLIDABLE_PARTS = {
+	Torso = true,
+	Head = true,
+	HumanoidRootPart = true,
+}
+
+local function applySimpleCharacterCollision(character)
+	if not character then
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.CanCollide = COLLIDABLE_PARTS[descendant.Name] == true
+
+			if descendant.CanCollide == false then
+				descendant.Massless = true
+			end
+		end
+	end
+end
 
 local ProgressionService = {}
 ProgressionService.__index = ProgressionService
@@ -927,6 +948,7 @@ function ProgressionService:ApplyEquippedTitleToCharacter(player, character, for
 		if character:GetAttribute("AppliedTitleId") ~= nil then
 			self:ClearTitleVisuals(character)
 		end
+		applySimpleCharacterCollision(character)
 		return
 	end
 
@@ -934,6 +956,7 @@ function ProgressionService:ApplyEquippedTitleToCharacter(player, character, for
 		if character:GetAttribute("AppliedTitleId") ~= nil then
 			self:ClearTitleVisuals(character)
 		end
+		applySimpleCharacterCollision(character)
 		return
 	end
 
@@ -984,6 +1007,7 @@ function ProgressionService:ApplyEquippedTitleToCharacter(player, character, for
 	end
 
 	character:SetAttribute("AppliedTitleId", titleId)
+	applySimpleCharacterCollision(character)
 end
 
 function ProgressionService:EquipTitle(player, titleId)

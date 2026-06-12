@@ -14,6 +14,7 @@ local moveRemote = remotes:WaitForChild("MoveRemote")
 local ultRemote = remotes:WaitForChild("UltRemote")
 local soulBurstRemote = remotes:WaitForChild("SoulBurstRemote")
 local cinematicRemote = remotes:WaitForChild("CinematicRemote")
+local emoteRemote = remotes:WaitForChild("EmoteRemote")
 
 local assets = ReplicatedStorage:WaitForChild("Assets")
 local charactersFolder = assets:WaitForChild("Characters")
@@ -109,6 +110,19 @@ local function getCharacter()
 	if not humanoid or humanoid.Health <= 0 then return nil end
 
 	return character, humanoid
+end
+
+local function cancelEmoteIfActive()
+	local character = player.Character
+	if character and character:GetAttribute("Emoting") == true then
+		emoteRemote:FireServer({
+			Action = "CancelEmote",
+		})
+
+		return true
+	end
+
+	return false
 end
 
 local function getCurrentCharacterName()
@@ -214,6 +228,7 @@ local function buildMoveDisplayFromModule(characterName)
 
 			display[slot].RequiresTarget = moveData.RequiresTarget == true
 			display[slot].RequiresAim = moveData.RequiresAim == true
+			display[slot].TargetRange = moveData.TargetRange or moveData.MaxTargetRange
 		end
 	end
 
@@ -348,6 +363,7 @@ local function canRequestAttack()
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
 	if character:GetAttribute("UsingMove") then return false end
+	if character:GetAttribute("Emoting") then return false end
 
 	return true
 end
@@ -360,6 +376,7 @@ local function canRequestMove()
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
 	if character:GetAttribute("UsingMove") then return false end
+	if character:GetAttribute("Emoting") then return false end
 
 	return true
 end
@@ -381,6 +398,7 @@ end
 
 local function requestBlockStart()
 	if blocking then return true end
+	if cancelEmoteIfActive() then return false end
 	if not canRequestBlock() then return false end
 
 	blocking = true
@@ -527,6 +545,7 @@ end
 
 local function requestMove(moveSlot)
 	if localMoveCooldowns[moveSlot] then return end
+	if cancelEmoteIfActive() then return end
 	if not canRequestMove() then return end
 
 	local moveInfo = currentMoveDisplay[moveSlot]
@@ -544,6 +563,21 @@ local function requestMove(moveSlot)
 	if moveInfo and moveInfo.RequiresTarget and not targetCharacter then
 		warn("[CombatClient] Move needs a valid mouse target:", moveId or moveSlot)
 		return
+	end
+
+	if moveInfo
+		and moveInfo.RequiresTarget
+		and typeof(moveInfo.TargetRange) == "number"
+		and targetCharacter
+	then
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+
+		if not root or not targetRoot or (targetRoot.Position - root.Position).Magnitude > moveInfo.TargetRange then
+			warn("[CombatClient] Move target out of range:", moveId or moveSlot)
+			return
+		end
 	end
 
 	if moveInfo and moveInfo.RequiresAim and typeof(aimPosition) ~= "Vector3" then
@@ -788,6 +822,7 @@ end
 
 local function requestAttack()
 	if localM1Cooldown then return end
+	if cancelEmoteIfActive() then return end
 	if not canRequestAttack() then return end
 
 	localM1Cooldown = true
@@ -931,6 +966,21 @@ local fovOffsetCamera = nil
 
 local function getCamera()
 	return workspace.CurrentCamera
+end
+
+local function isCameraShakeEnabled()
+	return player:GetAttribute("Setting_CameraShake") ~= false
+end
+
+local function clearActiveCameraShakes()
+	table.clear(activeCameraShakes)
+
+	local camera = getCamera()
+	if camera and lastShakeTransform ~= CFrame.new() then
+		camera.CFrame = camera.CFrame * lastShakeTransform:Inverse()
+	end
+
+	lastShakeTransform = CFrame.new()
 end
 
 local function ensureFOVBase(camera)
@@ -1114,6 +1164,11 @@ local function resetCinematicCamera()
 end
 
 local function startCameraShake(intensity, roughness, duration)
+	if not isCameraShakeEnabled() then
+		clearActiveCameraShakes()
+		return
+	end
+
 	intensity = typeof(intensity) == "number" and math.max(0, intensity) or 1
 	roughness = typeof(roughness) == "number" and math.max(0.1, roughness) or 8
 	duration = typeof(duration) == "number" and math.max(0.01, duration) or 0.25
@@ -1126,6 +1181,12 @@ local function startCameraShake(intensity, roughness, duration)
 		Seed = math.random() * 1000,
 	})
 end
+
+player:GetAttributeChangedSignal("Setting_CameraShake"):Connect(function()
+	if not isCameraShakeEnabled() then
+		clearActiveCameraShakes()
+	end
+end)
 
 local function getImpactFrameEffect()
 	local effect = Lighting:FindFirstChild("CombatImpactFrame")
@@ -1375,6 +1436,10 @@ UserInputService.JumpRequest:Connect(function()
 	end
 
 	if character:GetAttribute("UsingMove") then
+		humanoid.Jump = false
+	end
+
+	if character:GetAttribute("Emoting") then
 		humanoid.Jump = false
 	end
 end)

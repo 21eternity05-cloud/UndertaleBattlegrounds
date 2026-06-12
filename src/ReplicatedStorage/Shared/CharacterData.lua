@@ -59,14 +59,14 @@ local CharacterData = {
 	DisbeliefPapyrus = {
 		Id = "DisbeliefPapyrus",
 		DisplayName = "Disbelief Papyrus",
-		Cost = 3500,
+		Cost = 35,
 		Free = false,
 	},
 
 	GlitchtaleFrisk = {
 		Id = "GlitchtaleFrisk",
 		DisplayName = "Glitchtale Frisk",
-		Cost = 4000,
+		Cost = 40,
 		Free = false,
 	},
 }

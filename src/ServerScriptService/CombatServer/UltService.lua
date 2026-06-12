@@ -208,6 +208,11 @@ function UltService:SpendUlt(player)
 end
 
 function UltService:CanUseUltimate(player)
+	local character = player and player.Character
+	if character and character:GetAttribute("Emoting") == true then
+		return false
+	end
+
 	return self:IsFull(player)
 end
 

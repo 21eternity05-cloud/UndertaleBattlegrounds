@@ -3,6 +3,7 @@ print("[CombatServer] Starting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local combatFolder = script.Parent
+local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 
 local Config = require(combatFolder:WaitForChild("CombatConfig"))
 
@@ -41,7 +42,8 @@ local CharacterIntroService = require(combatFolder:WaitForChild("CharacterIntroS
 	Config,
 	AnimationService,
 	VFXService,
-	CinematicService
+	CinematicService,
+	CharacterMorphService
 )
 local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
 local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
@@ -51,6 +53,7 @@ local SpawnService = require(combatFolder:WaitForChild("SpawnService")).new(
 	StateService,
 	CombatStatusService
 )
+local EmoteService = require(servicesFolder:WaitForChild("EmoteService")).new(Config, StateService)
 
 local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
@@ -168,6 +171,12 @@ DebugService.SoulBurstService = SoulBurstService
 
 -- Remotes
 combatRemote.OnServerEvent:Connect(function(player, action, payload)
+	local character = player.Character
+	if character and character:GetAttribute("Emoting") == true then
+		EmoteService:CancelEmote(player)
+		return
+	end
+
 	if action == "M1" then
 		M1Service:PerformM1(player, payload)
 	elseif action == "BlockStart" then
@@ -178,10 +187,22 @@ combatRemote.OnServerEvent:Connect(function(player, action, payload)
 end)
 
 moveRemote.OnServerEvent:Connect(function(player, moveRequest)
+	local character = player.Character
+	if character and character:GetAttribute("Emoting") == true then
+		EmoteService:CancelEmote(player)
+		return
+	end
+
 	MoveService:PerformMove(player, moveRequest)
 end)
 
 SoulBurstService.SoulBurstRemote.OnServerEvent:Connect(function(player, action)
+	local character = player.Character
+	if character and character:GetAttribute("Emoting") == true then
+		EmoteService:CancelEmote(player)
+		return
+	end
+
 	if action == "Activate" then
 		SoulBurstService:ActivateSoulBurst(player)
 	end
@@ -209,6 +230,11 @@ local function parseCharacterRequest(action, payload)
 end
 
 characterRemote.OnServerEvent:Connect(function(player, action, payload)
+	local currentCharacter = player.Character
+	if currentCharacter and currentCharacter:GetAttribute("Emoting") == true then
+		EmoteService:CancelEmote(player)
+	end
+
 	if action == "SelectCharacter" then
 		local characterName, options = parseCharacterRequest(action, payload)
 		if characterName then
@@ -231,6 +257,7 @@ end)
 
 -- Startup
 StateService:StartCharacterSetup()
+EmoteService:Start()
 KillCreditService:Start()
 ProgressionService:Start()
 CharacterMorphService:Start()

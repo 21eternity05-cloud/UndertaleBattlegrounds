@@ -307,6 +307,10 @@ function CharacterService:SetCharacter(player, characterName, options)
 
 		self:PlayCharacterIntro(player, character, characterName)
 		self:ApplyEquippedTitleAfterCharacterVisuals(player, character)
+
+		if self.CharacterMorphService and self.CharacterMorphService.ApplyCharacterCollisionRules then
+			self.CharacterMorphService:ApplyCharacterCollisionRules(character)
+		end
 	end
 
 	print(player.Name .. " changed character to " .. characterName)
@@ -354,6 +358,10 @@ function CharacterService:SetupPlayer(player)
 
 		self:PlayCharacterIntro(player, character, characterName)
 		self:ApplyEquippedTitleAfterCharacterVisuals(player, character)
+
+		if self.CharacterMorphService and self.CharacterMorphService.ApplyCharacterCollisionRules then
+			self.CharacterMorphService:ApplyCharacterCollisionRules(character)
+		end
 	end)
 end
 
@@ -400,6 +408,10 @@ function CharacterService:Start()
 
 			self:PlayCharacterIntro(player, player.Character, characterName)
 			self:ApplyEquippedTitleAfterCharacterVisuals(player, player.Character)
+
+			if self.CharacterMorphService and self.CharacterMorphService.ApplyCharacterCollisionRules then
+				self.CharacterMorphService:ApplyCharacterCollisionRules(player.Character)
+			end
 		end
 	end
 end

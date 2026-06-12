@@ -209,6 +209,9 @@ function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
 	if character:GetAttribute("UsingMove") then
 		return false
 	end
+	if character:GetAttribute("Emoting") then
+		return false
+	end
 	if character:GetAttribute("Stunned") then
 		return false
 	end
@@ -282,6 +285,9 @@ function MoveService:RestoreMoveMovement(character)
 		return
 	end
 	if character:GetAttribute("UsingMove") then
+		return
+	end
+	if character:GetAttribute("Emoting") then
 		return
 	end
 

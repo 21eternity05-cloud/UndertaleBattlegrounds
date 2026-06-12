@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local soulBurstRemote = remotes:WaitForChild("SoulBurstRemote")
+local emoteRemote = remotes:WaitForChild("EmoteRemote")
 
 local DASH_KEY = Enum.KeyCode.Q
 
@@ -50,6 +51,10 @@ local function isDashLocked(character)
 	end
 
 	if character:GetAttribute("MovementLocked") then
+		return true
+	end
+
+	if character:GetAttribute("Emoting") then
 		return true
 	end
 
@@ -244,6 +249,11 @@ local function dash()
 	if not character then return end
 
 	if not canDashNow(character, humanoid, root) then
+		if character:GetAttribute("Emoting") == true then
+			emoteRemote:FireServer({
+				Action = "CancelEmote",
+			})
+		end
 		return
 	end
 

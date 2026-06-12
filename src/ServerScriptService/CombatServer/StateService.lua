@@ -23,6 +23,8 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("Stunned", false)
 	character:SetAttribute("Blocking", false)
 	character:SetAttribute("Guardbroken", false)
+	character:SetAttribute("Emoting", false)
+	character:SetAttribute("CurrentEmote", nil)
 
 	character:SetAttribute("AirComboReady", false)
 	character:SetAttribute("UsedUptiltInCombo", false)
@@ -101,6 +103,7 @@ function StateService:GetCharacterInfo(player)
 end
 
 function StateService:CanAttack(character)
+	if character:GetAttribute("Emoting") then return false end
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Stunned") then return false end
@@ -111,6 +114,7 @@ function StateService:CanAttack(character)
 end
 
 function StateService:CanUseMove(character)
+	if character:GetAttribute("Emoting") then return false end
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Stunned") then return false end
@@ -194,6 +198,7 @@ function StateService:LockJump(character, duration)
 		if character:GetAttribute("Guardbroken") then return end
 		if character:GetAttribute("Blocking") then return end
 		if character:GetAttribute("UsingMove") then return end
+		if character:GetAttribute("Emoting") then return end
 
 		currentHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 		currentHumanoid.JumpPower = self.Config.DefaultJumpPower

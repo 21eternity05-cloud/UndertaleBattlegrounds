@@ -51,6 +51,10 @@
 
         "InteractableRemote": {
           "$className": "RemoteEvent"
+        },
+
+        "EmoteRemote": {
+          "$className": "RemoteEvent"
         }
       },
 
@@ -64,6 +68,62 @@
 
       "Assets": {
         "$className": "Folder",
+
+        "Emotes": {
+          "$className": "Folder",
+
+          "Animations": {
+            "$className": "Folder",
+
+            "DefaultDance": {
+              "$className": "Animation"
+            },
+
+            "TPose": {
+              "$className": "Animation"
+            },
+
+            "Headless": {
+              "$className": "Animation"
+            },
+
+            "Spin": {
+              "$className": "Animation"
+            },
+
+            "LoudLaugh": {
+              "$className": "Animation"
+            },
+
+            "CleanGroove": {
+              "$className": "Animation"
+            }
+          },
+
+          "Sounds": {
+            "$className": "Folder",
+
+            "DefaultDanceMusic": {
+              "$className": "Sound"
+            },
+
+            "LoudLaughSound": {
+              "$className": "Sound"
+            },
+
+            "CleanGrooveMusic": {
+              "$className": "Sound"
+            }
+          },
+
+          "Props": {
+            "$className": "Folder",
+
+            "FakeHead": {
+              "$className": "Part"
+            }
+          }
+        },
 
         "Characters": {
           "$className": "Folder",
@@ -108,6 +168,10 @@
 
       "CombatServer": {
         "$path": "src/ServerScriptService/CombatServer"
+      },
+
+      "Services": {
+        "$path": "src/ServerScriptService/Services"
       },
 
       "World": {
