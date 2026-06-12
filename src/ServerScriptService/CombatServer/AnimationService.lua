@@ -271,6 +271,14 @@ function AnimationService:GetDownslamAnimationName(character)
 	return self.Config.M1Animations and self.Config.M1Animations.Downslam
 end
 
+function AnimationService:GetBlockAnimationName(character)
+	if isDisbeliefPapyrusAwakened(character) then
+		return "AwakenBlock"
+	end
+
+	return self.Config.BlockAnimation or "Block"
+end
+
 function AnimationService:PlayM1Animation(character, combo)
 	local animationName = self:GetM1AnimationName(character, combo)
 
@@ -319,7 +327,11 @@ function AnimationService:StopCharacterAnimationByName(character, animationName,
 end
 
 function AnimationService:PlayBlockAnimation(character)
-	local animationName = self.Config.BlockAnimation or "Block"
+	local animationName = self:GetBlockAnimationName(character)
+
+	self:StopCharacterAnimationByName(character, "Block", 0.04)
+	self:StopCharacterAnimationByName(character, "AwakenBlock", 0.04)
+
 	local track = self:PlayCharacterAnimation(character, animationName, 0.08, 1, 1)
 
 	if track then
@@ -332,8 +344,19 @@ function AnimationService:PlayBlockAnimation(character)
 end
 
 function AnimationService:StopBlockAnimation(character)
-	local animationName = self.Config.BlockAnimation or "Block"
+	local animationName = self:GetBlockAnimationName(character)
+
 	self:StopCharacterAnimationByName(character, animationName, 0.12)
+
+	-- Safety cleanup:
+	-- If the player transforms while blocking, this prevents either block track from getting stuck.
+	if animationName ~= "Block" then
+		self:StopCharacterAnimationByName(character, "Block", 0.12)
+	end
+
+	if animationName ~= "AwakenBlock" then
+		self:StopCharacterAnimationByName(character, "AwakenBlock", 0.12)
+	end
 end
 
 function AnimationService:StopUniversalAnimation(character, animationKey, fadeTime)

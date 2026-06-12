@@ -18,7 +18,7 @@ local DisbeliefCounter = {
 	Damage = 9,
 	Stun = 0.75,
 
-	Radius = 5.75,
+	Radius = 10,
 	Offset = CFrame.new(0, -1.4, 0),
 
 	Blockable = true,

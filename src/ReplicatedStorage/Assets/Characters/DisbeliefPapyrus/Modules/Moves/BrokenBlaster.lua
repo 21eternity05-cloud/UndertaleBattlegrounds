@@ -1,6 +1,3 @@
--- BrokenBlaster
--- ReplicatedStorage > Assets > Characters > DisbeliefPapyrus > Modules > Moves > BrokenBlaster
-
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
@@ -15,21 +12,16 @@ local BrokenBlaster = {
 	LockTime = 1.15,
 	MaxLockTime = 1.75,
 
-	-- Ram hit: weak hit that confirms the blast.
-	-- It can stun, but it does NOT guardbreak.
 	RamDamage = 4,
 	RamStun = 0.45,
 	RamRadius = 4.75,
 	RamGuardbreak = false,
 
-	-- Blast hit: main damage and launch.
-	-- This is the part that guardbreaks.
 	BlastDamage = 12,
 	BlastStun = 0.65,
 	BlastRadius = 5.75,
 	BlastGuardbreak = true,
 
-	-- These are here for compatibility with your move system.
 	Damage = 12,
 	Stun = 0.65,
 	Radius = 5.75,
@@ -49,7 +41,6 @@ local BrokenBlaster = {
 
 	Startup = 0.28,
 
-	-- Blaster starts close, then rams forward.
 	SpawnForwardOffset = 3.2,
 	SpawnHeightOffset = 2.2,
 	SpawnSideOffset = 1.6,
@@ -58,26 +49,27 @@ local BrokenBlaster = {
 	RamLifetime = 0.36,
 	RamHitboxTickRate = 0.035,
 
-	-- After ram confirms, fire point blank.
 	ConfirmFreezeTime = 0.7,
 	FireDelayAfterRam = 0.45,
 
-	-- Short beam, not Sans sniper range.
 	BeamRange = 26,
 	BeamStep = 5,
 	BeamDuration = 0.16,
 	BeamTickRate = 0.04,
 
+	BeamVisualRadius = 5.75,
+	BeamVisualTransparency = 0.2,
+	BeamFadeTime = 0.12,
+	BeamColor = Color3.fromRGB(255, 255, 255),
+
 	FadeTime = 0.18,
 
-	-- Strong MovementService knockback on normal blast hits only.
 	KnockbackPreset = "PresetKnockback",
 	PresetKnockbackSpeed = 105,
 	PresetKnockbackUpward = 26,
 	PresetKnockbackDuration = 0.32,
 	PresetKnockbackMaxForce = 100000,
 
-	-- Backward compatibility.
 	Knockback = 105,
 	UpwardKnockback = 26,
 	KnockbackDuration = 0.32,
@@ -158,7 +150,9 @@ local function ensurePrimaryPart(object)
 end
 
 local function forcePrimaryPartInvisible(object)
-	if not object then return end
+	if not object then
+		return
+	end
 
 	if object:IsA("Model") then
 		local primary = ensurePrimaryPart(object)
@@ -191,7 +185,10 @@ end
 
 local function pivotObject(object, cframe)
 	if object:IsA("Model") then
-		if not ensurePrimaryPart(object) then return end
+		if not ensurePrimaryPart(object) then
+			return
+		end
+
 		object:PivotTo(cframe)
 	elseif object:IsA("BasePart") then
 		object.CFrame = cframe
@@ -307,9 +304,17 @@ local function fadeAndDestroyVFX(object, fadeTime)
 end
 
 local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
+	if not ctx.VFXService then
+		return
+	end
+
+	if not ctx.VFXService.PlayCharacterSFXAtPart then
+		return
+	end
+
+	if not parentPart or not parentPart.Parent then
+		return
+	end
 
 	local played = ctx.VFXService:PlayCharacterSFXAtPart(
 		"DisbeliefPapyrus",
@@ -472,8 +477,6 @@ local function makeRamConfirmHitData(moveData)
 	hitData.CanBeBlocked = true
 	hitData.Unblockable = false
 
-	-- Ram does NOT guardbreak.
-	-- It can still stun, damage, and confirm the beam.
 	hitData.Guardbreak = false
 	hitData.CanBeCountered = moveData.CanBeCountered
 	hitData.HitCancelsTarget = true
@@ -494,7 +497,6 @@ local function makeRamHitboxData(moveData)
 		CanBeBlocked = true,
 		Unblockable = false,
 
-		-- Ram does NOT guardbreak.
 		Guardbreak = false,
 		CanBeCountered = moveData.CanBeCountered,
 		HitCancelsTarget = true,
@@ -589,7 +591,9 @@ local function buildSphereHitboxData(moveData, damage, stun, radius)
 end
 
 local function freezeTargetBriefly(ctx, targetCharacter, targetRoot, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
 
 	duration = duration or 0.28
 
@@ -605,7 +609,9 @@ local function freezeTargetBriefly(ctx, targetCharacter, targetRoot, duration)
 		targetCharacter:SetAttribute("MovementLocked", true)
 
 		task.delay(duration, function()
-			if not targetCharacter or not targetCharacter.Parent then return end
+			if not targetCharacter or not targetCharacter.Parent then
+				return
+			end
 
 			targetCharacter:SetAttribute("Stunned", false)
 			targetCharacter:SetAttribute("DashLocked", false)
@@ -677,6 +683,48 @@ local function spawnBeamVFX(ctx, startPosition, direction, range, lifetime)
 	return beam
 end
 
+local function createGasterStyleBeamVisual(startPosition, direction, data)
+	if not direction or direction.Magnitude < 0.05 then
+		direction = Vector3.new(0, 0, -1)
+	end
+
+	direction = direction.Unit
+
+	local length = data.BeamRange or data.BeamLength or 26
+	local radius = data.BeamVisualRadius or data.BlastRadius or data.BeamRadius or 5.75
+	local fadeTime = data.BeamFadeTime or 0.12
+	local transparency = data.BeamVisualTransparency or 0.2
+	local color = data.BeamColor or Color3.fromRGB(255, 255, 255)
+
+	local beam = Instance.new("Part")
+	beam.Name = "GasterBlasterBeam"
+	beam.Anchored = true
+	beam.CanCollide = false
+	beam.CanTouch = false
+	beam.CanQuery = false
+	beam.Material = Enum.Material.Neon
+	beam.Color = color
+	beam.Transparency = transparency
+	beam.Size = Vector3.new(radius * 1.2, radius * 1.2, length)
+
+	local center = startPosition + (direction * (length * 0.5))
+	beam.CFrame = CFrame.lookAt(center, center + direction)
+	beam.Parent = workspace
+
+	TweenService:Create(
+		beam,
+		TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Transparency = 1,
+			Size = Vector3.new(radius * 0.25, radius * 0.25, length),
+		}
+	):Play()
+
+	Debris:AddItem(beam, fadeTime + 0.08)
+
+	return beam
+end
+
 local function applyStandardHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData, moveId)
 	if ctx.ApplyStandardHit then
 		return ctx:ApplyStandardHit(
@@ -691,7 +739,7 @@ local function applyStandardHit(ctx, targetCharacter, targetHumanoid, targetRoot
 	return ctx:DefaultApplyHit(targetCharacter, targetHumanoid, targetRoot)
 end
 
-local function firePointBlankBlast(ctx, blaster, startPosition, direction, confirmedTargetCharacter)
+local function firePointBlankBlast(ctx, blaster, startPosition, direction)
 	local character = ctx.Character
 	local root = ctx.Root
 	local moveData = ctx.MoveData
@@ -708,7 +756,6 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction, confi
 		moveData.BlastRadius or 5.75
 	)
 
-	-- Beam is the guardbreak part.
 	blastHitboxData.Guardbreak = moveData.BlastGuardbreak ~= false
 	blastHitboxData.Blockable = true
 	blastHitboxData.CanBeBlocked = true
@@ -721,7 +768,6 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction, confi
 		moveData.BlastRadius or 5.75
 	)
 
-	-- Beam is the guardbreak part.
 	blastHitData.Guardbreak = moveData.BlastGuardbreak ~= false
 	blastHitData.Blockable = true
 	blastHitData.CanBeBlocked = true
@@ -730,7 +776,10 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction, confi
 	local alreadyHit = {}
 
 	playPapyrusSFX(ctx, "BrokenBlasterFire", root, 2)
+	playPapyrusSFX(ctx, "BrokenBlasterBeamLoop", root, beamDuration + 0.25)
+
 	spawnBeamVFX(ctx, startPosition, direction, beamRange, beamDuration + 0.2)
+	createGasterStyleBeamVisual(startPosition, direction, moveData)
 
 	local startTime = os.clock()
 	local lastTick = beamTickRate
@@ -760,6 +809,8 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction, confi
 		end
 
 		lastTick = 0
+
+		createGasterStyleBeamVisual(startPosition, direction, moveData)
 
 		local distance = 0
 
@@ -793,7 +844,6 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction, confi
 					elseif result == "Blocked" then
 						playPapyrusSFX(ctx, "Block", targetRoot, 2)
 					elseif result == "Guardbreak" then
-						-- Guardbreak should break block/stun in place, not launch.
 						playPapyrusSFX(ctx, "BlockBreak", targetRoot, 2)
 
 						if targetRoot and targetRoot.Parent then
@@ -856,8 +906,7 @@ local function confirmPointBlankBlast(ctx, blaster, direction, targetCharacter, 
 			ctx,
 			blaster,
 			beamStartPosition,
-			direction,
-			targetCharacter
+			direction
 		)
 
 		task.delay(
@@ -946,7 +995,9 @@ function BrokenBlaster.Execute(ctx)
 
 	local connection
 	connection = RunService.Heartbeat:Connect(function(deltaTime)
-		if finished then return end
+		if finished then
+			return
+		end
 
 		if not ctx:IsActive() or isMoveInterrupted(ctx) then
 			finished = true
@@ -1016,9 +1067,6 @@ function BrokenBlaster.Execute(ctx)
 
 				print("[BrokenBlaster] Ram result:", result)
 
-				-- IMPORTANT:
-				-- Ram confirms the beam on normal hit, armored hit, block, or guardbreak.
-				-- Ram itself does NOT guardbreak.
 				if result == "Hit" or result == "ArmoredHit" or result == "Blocked" or result == "Guardbreak" then
 					if result == "Blocked" then
 						playPapyrusSFX(ctx, "Block", targetRoot, 2)

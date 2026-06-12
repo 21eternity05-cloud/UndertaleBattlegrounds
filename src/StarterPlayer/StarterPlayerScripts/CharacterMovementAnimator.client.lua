@@ -13,6 +13,7 @@ local ANIMATION_NAMES = {
 
 local AWAKEN_ANIMATION_NAMES = {
 	Idle = "AwakenIdle",
+	Walk = "AwakenWalk",
 }
 
 local activeTracks = {}
@@ -88,10 +89,18 @@ local function isDisbeliefPapyrusAwakened(character)
 end
 
 local function getMovementAnimationName(character, animationType)
-	if animationType == "Idle" and isDisbeliefPapyrusAwakened(character) then
-		return AWAKEN_ANIMATION_NAMES.Idle
+	if isDisbeliefPapyrusAwakened(character) then
+		if animationType == "Idle" then
+			return AWAKEN_ANIMATION_NAMES.Idle
+		elseif animationType == "Walk" then
+			return AWAKEN_ANIMATION_NAMES.Walk
+		end
 	end
 
+	return ANIMATION_NAMES[animationType]
+end
+
+local function getFallbackMovementAnimationName(animationType)
 	return ANIMATION_NAMES[animationType]
 end
 
@@ -122,6 +131,38 @@ local function findAnimation(animationsFolder, animationName)
 
 	if animation and animation:IsA("Animation") then
 		return animation
+	end
+
+	return nil
+end
+
+local function findMovementAnimation(animationsFolder, character, animationType)
+	local animationName = getMovementAnimationName(character, animationType)
+	local animation = findAnimation(animationsFolder, animationName)
+
+	if animation then
+		return animation
+	end
+
+	local fallbackName = getFallbackMovementAnimationName(animationType)
+
+	if fallbackName and fallbackName ~= animationName then
+		local fallbackAnimation = findAnimation(animationsFolder, fallbackName)
+
+		if fallbackAnimation then
+			warn(
+				"[CharacterMovementAnimator] Missing movement animation:",
+				animationName,
+				"using fallback:",
+				fallbackName
+			)
+
+			return fallbackAnimation
+		end
+	end
+
+	if animationName then
+		warn("[CharacterMovementAnimator] Missing movement animation:", animationName)
 	end
 
 	return nil
@@ -217,27 +258,23 @@ local function setupCharacter(character)
 		return
 	end
 
-	local idleName = getMovementAnimationName(character, "Idle")
-	local walkName = getMovementAnimationName(character, "Walk")
-	local runName = getMovementAnimationName(character, "Run")
-
 	activeTracks.Idle = loadTrack(
 		animator,
-		findAnimation(animationsFolder, idleName),
+		findMovementAnimation(animationsFolder, character, "Idle"),
 		Enum.AnimationPriority.Idle,
 		true
 	)
 
 	activeTracks.Walk = loadTrack(
 		animator,
-		findAnimation(animationsFolder, walkName),
+		findMovementAnimation(animationsFolder, character, "Walk"),
 		Enum.AnimationPriority.Movement,
 		true
 	)
 
 	activeTracks.Run = loadTrack(
 		animator,
-		findAnimation(animationsFolder, runName),
+		findMovementAnimation(animationsFolder, character, "Run"),
 		Enum.AnimationPriority.Movement,
 		true
 	)

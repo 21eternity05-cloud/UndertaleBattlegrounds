@@ -57,4 +57,73 @@ return {
 			},
 		},
 	},
+
+
+	HollowSnowdin_002 = {
+		Title = "A door",
+		DisplayPromptText = " - Door",
+
+		Lines = {
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				StartSound = "Equip",
+				Text = "You find a grey door.",
+			},
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				Text = "You try to open the door but...",
+			},
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				Text = "The door is locked.",
+			},
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				Text = "Maybe in a different time you opened it.",
+
+			},
+		},
+	},
+
+	HollowSnowdin_003 = {
+		Title = "HotDogStand",
+		DisplayPromptText = " - Sans's Hot Dog Stand",
+
+		Lines = {
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				StartSound = "Equip",
+				Text = "You find a hot dog stand with no one around.",
+			},
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				Text = "You wonder what the stand is doing here.",
+			},
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				Text = "This doesn't seem to be snowdin.",
+			},
+			{
+				Speaker = "You?",
+				Portrait = "Self",
+				TextSound = "SaveFile",
+				Text = "Where are we?",
+
+			},
+		},
+	},
 }
