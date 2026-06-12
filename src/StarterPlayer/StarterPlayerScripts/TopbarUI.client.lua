@@ -7,6 +7,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local characterRemote = remotes:WaitForChild("CharacterRemote")
 local progressionRemote = remotes:WaitForChild("ProgressionRemote")
+local settingsRemote = remotes:WaitForChild("SettingsRemote")
 local notificationRemote = remotes:WaitForChild("NotificationRemote", 10)
 
 local Packages = ReplicatedStorage:WaitForChild("Packages")
@@ -35,6 +36,12 @@ local selectedCustomizeCategory = "Characters"
 local morphEnabled = false
 local pendingPurchaseCharacter = nil
 local pendingPurchaseSkin = nil
+local settings = {
+	Music = true,
+	CameraShake = true,
+	MorphAlways = false,
+	Titles = true,
+}
 
 local shopPreviewController = ShopPreviewController.new(player, ReplicatedStorage)
 shopPreviewController:Start()
@@ -322,6 +329,43 @@ local function getEquippedSkin(characterName)
 	return defaultSkinName or "Default"
 end
 
+local function isTitleOwned(titleId, titleData)
+	if titleData and titleData.Starter == true then
+		return true
+	end
+
+	if profile and profile.OwnedTitles and profile.OwnedTitles[titleId] == true then
+		return true
+	end
+
+	return false
+end
+
+local function getSortedTitles()
+	local titles = {}
+
+	for titleId, data in pairs(TitleData) do
+		if typeof(data) == "table" and (data.Hidden ~= true or isTitleOwned(titleId, data)) then
+			table.insert(titles, titleId)
+		end
+	end
+
+	table.sort(titles, function(left, right)
+		local leftData = TitleData[left] or {}
+		local rightData = TitleData[right] or {}
+		local leftOrder = leftData.Order or math.huge
+		local rightOrder = rightData.Order or math.huge
+
+		if leftOrder == rightOrder then
+			return (leftData.DisplayName or left) < (rightData.DisplayName or right)
+		end
+
+		return leftOrder < rightOrder
+	end)
+
+	return titles
+end
+
 local function hideCombatUI()
 	for _, child in ipairs(playerGui:GetChildren()) do
 		if child:IsA("ScreenGui") and HIDDEN_GUI_NAMES[child.Name] then
@@ -456,6 +500,38 @@ local function requestSnapshot()
 	})
 end
 
+local function applySettingsSnapshot(snapshot)
+	if typeof(snapshot) ~= "table" then
+		return
+	end
+
+	for settingName in pairs(settings) do
+		if typeof(snapshot[settingName]) == "boolean" then
+			settings[settingName] = snapshot[settingName]
+			player:SetAttribute("Setting_" .. settingName, snapshot[settingName])
+		end
+	end
+end
+
+local function setLocalSetting(settingName, value)
+	if settings[settingName] == nil then
+		return
+	end
+
+	settings[settingName] = value == true
+	player:SetAttribute("Setting_" .. settingName, settings[settingName])
+end
+
+local function sendSetting(settingName, value)
+	setLocalSetting(settingName, value)
+
+	settingsRemote:FireServer({
+		Action = "SetSetting",
+		Setting = settingName,
+		Value = settings[settingName],
+	})
+end
+
 local function requestPlayAs(characterName, skinName)
 	if isOwned(characterName) then
 		characterRemote:FireServer("PlayAsCharacter", {
@@ -531,30 +607,48 @@ local function showSettings()
 		true
 	)
 
-	local settings = {
-		"Music",
-		"SFX",
-		"Camera Shake",
-		"Hitbox Debug",
+	local settingRows = {
+		{ Id = "Music", Label = "Music" },
+		{ Id = "CameraShake", Label = "Camera Shake" },
+		{ Id = "MorphAlways", Label = "Morph Always" },
+		{ Id = "Titles", Label = "Titles" },
 	}
 
-	for index, settingName in ipairs(settings) do
-		local row = makeButton(
+	for index, settingInfo in ipairs(settingRows) do
+		local rowY = 58 + (index - 1) * 48
+		local label = makeText(
 			panel,
-			settingName:gsub("%s+", "") .. "Toggle",
-			"  " .. settingName .. ": On",
-			UDim2.fromOffset(16, 58 + (index - 1) * 46),
-			UDim2.new(1, -32, 0, 36),
-			Color3.fromRGB(30, 30, 38)
+			settingInfo.Id .. "Label",
+			settingInfo.Label,
+			UDim2.fromOffset(16, rowY + 8),
+			UDim2.new(1, -124, 0, 22),
+			15,
+			true
+		)
+		label.TextColor3 = Color3.fromRGB(245, 245, 248)
+
+		local toggle = makeButton(
+			panel,
+			settingInfo.Id .. "Toggle",
+			"",
+			UDim2.new(1, -92, 0, rowY),
+			UDim2.fromOffset(76, 36),
+			Color3.fromRGB(42, 42, 50)
 		)
 
-		row.TextXAlignment = Enum.TextXAlignment.Left
+		local function refreshToggle()
+			local enabled = settings[settingInfo.Id] == true
+			toggle.Text = enabled and "ON" or "OFF"
+			toggle.BackgroundColor3 = enabled
+				and Color3.fromRGB(48, 76, 54)
+				or Color3.fromRGB(62, 45, 45)
+		end
 
-		local enabled = true
+		refreshToggle()
 
-		row.MouseButton1Click:Connect(function()
-			enabled = not enabled
-			row.Text = "  " .. settingName .. ": " .. (enabled and "On" or "Off")
+		toggle.MouseButton1Click:Connect(function()
+			sendSetting(settingInfo.Id, settings[settingInfo.Id] ~= true)
+			refreshToggle()
 		end)
 	end
 end
@@ -864,14 +958,26 @@ local function showCustomize()
 				end
 			end
 		elseif category == "Titles" then
-			for titleId, data in pairs(TitleData) do
+			for _, titleId in ipairs(getSortedTitles()) do
+				local data = TitleData[titleId]
 				if typeof(data) == "table" then
-					addItemButton(data.DisplayName or titleId, function()
-						progressionRemote:FireServer({
-							Action = "EquipTitle",
-							TitleId = titleId,
-						})
-					end, true)
+					local owned = isTitleOwned(titleId, data)
+					local text = data.DisplayName or titleId
+
+					if not owned then
+						text ..= "  -  Locked"
+					elseif profile and profile.EquippedTitle == titleId then
+						text ..= "  -  Equipped"
+					end
+
+					addItemButton(text, function()
+						if owned then
+							progressionRemote:FireServer({
+								Action = "EquipTitle",
+								TitleId = titleId,
+							})
+						end
+					end, owned)
 				end
 			end
 		elseif category == "Skins" then
@@ -1020,6 +1126,7 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 
 	if payload.Profile then
 		profile = payload.Profile
+		applySettingsSnapshot(profile.Settings)
 		refreshDust()
 		rebuildCharacterDropdown()
 
@@ -1036,6 +1143,26 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 
 			showCustomize()
 		end
+	end
+end)
+
+settingsRemote.OnClientEvent:Connect(function(payload)
+	if typeof(payload) ~= "table" then
+		return
+	end
+
+	if payload.Settings then
+		applySettingsSnapshot(payload.Settings)
+	elseif payload.Action == "SettingChanged"
+		and typeof(payload.Setting) == "string"
+		and typeof(payload.Value) == "boolean"
+	then
+		setLocalSetting(payload.Setting, payload.Value)
+	end
+
+	if currentPanelName == "Settings" then
+		clearCurrentGui()
+		showSettings()
 	end
 end)
 
@@ -1076,5 +1203,8 @@ end
 refreshDust()
 rebuildCharacterDropdown()
 requestSnapshot()
+settingsRemote:FireServer({
+	Action = "RequestSettings",
+})
 
 print("[TopBarUI] Loaded TSB-style TopBarPlus UI")

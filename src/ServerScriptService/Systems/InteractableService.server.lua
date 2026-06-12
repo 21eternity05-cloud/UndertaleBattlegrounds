@@ -170,6 +170,11 @@ local function handleLoreFragment(player, interactable)
 		return
 	end
 
+	local progressionService = _G.UTBGProgressionService
+	if progressionService and progressionService.UnlockLore then
+		progressionService:UnlockLore(player, fragmentId)
+	end
+
 	interactableRemote:FireClient(player, {
 		Action = "ShowLoreDialogue",
 		FragmentId = fragmentId,

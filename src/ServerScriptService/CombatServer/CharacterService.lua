@@ -172,15 +172,18 @@ function CharacterService:NormalizeCharacterOptions(player, characterName, optio
 
 	skinName = self:GetValidSkinName(player, characterName, skinName)
 
+	local requestedMorphEnabled = options.MorphEnabled == true
+
 	return {
 		SkinName = skinName,
-		MorphEnabled = options.MorphEnabled == true,
+		RequestedMorphEnabled = requestedMorphEnabled,
+		MorphEnabled = requestedMorphEnabled or player:GetAttribute("Setting_MorphAlways") == true,
 	}
 end
 
 function CharacterService:ApplyCharacterAttributes(player, character, characterName, options)
 	player:SetAttribute("CharacterName", characterName)
-	player:SetAttribute("MorphEnabled", options.MorphEnabled == true)
+	player:SetAttribute("MorphEnabled", options.RequestedMorphEnabled == true)
 
 	if options.SkinName then
 		player:SetAttribute("SelectedSkin", options.SkinName)
@@ -231,6 +234,20 @@ function CharacterService:PlayCharacterIntro(player, character, characterName)
 	end
 
 	self.CharacterIntroService:PlayCharacterSwitchIntro(player, characterName, character)
+end
+
+function CharacterService:ApplyEquippedTitleAfterCharacterVisuals(player, character)
+	if not self.ProgressionService or not self.ProgressionService.ApplyEquippedTitleToCharacter then
+		return
+	end
+
+	task.defer(function()
+		task.wait(0.1)
+
+		if character and character.Parent and player.Character == character then
+			self.ProgressionService:ApplyEquippedTitleToCharacter(player, character)
+		end
+	end)
 end
 
 function CharacterService:SetCharacter(player, characterName, options)
@@ -285,6 +302,7 @@ function CharacterService:SetCharacter(player, characterName, options)
 		end
 
 		self:PlayCharacterIntro(player, character, characterName)
+		self:ApplyEquippedTitleAfterCharacterVisuals(player, character)
 	end
 
 	print(player.Name .. " changed character to " .. characterName)
@@ -331,6 +349,7 @@ function CharacterService:SetupPlayer(player)
 		end
 
 		self:PlayCharacterIntro(player, character, characterName)
+		self:ApplyEquippedTitleAfterCharacterVisuals(player, character)
 	end)
 end
 
@@ -376,6 +395,7 @@ function CharacterService:Start()
 			end
 
 			self:PlayCharacterIntro(player, player.Character, characterName)
+			self:ApplyEquippedTitleAfterCharacterVisuals(player, player.Character)
 		end
 	end
 end

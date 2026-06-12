@@ -1,7 +1,7 @@
 return {
 	HollowSnowdin_001 = {
 		Title = "A SAVE That Forgot You",
-		DisplayPromptText = "E - SAVE",
+		DisplayPromptText = " - SAVE",
 
 		Lines = {
 			{
@@ -9,38 +9,51 @@ return {
 				Portrait = "SaveStar",
 				TextSound = "SaveFile",
 				StartSound = "Equip",
-				Text = "The file is still here.",
+				Text = "File found.",
 			},
 			{
 				Speaker = "SAVE FILE",
 				Portrait = "SaveStar",
 				TextSound = "SaveFile",
-				Text = "But the name is gone.",
+				Text = "Location: Snowdin.",
 			},
 			{
 				Speaker = "SAVE FILE",
 				Portrait = "SaveStar",
 				TextSound = "SaveFile",
-				Text = "Snow falls. Footsteps repeat. Dust refuses to settle.",
+				Text = "Population: 0.",
+			},
+			{
+				Speaker = "SAVE FILE",
+				Portrait = "SaveStar",
+				TextSound = "SaveFile",
+				Text = "The snow keeps falling, but nobody leaves footprints anymore.",
 			},
 			{
 				Speaker = "???",
 				Portrait = "Unknown",
 				TextSound = "Gaster",
-				Text = "Someone finished a fight that was never meant to follow them.",
+				StartSound = "Error",
+				Text = "THIS IS NOT THE HALL YOU LEFT BEHIND.",
 			},
 			{
 				Speaker = "SAVE FILE",
 				Portrait = "SaveStar",
 				TextSound = "SaveFile",
-				Text = "This place remembers violence better than it remembers people.",
+				Text = "A judgment ended somewhere else.",
+			},
+			{
+				Speaker = "SAVE FILE",
+				Portrait = "SaveStar",
+				TextSound = "SaveFile",
+				Text = "The violence followed the wrong reset.",
 			},
 			{
 				Speaker = "SAVE FILE",
 				Portrait = "SaveStar",
 				TextSound = "SaveFile",
 				EndSound = "UNDERTALE_Save",
-				Text = "SAVE unavailable.",
+				Text = "SAVE failed.",
 			},
 		},
 	},

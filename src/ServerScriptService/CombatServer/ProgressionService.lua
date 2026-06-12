@@ -9,6 +9,30 @@ local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
 local Assets = ReplicatedStorage:WaitForChild("Assets")
 local CharactersFolder = Assets:WaitForChild("Characters")
 
+local NONE_TITLE_ID = "None"
+local ROUTE_WITNESS_LORE_ID = "HollowSnowdin_001"
+local BODY_PART_NAMES = {
+	"HumanoidRootPart",
+	"Head",
+	"Torso",
+	"Left Arm",
+	"Right Arm",
+	"Left Leg",
+	"Right Leg",
+}
+local DEFAULT_SETTINGS = {
+	Music = true,
+	CameraShake = true,
+	MorphAlways = false,
+	Titles = true,
+}
+local ALLOWED_SETTINGS = {
+	Music = true,
+	CameraShake = true,
+	MorphAlways = true,
+	Titles = true,
+}
+
 local ProgressionService = {}
 ProgressionService.__index = ProgressionService
 
@@ -19,8 +43,11 @@ function ProgressionService.new(config)
 	self.Profiles = {}
 	self.ProfileLoaded = {}
 	self.Remote = nil
+	self.SettingsRemote = nil
 	self.KillAwarded = setmetatable({}, { __mode = "k" })
 	self.DataStoreWarnings = {}
+	self.RefusedFallbackSaveWarnings = {}
+	self.TitleAssetWarnings = {}
 
 	self.DataStoreName = config.DataStoreName or "UTBG_PlayerData_v1"
 	local success, dataStore = pcall(function()
@@ -51,6 +78,23 @@ function ProgressionService:WarnDataStoreFailure(player, action, err)
 	warn("[DataStore]", action, "failed for", playerName, "-", tostring(err))
 	warn("[DataStore] DataStores require the experience to be published. In Studio, enable Game Settings > Security > Enable Studio Access to API Services.")
 	warn("[DataStore] Roblox DataStores can fail temporarily; gameplay will continue with default/session data.")
+end
+
+function ProgressionService:WarnRefusedFallbackSave(player, reason)
+	if not player then
+		return
+	end
+
+	local warningKey = tostring(player.UserId) .. ":" .. tostring(reason or "FallbackSave")
+
+	if self.RefusedFallbackSaveWarnings[warningKey] then
+		return
+	end
+
+	self.RefusedFallbackSaveWarnings[warningKey] = true
+
+	warn("[ProgressionService] Refusing to save fallback profile for", player.Name, "-", tostring(reason))
+	warn("[ProgressionService] This prevents a bad DataStore load from overwriting real saved progress.")
 end
 
 function ProgressionService:SafeDataStoreCall(player, action, callback)
@@ -96,6 +140,25 @@ function ProgressionService:GetRemote()
 	end
 
 	self.Remote = remote
+
+	return remote
+end
+
+function ProgressionService:GetSettingsRemote()
+	if self.SettingsRemote then
+		return self.SettingsRemote
+	end
+
+	local remotes = self:GetRemotesFolder()
+	local remote = remotes:FindFirstChild("SettingsRemote")
+
+	if not remote then
+		remote = Instance.new("RemoteEvent")
+		remote.Name = "SettingsRemote"
+		remote.Parent = remotes
+	end
+
+	self.SettingsRemote = remote
 
 	return remote
 end
@@ -172,20 +235,26 @@ function ProgressionService:MakeDefaultProfile()
 			ownedTitles[titleId] = true
 		end
 	end
+	ownedTitles[NONE_TITLE_ID] = true
 
 	local ownedSkins, equippedSkins = self:MakeDefaultSkinTables()
 
 	return {
 		Dust = self.Config.StartingDust or 0,
 		Kills = 0,
+		CharacterKills = {
+			Chara = 0,
+			Sans = 0,
+		},
 
 		OwnedCharacters = ownedCharacters,
 		OwnedTitles = ownedTitles,
 		OwnedSkins = ownedSkins,
 		EquippedSkins = equippedSkins,
 
-		EquippedTitle = CustomizationData.DefaultEquipped.Title,
+		EquippedTitle = NONE_TITLE_ID,
 		Equipped = table.clone(CustomizationData.DefaultEquipped),
+		Settings = table.clone(DEFAULT_SETTINGS),
 
 		Lore = {},
 	}
@@ -200,6 +269,23 @@ function ProgressionService:MergeProfile(savedProfile)
 
 	defaultProfile.Dust = tonumber(savedProfile.Dust) or defaultProfile.Dust
 	defaultProfile.Kills = tonumber(savedProfile.Kills) or defaultProfile.Kills
+	defaultProfile.OwnedTitles[NONE_TITLE_ID] = true
+
+	if typeof(savedProfile.CharacterKills) == "table" then
+		for characterName, kills in pairs(savedProfile.CharacterKills) do
+			if typeof(characterName) == "string" then
+				defaultProfile.CharacterKills[characterName] = math.max(0, math.floor(tonumber(kills) or 0))
+			end
+		end
+	end
+
+	if typeof(savedProfile.Settings) == "table" then
+		for settingName in pairs(ALLOWED_SETTINGS) do
+			if typeof(savedProfile.Settings[settingName]) == "boolean" then
+				defaultProfile.Settings[settingName] = savedProfile.Settings[settingName]
+			end
+		end
+	end
 
 	if typeof(savedProfile.OwnedCharacters) == "table" then
 		for characterName, owned in pairs(savedProfile.OwnedCharacters) do
@@ -249,6 +335,12 @@ function ProgressionService:MergeProfile(savedProfile)
 		end
 	end
 
+	if not TitleData[defaultProfile.EquippedTitle] or defaultProfile.OwnedTitles[defaultProfile.EquippedTitle] ~= true then
+		defaultProfile.EquippedTitle = NONE_TITLE_ID
+	end
+
+	defaultProfile.Equipped.Title = defaultProfile.EquippedTitle
+
 	if typeof(savedProfile.Lore) == "table" then
 		for loreId, unlocked in pairs(savedProfile.Lore) do
 			if unlocked == true then
@@ -264,6 +356,7 @@ function ProgressionService:GetSavePayload(profile)
 	return {
 		Dust = profile.Dust or 0,
 		Kills = profile.Kills or 0,
+		CharacterKills = profile.CharacterKills or {},
 
 		OwnedCharacters = profile.OwnedCharacters or {},
 		OwnedTitles = profile.OwnedTitles or {},
@@ -272,6 +365,7 @@ function ProgressionService:GetSavePayload(profile)
 
 		EquippedTitle = profile.EquippedTitle,
 		Equipped = profile.Equipped or {},
+		Settings = profile.Settings or DEFAULT_SETTINGS,
 
 		Lore = profile.Lore or {},
 	}
@@ -287,18 +381,41 @@ function ProgressionService:LoadProfile(player)
 
 	if not success then
 		self.Profiles[player] = defaultProfile
+
+		-- IMPORTANT:
+		-- false means this is a temporary/session fallback profile.
+		-- It must never be saved, or it can overwrite real data after a bad load.
 		self.ProfileLoaded[player] = false
+
+		warn("[ProgressionService] Using temporary fallback profile for", player.Name)
 		return defaultProfile
 	end
 
 	local profile = self:MergeProfile(result)
 
 	self.Profiles[player] = profile
+
+	-- IMPORTANT:
+	-- true means the DataStore call completed safely.
+	-- This is true even if result == nil, because nil means a real new profile.
 	self.ProfileLoaded[player] = true
 
 	print("[ProgressionService] Loaded profile:", player.Name, "Dust:", profile.Dust, "Kills:", profile.Kills)
 
 	return profile
+end
+
+function ProgressionService:CanSaveProfile(player)
+	if not player then
+		return false
+	end
+
+	if self.ProfileLoaded[player] ~= true then
+		self:WarnRefusedFallbackSave(player, "Profile did not safely load from DataStore")
+		return false
+	end
+
+	return true
 end
 
 function ProgressionService:SaveProfile(player)
@@ -308,11 +425,17 @@ function ProgressionService:SaveProfile(player)
 		return false
 	end
 
+	if not self:CanSaveProfile(player) then
+		return false
+	end
+
 	local key = self:GetDataKey(player)
 	local payload = self:GetSavePayload(profile)
 
 	local success = self:SafeDataStoreCall(player, "UpdateAsync", function()
-		self.DataStore:UpdateAsync(key, function()
+		return self.DataStore:UpdateAsync(key, function(oldData)
+			-- Do not trust oldData blindly. Current profile is server-authoritative
+			-- only when it loaded safely, which CanSaveProfile already checked.
 			return payload
 		end)
 	end)
@@ -376,7 +499,16 @@ function ProgressionService:SyncPlayerAttributes(player)
 	if not profile then return end
 
 	player:SetAttribute("Dust", profile.Dust or 0)
-	player:SetAttribute("EquippedTitle", profile.EquippedTitle)
+	player:SetAttribute("EquippedTitle", self:GetSafeEquippedTitle(player))
+
+	profile.Settings = profile.Settings or table.clone(DEFAULT_SETTINGS)
+	for settingName, defaultValue in pairs(DEFAULT_SETTINGS) do
+		if typeof(profile.Settings[settingName]) ~= "boolean" then
+			profile.Settings[settingName] = defaultValue
+		end
+
+		player:SetAttribute("Setting_" .. settingName, profile.Settings[settingName])
+	end
 
 	for characterName, skinName in pairs(profile.EquippedSkins or {}) do
 		if typeof(skinName) == "string" then
@@ -411,6 +543,57 @@ function ProgressionService:AddKill(player, amount)
 
 	self:EnsureLeaderstats(player)
 	self:SendSnapshot(player)
+end
+
+function ProgressionService:GetAttackerCharacterName(player, attackerCharacter)
+	local characterName = attackerCharacter and attackerCharacter:GetAttribute("CharacterName")
+
+	if typeof(characterName) == "string" and characterName ~= "" then
+		return characterName
+	end
+
+	characterName = player and player:GetAttribute("CharacterName")
+
+	if typeof(characterName) == "string" and characterName ~= "" then
+		return characterName
+	end
+
+	return nil
+end
+
+function ProgressionService:IncrementCharacterKill(player, characterName, amount)
+	local profile = self:GetProfile(player)
+	if not profile or typeof(characterName) ~= "string" or characterName == "" then
+		return
+	end
+
+	profile.CharacterKills = profile.CharacterKills or {}
+	profile.CharacterKills[characterName] = math.max(
+		0,
+		math.floor((profile.CharacterKills[characterName] or 0) + (amount or 1))
+	)
+end
+
+function ProgressionService:UnlockEarnedKillTitles(player)
+	local profile = self:GetProfile(player)
+	if not profile then
+		return
+	end
+
+	for titleId, data in pairs(TitleData) do
+		if typeof(data) == "table" and profile.OwnedTitles[titleId] ~= true then
+			if data.UnlockType == "Kills" and (profile.Kills or 0) >= (data.RequiredKills or math.huge) then
+				self:UnlockTitle(player, titleId)
+			elseif data.UnlockType == "CharacterKills" then
+				local characterName = data.CharacterName
+				local characterKills = characterName and profile.CharacterKills and profile.CharacterKills[characterName] or 0
+
+				if characterKills >= (data.RequiredKills or math.huge) then
+					self:UnlockTitle(player, titleId)
+				end
+			end
+		end
+	end
 end
 
 function ProgressionService:IsRespawnDummy(character)
@@ -486,8 +669,11 @@ function ProgressionService:AwardKill(attackerCharacter, targetCharacter)
 	self.KillAwarded[targetCharacter] = true
 
 	local dustReward = self:GetKillRewardForTarget(targetCharacter)
+	local attackerCharacterName = self:GetAttackerCharacterName(attackerPlayer, attackerCharacter)
 
 	self:AddKill(attackerPlayer, 1)
+	self:IncrementCharacterKill(attackerPlayer, attackerCharacterName, 1)
+	self:UnlockEarnedKillTitles(attackerPlayer)
 
 	if dustReward > 0 then
 		self:AddDust(attackerPlayer, dustReward)
@@ -611,6 +797,10 @@ function ProgressionService:EquipSkin(player, characterName, skinName)
 
 	self:SendSnapshot(player)
 
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
 	return true, "Equipped"
 end
 
@@ -647,7 +837,133 @@ function ProgressionService:PurchaseSkin(player, characterName, skinName)
 	self:EnsureLeaderstats(player)
 	self:SendSnapshot(player)
 
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
 	return true, "Purchased"
+end
+
+function ProgressionService:WarnTitleAssetOnce(key, ...)
+	if self.TitleAssetWarnings[key] then
+		return
+	end
+
+	self.TitleAssetWarnings[key] = true
+	warn(...)
+end
+
+function ProgressionService:GetTitlesFolder()
+	local titles = Assets:FindFirstChild("Titles")
+
+	if not titles then
+		self:WarnTitleAssetOnce("MissingTitlesFolder", "[ProgressionService] Missing ReplicatedStorage.Assets.Titles; title visuals skipped.")
+	end
+
+	return titles
+end
+
+function ProgressionService:GetSafeEquippedTitle(player)
+	local profile = self:GetProfile(player)
+
+	if not profile then
+		return NONE_TITLE_ID
+	end
+
+	profile.OwnedTitles = profile.OwnedTitles or {}
+	profile.OwnedTitles[NONE_TITLE_ID] = true
+
+	local titleId = profile.EquippedTitle
+
+	if typeof(titleId) ~= "string" or not TitleData[titleId] or profile.OwnedTitles[titleId] ~= true then
+		titleId = NONE_TITLE_ID
+		profile.EquippedTitle = titleId
+	end
+
+	profile.Equipped = profile.Equipped or {}
+	profile.Equipped.Title = titleId
+
+	return titleId
+end
+
+function ProgressionService:ClearTitleVisuals(character)
+	if not character then
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:GetAttribute("TitleVisual") == true then
+			descendant:Destroy()
+		end
+	end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if child:GetAttribute("TitleVisual") == true then
+			child:Destroy()
+		end
+	end
+
+	local folder = character:FindFirstChild("ActiveTitleVisuals")
+	if folder then
+		folder:Destroy()
+	end
+end
+
+function ProgressionService:ApplyEquippedTitleToCharacter(player, character)
+	if not player or not character or not character.Parent then
+		return
+	end
+
+	self:ClearTitleVisuals(character)
+
+	if player:GetAttribute("Setting_Titles") == false then
+		return
+	end
+
+	local titleId = self:GetSafeEquippedTitle(player)
+	if titleId == NONE_TITLE_ID then
+		return
+	end
+
+	local titlesFolder = self:GetTitlesFolder()
+	if not titlesFolder then
+		return
+	end
+
+	local noneModel = titlesFolder:FindFirstChild(NONE_TITLE_ID)
+	if not noneModel then
+		self:WarnTitleAssetOnce("MissingNoneTitle", "[ProgressionService] Missing ReplicatedStorage.Assets.Titles.None; title visuals skipped.")
+		return
+	end
+
+	local titleModel = titlesFolder:FindFirstChild(titleId)
+	if not titleModel then
+		local profile = self:GetProfile(player)
+		if profile then
+			profile.EquippedTitle = NONE_TITLE_ID
+			profile.Equipped = profile.Equipped or {}
+			profile.Equipped.Title = NONE_TITLE_ID
+		end
+		player:SetAttribute("EquippedTitle", NONE_TITLE_ID)
+		return
+	end
+
+	for _, bodyPartName in ipairs(BODY_PART_NAMES) do
+		local selectedBodyPart = titleModel:FindFirstChild(bodyPartName)
+		local noneBodyPart = noneModel:FindFirstChild(bodyPartName)
+		local characterBodyPart = character:FindFirstChild(bodyPartName)
+
+		if selectedBodyPart and noneBodyPart and characterBodyPart then
+			for _, selectedChild in ipairs(selectedBodyPart:GetChildren()) do
+				if not noneBodyPart:FindFirstChild(selectedChild.Name) then
+					local clone = selectedChild:Clone()
+					clone:SetAttribute("TitleVisual", true)
+					clone:SetAttribute("TitleId", titleId)
+					clone.Parent = characterBodyPart
+				end
+			end
+		end
+	end
 end
 
 function ProgressionService:EquipTitle(player, titleId)
@@ -666,9 +982,11 @@ function ProgressionService:EquipTitle(player, titleId)
 	end
 
 	profile.EquippedTitle = titleId
+	profile.Equipped = profile.Equipped or {}
 	profile.Equipped.Title = titleId
 
 	player:SetAttribute("EquippedTitle", titleId)
+	self:ApplyEquippedTitleToCharacter(player, player.Character)
 
 	self:SendSnapshot(player)
 
@@ -679,6 +997,74 @@ function ProgressionService:EquipTitle(player, titleId)
 	return true, "Equipped"
 end
 
+function ProgressionService:UnlockTitle(player, titleId)
+	local profile = self:GetProfile(player)
+
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	if not TitleData[titleId] then
+		return false, "UnknownTitle"
+	end
+
+	if profile.OwnedTitles[titleId] == true then
+		return true, "AlreadyOwned"
+	end
+
+	profile.OwnedTitles[titleId] = true
+
+	self:SendSnapshot(player)
+
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
+	return true, "Unlocked"
+end
+
+function ProgressionService:SetSetting(player, settingName, enabled)
+	if not ALLOWED_SETTINGS[settingName] then
+		return false, "UnknownSetting"
+	end
+
+	if typeof(enabled) ~= "boolean" then
+		return false, "InvalidValue"
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	profile.Settings = profile.Settings or table.clone(DEFAULT_SETTINGS)
+	profile.Settings[settingName] = enabled
+	player:SetAttribute("Setting_" .. settingName, enabled)
+
+	if settingName == "Titles" then
+		if enabled then
+			self:ApplyEquippedTitleToCharacter(player, player.Character)
+		elseif player.Character then
+			self:ClearTitleVisuals(player.Character)
+		end
+	end
+
+	self:GetSettingsRemote():FireClient(player, {
+		Action = "SettingChanged",
+		Setting = settingName,
+		Value = enabled,
+		Settings = table.clone(profile.Settings),
+	})
+
+	self:SendSnapshot(player)
+
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
+	return true, "Updated"
+end
+
 function ProgressionService:UnlockLore(player, loreId)
 	local profile = self:GetProfile(player)
 
@@ -687,6 +1073,11 @@ function ProgressionService:UnlockLore(player, loreId)
 	end
 
 	profile.Lore[loreId] = true
+
+	if loreId == ROUTE_WITNESS_LORE_ID then
+		self:UnlockTitle(player, "RouteWitness")
+	end
+
 	self:SendSnapshot(player)
 
 	task.defer(function()
@@ -706,14 +1097,16 @@ function ProgressionService:BuildSnapshot(player)
 	return {
 		Dust = profile.Dust or 0,
 		Kills = profile.Kills or 0,
+		CharacterKills = table.clone(profile.CharacterKills or {}),
 
 		OwnedCharacters = table.clone(profile.OwnedCharacters),
 		OwnedTitles = table.clone(profile.OwnedTitles),
 		OwnedSkins = table.clone(profile.OwnedSkins),
 		EquippedSkins = table.clone(profile.EquippedSkins),
 
-		EquippedTitle = profile.EquippedTitle,
+		EquippedTitle = self:GetSafeEquippedTitle(player),
 		Equipped = table.clone(profile.Equipped),
+		Settings = table.clone(profile.Settings or DEFAULT_SETTINGS),
 
 		Lore = table.clone(profile.Lore),
 
@@ -806,9 +1199,32 @@ end
 
 function ProgressionService:Start()
 	local remote = self:GetRemote()
+	local settingsRemote = self:GetSettingsRemote()
 
 	remote.OnServerEvent:Connect(function(player, payload)
 		self:HandleRemote(player, payload)
+	end)
+
+	settingsRemote.OnServerEvent:Connect(function(player, payload)
+		if typeof(payload) ~= "table" then
+			return
+		end
+
+		if payload.Action == "SetSetting"
+			and typeof(payload.Setting) == "string"
+			and typeof(payload.Value) == "boolean"
+		then
+			self:SetSetting(player, payload.Setting, payload.Value)
+		elseif payload.Action == "RequestSettings" then
+			local profile = self:GetProfile(player)
+			if profile then
+				self:SyncPlayerAttributes(player)
+				settingsRemote:FireClient(player, {
+					Action = "SettingsSnapshot",
+					Settings = table.clone(profile.Settings or DEFAULT_SETTINGS),
+				})
+			end
+		end
 	end)
 
 	Players.PlayerAdded:Connect(function(player)
@@ -819,6 +1235,7 @@ function ProgressionService:Start()
 		self:SaveProfile(player)
 		self.Profiles[player] = nil
 		self.ProfileLoaded[player] = nil
+		self.RefusedFallbackSaveWarnings[tostring(player.UserId) .. ":Profile did not safely load from DataStore"] = nil
 	end)
 
 	for _, player in ipairs(Players:GetPlayers()) do

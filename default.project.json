@@ -37,6 +37,10 @@
           "$className": "RemoteEvent"
         },
 
+        "SettingsRemote": {
+          "$className": "RemoteEvent"
+        },
+
         "LoreRemote": {
           "$className": "RemoteEvent"
         },

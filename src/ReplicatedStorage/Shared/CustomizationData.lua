@@ -28,7 +28,7 @@ local CustomizationData = {
 	},
 
 	DefaultEquipped = {
-		Title = "HollowWitness",
+		Title = "None",
 		Morph = nil,
 		Aura = nil,
 		Skin = nil,

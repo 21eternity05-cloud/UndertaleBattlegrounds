@@ -33,7 +33,7 @@ sizeConstraint.Parent = dialogueBox
 
 local boxStroke = Instance.new("UIStroke")
 boxStroke.Color = Color3.fromRGB(245, 245, 245)
-boxStroke.Thickness = 2
+boxStroke.Thickness = 3
 boxStroke.Parent = dialogueBox
 
 local portraitFrame = Instance.new("ViewportFrame")
@@ -54,7 +54,7 @@ portraitStroke.Parent = portraitFrame
 local speakerLabel = Instance.new("TextLabel")
 speakerLabel.Name = "Speaker"
 speakerLabel.BackgroundTransparency = 1
-speakerLabel.Font = Enum.Font.GothamBold
+speakerLabel.Font = Enum.Font.Silkscreen
 speakerLabel.Position = UDim2.fromOffset(154, 18)
 speakerLabel.Size = UDim2.new(1, -188, 0, 24)
 speakerLabel.TextColor3 = Color3.fromRGB(255, 226, 126)
@@ -65,7 +65,7 @@ speakerLabel.Parent = dialogueBox
 local textLabel = Instance.new("TextLabel")
 textLabel.Name = "Text"
 textLabel.BackgroundTransparency = 1
-textLabel.Font = Enum.Font.Gotham
+textLabel.Font = Enum.Font.Silkscreen
 textLabel.Position = UDim2.fromOffset(154, 50)
 textLabel.Size = UDim2.new(1, -188, 0, 82)
 textLabel.TextColor3 = Color3.fromRGB(245, 245, 248)

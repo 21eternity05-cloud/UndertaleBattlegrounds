@@ -24,6 +24,7 @@ local CharacterMorphService = require(combatFolder:WaitForChild("CharacterMorphS
 
 -- Player / progression services
 local ProgressionService = require(combatFolder:WaitForChild("ProgressionService")).new(Config)
+_G.UTBGProgressionService = ProgressionService
 local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(
 	Config,
 	WeaponService,

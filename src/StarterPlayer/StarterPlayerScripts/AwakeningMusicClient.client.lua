@@ -9,6 +9,34 @@ local assets = ReplicatedStorage:WaitForChild("Assets")
 local charactersFolder = assets:WaitForChild("Characters")
 
 local activeMusic = {}
+local musicEnabled = Players.LocalPlayer:GetAttribute("Setting_Music") ~= false
+
+local function getEffectiveMusicVolume(baseVolume)
+	if musicEnabled then
+		return baseVolume or 0.55
+	end
+
+	return 0
+end
+
+local function applyMusicSetting()
+	musicEnabled = Players.LocalPlayer:GetAttribute("Setting_Music") ~= false
+
+	for _, active in pairs(activeMusic) do
+		local sound = active.Sound
+		if active.Tween then
+			active.Tween:Cancel()
+			active.Tween = nil
+		end
+
+		if sound and sound.Parent then
+			sound.Volume = getEffectiveMusicVolume(active.BaseVolume)
+		end
+	end
+end
+
+Players.LocalPlayer:GetAttributeChangedSignal("Setting_Music"):Connect(applyMusicSetting)
+applyMusicSetting()
 
 local function getSourceSound(characterName, soundName)
 	local characterFolder = charactersFolder:FindFirstChild(characterName)
@@ -86,6 +114,7 @@ local function startPlayerMusic(payload)
 	end
 
 	local sound = sourceSound:Clone()
+	local baseVolume = payload.Volume or sourceSound.Volume or 0.55
 	sound.Name = "LocalAwakeningMusic"
 	sound.Looped = true
 	sound.Volume = 0
@@ -99,13 +128,14 @@ local function startPlayerMusic(payload)
 	local tween = TweenService:Create(
 		sound,
 		TweenInfo.new(payload.FadeInTime or 1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Volume = payload.Volume or sourceSound.Volume or 0.55 }
+		{ Volume = getEffectiveMusicVolume(baseVolume) }
 	)
 
 	activeMusic[player] = {
 		Sound = sound,
 		Tween = tween,
 		Character = character,
+		BaseVolume = baseVolume,
 	}
 
 	tween:Play()
