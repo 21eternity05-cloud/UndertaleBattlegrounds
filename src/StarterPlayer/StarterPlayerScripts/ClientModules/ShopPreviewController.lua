@@ -46,9 +46,12 @@ local function applySimpleCharacterCollision(character)
 
 	for _, descendant in ipairs(character:GetDescendants()) do
 		if descendant:IsA("BasePart") then
-			descendant.CanCollide = COLLIDABLE_PARTS[descendant.Name] == true
+			local canCollide = COLLIDABLE_PARTS[descendant.Name] == true
+			descendant.CanCollide = canCollide
+			descendant.CanTouch = false
+			descendant.CanQuery = canCollide
 
-			if descendant.CanCollide == false then
+			if not canCollide then
 				descendant.Massless = true
 			end
 		end
@@ -63,6 +66,10 @@ function ShopPreviewController.new(player, replicatedStorage)
 	self.ShopLocationRemote = nil
 	self.ActivePreviewModel = nil
 	self.ActivePreviewIdleTrack = nil
+	self.ActivePreviewEmoteTrack = nil
+	self.ActivePreviewEmoteConnection = nil
+	self.ActivePreviewEmoteSounds = {}
+	self.ActivePreviewMarkerConnections = {}
 	self.OldCameraType = nil
 	self.OldCameraSubject = nil
 	self.OldCameraCFrame = nil
@@ -100,6 +107,48 @@ function ShopPreviewController:GetIdleAnimation(characterName)
 
 	if idleAnimation and idleAnimation:IsA("Animation") then
 		return idleAnimation
+	end
+
+	return nil
+end
+
+function ShopPreviewController:GetEmoteData()
+	local shared = self.ReplicatedStorage:FindFirstChild("Shared")
+	local emoteModule = shared and shared:FindFirstChild("EmoteData")
+
+	if not emoteModule or not emoteModule:IsA("ModuleScript") then
+		return nil
+	end
+
+	local success, result = pcall(require, emoteModule)
+	if success and typeof(result) == "table" then
+		return result
+	end
+
+	return nil
+end
+
+function ShopPreviewController:GetEmoteAnimation(animationName)
+	local assets = self.ReplicatedStorage:FindFirstChild("Assets")
+	local emotes = assets and assets:FindFirstChild("Emotes")
+	local animations = emotes and emotes:FindFirstChild("Animations")
+	local animation = animations and animations:FindFirstChild(animationName)
+
+	if animation and animation:IsA("Animation") then
+		return animation
+	end
+
+	return nil
+end
+
+function ShopPreviewController:GetEmoteSound(soundName)
+	local assets = self.ReplicatedStorage:FindFirstChild("Assets")
+	local emotes = assets and assets:FindFirstChild("Emotes")
+	local sounds = emotes and emotes:FindFirstChild("Sounds")
+	local sound = sounds and sounds:FindFirstChild(soundName)
+
+	if sound and sound:IsA("Sound") then
+		return sound
 	end
 
 	return nil
@@ -571,11 +620,13 @@ function ShopPreviewController:ApplyTitleVisualsToModel(model, titleId, force)
 
 	if self.Player:GetAttribute("Setting_Titles") == false then
 		self:ClearTitleVisuals(model)
+		self:ApplyPreviewCollisionRules(model)
 		return
 	end
 
 	if typeof(titleId) ~= "string" or titleId == "" or titleId == NONE_TITLE_ID then
 		self:ClearTitleVisuals(model)
+		self:ApplyPreviewCollisionRules(model)
 		return
 	end
 
@@ -589,6 +640,7 @@ function ShopPreviewController:ApplyTitleVisualsToModel(model, titleId, force)
 
 	if not titlesFolder or not noneModel or not titleModel then
 		self:ClearTitleVisuals(model)
+		self:ApplyPreviewCollisionRules(model)
 		return
 	end
 
@@ -626,6 +678,8 @@ function ShopPreviewController:ApplyTitleToActivePreview(force)
 end
 
 function ShopPreviewController:DestroyActivePreview()
+	self:StopPreviewEmote()
+
 	if self.ActivePreviewIdleTrack then
 		pcall(function()
 			self.ActivePreviewIdleTrack:Stop(0)
@@ -649,7 +703,84 @@ function ShopPreviewController:DestroyActivePreview()
 	end
 end
 
+function ShopPreviewController:StopPreviewEmote()
+	if self.ActivePreviewEmoteConnection then
+		self.ActivePreviewEmoteConnection:Disconnect()
+		self.ActivePreviewEmoteConnection = nil
+	end
+
+	for _, connection in ipairs(self.ActivePreviewMarkerConnections or {}) do
+		connection:Disconnect()
+	end
+	table.clear(self.ActivePreviewMarkerConnections)
+
+	if self.ActivePreviewEmoteTrack then
+		pcall(function()
+			self.ActivePreviewEmoteTrack:Stop(0.12)
+			self.ActivePreviewEmoteTrack:Destroy()
+		end)
+
+		self.ActivePreviewEmoteTrack = nil
+	end
+
+	for _, sound in ipairs(self.ActivePreviewEmoteSounds or {}) do
+		if sound and sound.Parent then
+			sound:Stop()
+			sound:Destroy()
+		end
+	end
+	table.clear(self.ActivePreviewEmoteSounds)
+end
+
+function ShopPreviewController:PlayPreviewEmoteSound(soundName, looped)
+	local template = self:GetEmoteSound(soundName)
+	if not template then
+		warn("[ShopPreviewController] Missing preview emote sound:", tostring(soundName))
+		return nil
+	end
+
+	local model = self.ActivePreviewModel
+	local root = model and model:FindFirstChild("HumanoidRootPart", true)
+	local parent = root or model
+	if not parent then
+		return nil
+	end
+
+	local sound = template:Clone()
+	sound.Looped = looped == true
+	sound.Parent = parent
+	sound:Play()
+	table.insert(self.ActivePreviewEmoteSounds, sound)
+
+	return sound
+end
+
+function ShopPreviewController:ConnectPreviewMarkerSounds(data, track)
+	if typeof(data.MarkerSounds) ~= "table" then
+		return
+	end
+
+	for markerName, soundName in pairs(data.MarkerSounds) do
+		if typeof(markerName) == "string" and typeof(soundName) == "string" then
+			table.insert(self.ActivePreviewMarkerConnections, track:GetMarkerReachedSignal(markerName):Connect(function()
+				self:PlayPreviewEmoteSound(soundName, false)
+			end))
+		end
+	end
+end
+
 function ShopPreviewController:PlayPreviewIdle(characterName, model)
+	self:StopPreviewEmote()
+
+	if self.ActivePreviewIdleTrack then
+		pcall(function()
+			self.ActivePreviewIdleTrack:Stop(0)
+			self.ActivePreviewIdleTrack:Destroy()
+		end)
+
+		self.ActivePreviewIdleTrack = nil
+	end
+
 	local idleAnimation = self:GetIdleAnimation(characterName)
 	if not idleAnimation then
 		warn("[ShopPreviewController] No preview Idle animation for", characterName)
@@ -683,6 +814,87 @@ function ShopPreviewController:PlayPreviewIdle(characterName, model)
 	track.Priority = Enum.AnimationPriority.Idle
 	track:Play(0.15)
 	self.ActivePreviewIdleTrack = track
+end
+
+function ShopPreviewController:PreviewEmote(emoteId)
+	self:StopPreviewEmote()
+
+	local model = self.ActivePreviewModel
+	local humanoid = model and model:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+	self:ApplyPreviewCollisionRules(model)
+
+	local emoteData = self:GetEmoteData()
+	local data = emoteData and emoteData[emoteId]
+	if typeof(data) ~= "table" then
+		return false
+	end
+
+	local animation = self:GetEmoteAnimation(data.AnimationName)
+	if not animation then
+		warn("[ShopPreviewController] Missing preview emote animation:", tostring(data.AnimationName))
+		return false
+	end
+
+	if self.ActivePreviewIdleTrack then
+		pcall(function()
+			self.ActivePreviewIdleTrack:Stop(0.12)
+			self.ActivePreviewIdleTrack:Destroy()
+		end)
+
+		self.ActivePreviewIdleTrack = nil
+	end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+
+	local success, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+
+	if not success or not track then
+		warn("[ShopPreviewController] Failed to play preview emote:", tostring(emoteId))
+		return false
+	end
+
+	track.Looped = data.Looped == true
+	track.Name = "PreviewEmote"
+	track.Priority = Enum.AnimationPriority.Action
+	self.ActivePreviewEmoteTrack = track
+	self:ConnectPreviewMarkerSounds(data, track)
+
+	if data.MusicName then
+		self:PlayPreviewEmoteSound(data.MusicName, true)
+	end
+
+	if data.SoundName then
+		self:PlayPreviewEmoteSound(data.SoundName, false)
+	end
+
+	if data.Looped ~= true then
+		self.ActivePreviewEmoteConnection = track.Stopped:Connect(function()
+			if self.ActivePreviewEmoteTrack == track then
+				self.ActivePreviewEmoteTrack = nil
+				if self.ActivePreviewEmoteConnection then
+					self.ActivePreviewEmoteConnection:Disconnect()
+					self.ActivePreviewEmoteConnection = nil
+				end
+				pcall(function()
+					track:Destroy()
+				end)
+				self:PlayPreviewIdle(self.LastCharacterName, model)
+			end
+		end)
+	end
+
+	track:Play(0.12)
+	self:ApplyPreviewCollisionRules(model)
+	return true
 end
 
 function ShopPreviewController:SetupPreviewModel(characterName, skinName)
@@ -731,6 +943,7 @@ function ShopPreviewController:SetupPreviewModel(characterName, skinName)
 		fallback.Parent = previewFolder
 		self.ActivePreviewModel = fallback
 		self:ApplyTitleToActivePreview(true)
+		self:ApplyPreviewCollisionRules(fallback)
 	end
 end
 

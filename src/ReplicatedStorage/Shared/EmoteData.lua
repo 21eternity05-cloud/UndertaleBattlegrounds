@@ -1,7 +1,12 @@
 return {
 	DefaultDance = {
 		DisplayName = "Default Dance",
+		Description = "The reliable first move on every battle stage.",
 		AnimationName = "DefaultDance",
+		Cost = 0,
+		Starter = true,
+		Free = true,
+		Order = 1,
 		Looped = true,
 		CanMove = false,
 		CancelOnMove = true,
@@ -12,7 +17,10 @@ return {
 
 	TPose = {
 		DisplayName = "T-Pose",
+		Description = "Stand perfectly still and let the pressure do the talking.",
 		AnimationName = "TPose",
+		Cost = 75,
+		Order = 2,
 		Looped = true,
 		CanMove = false,
 		CancelOnMove = true,
@@ -22,7 +30,10 @@ return {
 
 	Headless = {
 		DisplayName = "Headless",
+		Description = "A spooky pose for players who like a dramatic entrance.",
 		AnimationName = "Headless",
+		Cost = 125,
+		Order = 3,
 		Looped = true,
 		CanMove = false,
 		CancelOnMove = true,
@@ -33,7 +44,10 @@ return {
 
 	Spin = {
 		DisplayName = "Spin",
+		Description = "Keep moving while showing off a clean rotating step.",
 		AnimationName = "Spin",
+		Cost = 150,
+		Order = 4,
 		Looped = true,
 		CanMove = true,
 		CancelOnMove = false,
@@ -43,7 +57,10 @@ return {
 
 	LoudLaugh = {
 		DisplayName = "Loud Laugh",
+		Description = "A short laugh with maximum confidence.",
 		AnimationName = "LoudLaugh",
+		Cost = 200,
+		Order = 5,
 		Looped = false,
 		CanMove = false,
 		CancelOnMove = true,
@@ -55,7 +72,10 @@ return {
 
 	CleanGroove = {
 		DisplayName = "Clean Groove",
+		Description = "A stylish looping groove with its own beat.",
 		AnimationName = "CleanGroove",
+		Cost = 275,
+		Order = 6,
 		Looped = true,
 		CanMove = false,
 		CancelOnMove = true,

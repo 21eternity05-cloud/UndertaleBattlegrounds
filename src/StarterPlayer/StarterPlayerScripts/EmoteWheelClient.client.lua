@@ -7,19 +7,12 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local emoteRemote = remotes:WaitForChild("EmoteRemote")
+local progressionRemote = remotes:WaitForChild("ProgressionRemote")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EmoteData = require(Shared:WaitForChild("EmoteData"))
 
-local EMOTE_ORDER = {
-	"DefaultDance",
-	"TPose",
-	"Headless",
-	"Spin",
-	"LoudLaugh",
-	"CleanGroove",
-}
-
+local MAX_SLOTS = 8
 local WHEEL_KEY = Enum.KeyCode.R
 local MOVE_KEYS = {
 	[Enum.KeyCode.W] = true,
@@ -31,6 +24,9 @@ local MOVE_KEYS = {
 local gui = nil
 local wheel = nil
 local buttons = {}
+local equippedEmotes = {}
+local centerTitle = nil
+local selectedSlot = 1
 local selectedEmoteId = nil
 local wheelOpen = false
 
@@ -67,24 +63,56 @@ local function requestPlay(emoteId)
 	})
 end
 
-local function highlightSelection(emoteId)
-	selectedEmoteId = emoteId
+local function getEquippedEmote(slot)
+	local emoteId = equippedEmotes[slot] or equippedEmotes[tostring(slot)]
+	if typeof(emoteId) == "string" and EmoteData[emoteId] then
+		return emoteId
+	end
 
-	for id, button in pairs(buttons) do
+	return nil
+end
+
+local function highlightSelection(slot)
+	selectedSlot = slot
+	selectedEmoteId = getEquippedEmote(slot)
+
+	for index, button in pairs(buttons) do
 		local stroke = button:FindFirstChildOfClass("UIStroke")
 		if stroke then
-			stroke.Color = id == emoteId and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(90, 90, 105)
-			stroke.Thickness = id == emoteId and 2 or 1
+			stroke.Color = index == slot and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(90, 90, 105)
+			stroke.Thickness = index == slot and 2 or 1
 		end
 
-		button.BackgroundColor3 = id == emoteId
+		button.BackgroundColor3 = index == slot
 			and Color3.fromRGB(58, 58, 70)
 			or Color3.fromRGB(28, 28, 34)
 	end
+
+	if centerTitle then
+		local data = selectedEmoteId and EmoteData[selectedEmoteId]
+		centerTitle.Text = data and (data.DisplayName or selectedEmoteId) or "Empty"
+	end
+end
+
+local function refreshWheel()
+	for slot = 1, MAX_SLOTS do
+		local button = buttons[slot]
+		if button then
+			local emoteId = getEquippedEmote(slot)
+			local data = emoteId and EmoteData[emoteId]
+
+			button.Name = "Slot" .. tostring(slot)
+			button.Text = data and (tostring(slot) .. "\n" .. (data.DisplayName or emoteId)) or (tostring(slot) .. "\nEmpty")
+			button.TextColor3 = data and Color3.fromRGB(245, 245, 245) or Color3.fromRGB(145, 145, 158)
+		end
+	end
+
+	highlightSelection(selectedSlot)
 end
 
 local function createWheel()
 	if gui then
+		refreshWheel()
 		return
 	end
 
@@ -122,26 +150,25 @@ local function createWheel()
 	centerStroke.Thickness = 1
 	centerStroke.Parent = center
 
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.BackgroundTransparency = 1
-	title.Size = UDim2.fromScale(1, 1)
-	title.Font = Enum.Font.GothamBold
-	title.TextSize = 15
-	title.TextColor3 = Color3.fromRGB(245, 245, 245)
-	title.TextWrapped = true
-	title.Text = "Emotes"
-	title.Parent = center
+	centerTitle = Instance.new("TextLabel")
+	centerTitle.Name = "Title"
+	centerTitle.BackgroundTransparency = 1
+	centerTitle.Size = UDim2.fromScale(1, 1)
+	centerTitle.Font = Enum.Font.GothamBold
+	centerTitle.TextSize = 15
+	centerTitle.TextColor3 = Color3.fromRGB(245, 245, 245)
+	centerTitle.TextWrapped = true
+	centerTitle.Text = "Emotes"
+	centerTitle.Parent = center
 
 	local radius = 128
-	for index, emoteId in ipairs(EMOTE_ORDER) do
-		local data = EmoteData[emoteId] or {}
-		local angle = ((index - 1) / #EMOTE_ORDER) * math.pi * 2 - (math.pi / 2)
+	for index = 1, MAX_SLOTS do
+		local angle = ((index - 1) / MAX_SLOTS) * math.pi * 2 - (math.pi / 2)
 		local x = math.cos(angle) * radius
 		local y = math.sin(angle) * radius
 
 		local button = Instance.new("TextButton")
-		button.Name = emoteId
+		button.Name = "Slot" .. tostring(index)
 		button.AnchorPoint = Vector2.new(0.5, 0.5)
 		button.Position = UDim2.new(0.5, x, 0.5, y)
 		button.Size = UDim2.fromOffset(112, 54)
@@ -152,7 +179,7 @@ local function createWheel()
 		button.TextSize = 13
 		button.TextWrapped = true
 		button.TextColor3 = Color3.fromRGB(245, 245, 245)
-		button.Text = data.DisplayName or emoteId
+		button.Text = tostring(index) .. "\nEmpty"
 		button.Parent = wheel
 
 		local corner = Instance.new("UICorner")
@@ -165,18 +192,22 @@ local function createWheel()
 		stroke.Parent = button
 
 		button.MouseEnter:Connect(function()
-			highlightSelection(emoteId)
+			highlightSelection(index)
 		end)
 
 		button.MouseButton1Click:Connect(function()
-			highlightSelection(emoteId)
-			requestPlay(emoteId)
+			highlightSelection(index)
+			if selectedEmoteId then
+				requestPlay(selectedEmoteId)
+			end
 			gui.Enabled = false
 			wheelOpen = false
 		end)
 
-		buttons[emoteId] = button
+		buttons[index] = button
 	end
+
+	refreshWheel()
 end
 
 local function selectFromMouse()
@@ -197,10 +228,10 @@ local function selectFromMouse()
 		angle += math.pi * 2
 	end
 
-	local index = math.floor((angle / (math.pi * 2)) * #EMOTE_ORDER + 0.5) + 1
-	index = ((index - 1) % #EMOTE_ORDER) + 1
+	local index = math.floor((angle / (math.pi * 2)) * MAX_SLOTS + 0.5) + 1
+	index = ((index - 1) % MAX_SLOTS) + 1
 
-	highlightSelection(EMOTE_ORDER[index])
+	highlightSelection(index)
 end
 
 local function openWheel()
@@ -215,8 +246,7 @@ local function openWheel()
 		return
 	end
 
-	selectedEmoteId = selectedEmoteId or EMOTE_ORDER[1]
-	highlightSelection(selectedEmoteId)
+	highlightSelection(selectedSlot or 1)
 	gui.Enabled = true
 	wheelOpen = true
 	selectFromMouse()
@@ -234,6 +264,20 @@ local function closeWheel(playSelection)
 		requestPlay(selectedEmoteId)
 	end
 end
+
+progressionRemote.OnClientEvent:Connect(function(payload)
+	if typeof(payload) ~= "table" then
+		return
+	end
+
+	local snapshot = payload.Profile
+	if typeof(snapshot) ~= "table" then
+		return
+	end
+
+	equippedEmotes = typeof(snapshot.EquippedEmotes) == "table" and snapshot.EquippedEmotes or {}
+	refreshWheel()
+end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
@@ -274,3 +318,7 @@ player.CharacterAdded:Connect(function()
 end)
 
 createWheel()
+
+progressionRemote:FireServer({
+	Action = "RequestSnapshot",
+})

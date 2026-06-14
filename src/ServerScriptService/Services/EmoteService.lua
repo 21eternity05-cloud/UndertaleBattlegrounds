@@ -311,6 +311,11 @@ function EmoteService:PlayEmote(player, emoteId)
 		return false
 	end
 
+	local progressionService = _G.UTBGProgressionService
+	if progressionService and progressionService.IsEmoteOwned and not progressionService:IsEmoteOwned(player, emoteId) then
+		return false
+	end
+
 	local character, humanoid, root = self:GetCharacterInfo(player)
 	if not character then
 		return false

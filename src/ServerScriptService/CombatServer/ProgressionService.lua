@@ -1,16 +1,21 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CharacterData = require(Shared:WaitForChild("CharacterData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
 local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
+local EmoteData = require(Shared:WaitForChild("EmoteData"))
+local DevProductData = require(Shared:WaitForChild("DevProductData"))
 local Assets = ReplicatedStorage:WaitForChild("Assets")
 local CharactersFolder = Assets:WaitForChild("Characters")
 
 local NONE_TITLE_ID = "None"
 local ROUTE_WITNESS_LORE_ID = "HollowSnowdin_001"
+local STARTER_EMOTE_ID = "DefaultDance"
+local MAX_EMOTE_SLOTS = 8
 local BODY_PART_NAMES = {
 	"HumanoidRootPart",
 	"Head",
@@ -263,6 +268,8 @@ function ProgressionService:MakeDefaultProfile()
 	return {
 		Dust = self.Config.StartingDust or 0,
 		Kills = 0,
+		DonatedRobux = 0,
+		ProcessedProductReceipts = {},
 		CharacterKills = {
 			Chara = 0,
 			Sans = 0,
@@ -272,6 +279,12 @@ function ProgressionService:MakeDefaultProfile()
 		OwnedTitles = ownedTitles,
 		OwnedSkins = ownedSkins,
 		EquippedSkins = equippedSkins,
+		OwnedEmotes = {
+			[STARTER_EMOTE_ID] = true,
+		},
+		EquippedEmotes = {
+			[1] = STARTER_EMOTE_ID,
+		},
 
 		EquippedTitle = NONE_TITLE_ID,
 		Equipped = table.clone(CustomizationData.DefaultEquipped),
@@ -281,15 +294,81 @@ function ProgressionService:MakeDefaultProfile()
 	}
 end
 
+function ProgressionService:SanitizeDonations(profile)
+	if typeof(profile) ~= "table" then
+		return
+	end
+
+	profile.DonatedRobux = math.max(0, math.floor(tonumber(profile.DonatedRobux) or 0))
+
+	if typeof(profile.ProcessedProductReceipts) ~= "table" then
+		profile.ProcessedProductReceipts = {}
+	end
+
+	for purchaseId, processed in pairs(profile.ProcessedProductReceipts) do
+		if typeof(purchaseId) ~= "string" or processed ~= true then
+			profile.ProcessedProductReceipts[purchaseId] = nil
+		end
+	end
+end
+
+function ProgressionService:SanitizeEmotes(profile, hadEquippedEmoteData)
+	if typeof(profile) ~= "table" then
+		return
+	end
+
+	if typeof(profile.OwnedEmotes) ~= "table" then
+		profile.OwnedEmotes = {}
+	end
+
+	profile.OwnedEmotes[STARTER_EMOTE_ID] = true
+
+	for emoteId, owned in pairs(profile.OwnedEmotes) do
+		if owned ~= true or typeof(emoteId) ~= "string" or not EmoteData[emoteId] then
+			profile.OwnedEmotes[emoteId] = nil
+		end
+	end
+
+	local equippedEmotes = {}
+
+	if typeof(profile.EquippedEmotes) == "table" then
+		for slot, emoteId in pairs(profile.EquippedEmotes) do
+			local numericSlot = tonumber(slot)
+			if numericSlot then
+				numericSlot = math.floor(numericSlot)
+			end
+
+			if numericSlot
+				and numericSlot >= 1
+				and numericSlot <= MAX_EMOTE_SLOTS
+				and typeof(emoteId) == "string"
+				and EmoteData[emoteId]
+				and profile.OwnedEmotes[emoteId] == true
+			then
+				equippedEmotes[numericSlot] = emoteId
+			end
+		end
+	end
+
+	if hadEquippedEmoteData ~= true and not next(equippedEmotes) then
+		equippedEmotes[1] = STARTER_EMOTE_ID
+	end
+
+	profile.EquippedEmotes = equippedEmotes
+end
+
 function ProgressionService:MergeProfile(savedProfile)
 	local defaultProfile = self:MakeDefaultProfile()
 
 	if typeof(savedProfile) ~= "table" then
+		self:SanitizeDonations(defaultProfile)
+		self:SanitizeEmotes(defaultProfile, false)
 		return defaultProfile
 	end
 
 	defaultProfile.Dust = tonumber(savedProfile.Dust) or defaultProfile.Dust
 	defaultProfile.Kills = tonumber(savedProfile.Kills) or defaultProfile.Kills
+	defaultProfile.DonatedRobux = tonumber(savedProfile.DonatedRobux) or defaultProfile.DonatedRobux
 	defaultProfile.OwnedTitles[NONE_TITLE_ID] = true
 
 	if typeof(savedProfile.CharacterKills) == "table" then
@@ -346,6 +425,20 @@ function ProgressionService:MergeProfile(savedProfile)
 		end
 	end
 
+	if typeof(savedProfile.OwnedEmotes) == "table" then
+		defaultProfile.OwnedEmotes = {}
+		for emoteId, owned in pairs(savedProfile.OwnedEmotes) do
+			if owned == true then
+				defaultProfile.OwnedEmotes[emoteId] = true
+			end
+		end
+	end
+
+	local hadEquippedEmoteData = typeof(savedProfile.EquippedEmotes) == "table"
+	if hadEquippedEmoteData then
+		defaultProfile.EquippedEmotes = table.clone(savedProfile.EquippedEmotes)
+	end
+
 	if typeof(savedProfile.EquippedTitle) == "string" then
 		defaultProfile.EquippedTitle = savedProfile.EquippedTitle
 	end
@@ -370,6 +463,17 @@ function ProgressionService:MergeProfile(savedProfile)
 		end
 	end
 
+	if typeof(savedProfile.ProcessedProductReceipts) == "table" then
+		for purchaseId, processed in pairs(savedProfile.ProcessedProductReceipts) do
+			if processed == true then
+				defaultProfile.ProcessedProductReceipts[purchaseId] = true
+			end
+		end
+	end
+
+	self:SanitizeDonations(defaultProfile)
+	self:SanitizeEmotes(defaultProfile, hadEquippedEmoteData)
+
 	return defaultProfile
 end
 
@@ -377,12 +481,16 @@ function ProgressionService:GetSavePayload(profile)
 	return {
 		Dust = profile.Dust or 0,
 		Kills = profile.Kills or 0,
+		DonatedRobux = profile.DonatedRobux or 0,
+		ProcessedProductReceipts = profile.ProcessedProductReceipts or {},
 		CharacterKills = profile.CharacterKills or {},
 
 		OwnedCharacters = profile.OwnedCharacters or {},
 		OwnedTitles = profile.OwnedTitles or {},
 		OwnedSkins = profile.OwnedSkins or {},
 		EquippedSkins = profile.EquippedSkins or {},
+		OwnedEmotes = profile.OwnedEmotes or {},
+		EquippedEmotes = profile.EquippedEmotes or {},
 
 		EquippedTitle = profile.EquippedTitle,
 		Equipped = profile.Equipped or {},
@@ -865,6 +973,121 @@ function ProgressionService:PurchaseSkin(player, characterName, skinName)
 	return true, "Purchased"
 end
 
+function ProgressionService:IsEmoteOwned(player, emoteId)
+	local data = EmoteData[emoteId]
+	if not data then
+		return false
+	end
+
+	if data.Starter == true or data.Free == true or (data.Cost or 0) <= 0 then
+		return true
+	end
+
+	local profile = self:GetProfile(player)
+
+	return profile and profile.OwnedEmotes and profile.OwnedEmotes[emoteId] == true
+end
+
+function ProgressionService:PurchaseEmote(player, emoteId)
+	local data = EmoteData[emoteId]
+
+	if not data then
+		return false, "UnknownEmote"
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	self:SanitizeEmotes(profile, typeof(profile.EquippedEmotes) == "table")
+
+	if self:IsEmoteOwned(player, emoteId) then
+		return true, "AlreadyOwned"
+	end
+
+	local cost = math.max(0, math.floor(tonumber(data.Cost) or 0))
+	if (profile.Dust or 0) < cost then
+		return false, "NotEnoughDust"
+	end
+
+	profile.Dust -= cost
+	profile.OwnedEmotes[emoteId] = true
+
+	self:SyncPlayerAttributes(player)
+	self:EnsureLeaderstats(player)
+	self:SendSnapshot(player)
+
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
+	return true, "Purchased"
+end
+
+function ProgressionService:EquipEmote(player, emoteId, slot)
+	local numericSlot = math.floor(tonumber(slot) or 0)
+
+	if numericSlot < 1 or numericSlot > MAX_EMOTE_SLOTS then
+		return false, "InvalidSlot"
+	end
+
+	if not EmoteData[emoteId] then
+		return false, "UnknownEmote"
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	self:SanitizeEmotes(profile, typeof(profile.EquippedEmotes) == "table")
+
+	if profile.OwnedEmotes[emoteId] ~= true then
+		return false, "LockedEmote"
+	end
+
+	for equippedSlot, equippedEmoteId in pairs(profile.EquippedEmotes) do
+		if equippedEmoteId == emoteId and equippedSlot ~= numericSlot then
+			profile.EquippedEmotes[equippedSlot] = nil
+		end
+	end
+
+	profile.EquippedEmotes[numericSlot] = emoteId
+
+	self:SendSnapshot(player)
+
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
+	return true, "Equipped"
+end
+
+function ProgressionService:UnequipEmote(player, slot)
+	local numericSlot = math.floor(tonumber(slot) or 0)
+
+	if numericSlot < 1 or numericSlot > MAX_EMOTE_SLOTS then
+		return false, "InvalidSlot"
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return false, "NoProfile"
+	end
+
+	self:SanitizeEmotes(profile, typeof(profile.EquippedEmotes) == "table")
+	profile.EquippedEmotes[numericSlot] = nil
+
+	self:SendSnapshot(player)
+
+	task.defer(function()
+		self:SaveProfile(player)
+	end)
+
+	return true, "Unequipped"
+end
+
 function ProgressionService:WarnTitleAssetOnce(key, ...)
 	if self.TitleAssetWarnings[key] then
 		return
@@ -1133,6 +1356,68 @@ function ProgressionService:UnlockLore(player, loreId)
 	return true
 end
 
+function ProgressionService:SendDonationResult(player, productKey, product)
+	local profile = self:GetProfile(player)
+	if not profile then
+		return
+	end
+
+	self:GetRemote():FireClient(player, {
+		Action = "DonationProductResult",
+		Success = true,
+		ProductKey = productKey,
+		AmountRobux = product.AmountRobux or 0,
+		TotalDonatedRobux = profile.DonatedRobux or 0,
+		Message = "Thank you for supporting Undertale Battlegrounds!",
+		Profile = self:BuildSnapshot(player),
+	})
+end
+
+function ProgressionService:ProcessProductReceipt(receiptInfo)
+	local productKey, product = DevProductData.GetProductByProductId(receiptInfo.ProductId)
+
+	if not productKey or typeof(product) ~= "table" or product.ProductType ~= "Donation" then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+
+	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
+	if not player or self.ProfileLoaded[player] ~= true then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	local profile = self:GetProfile(player)
+	if not profile then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	self:SanitizeDonations(profile)
+
+	local purchaseId = tostring(receiptInfo.PurchaseId or "")
+	if purchaseId == "" then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	if profile.ProcessedProductReceipts[purchaseId] == true then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+
+	local amountRobux = math.max(0, math.floor(tonumber(product.AmountRobux) or 0))
+	local oldDonatedRobux = profile.DonatedRobux or 0
+	profile.DonatedRobux = oldDonatedRobux + amountRobux
+	profile.ProcessedProductReceipts[purchaseId] = true
+
+	if not self:SaveProfile(player) then
+		profile.DonatedRobux = oldDonatedRobux
+		profile.ProcessedProductReceipts[purchaseId] = nil
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	self:SendSnapshot(player)
+	self:SendDonationResult(player, productKey, product)
+
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+
 function ProgressionService:BuildSnapshot(player)
 	local profile = self:GetProfile(player)
 
@@ -1140,15 +1425,21 @@ function ProgressionService:BuildSnapshot(player)
 		return nil
 	end
 
+	self:SanitizeDonations(profile)
+	self:SanitizeEmotes(profile, typeof(profile.EquippedEmotes) == "table")
+
 	return {
 		Dust = profile.Dust or 0,
 		Kills = profile.Kills or 0,
+		DonatedRobux = profile.DonatedRobux or 0,
 		CharacterKills = table.clone(profile.CharacterKills or {}),
 
 		OwnedCharacters = table.clone(profile.OwnedCharacters),
 		OwnedTitles = table.clone(profile.OwnedTitles),
 		OwnedSkins = table.clone(profile.OwnedSkins),
 		EquippedSkins = table.clone(profile.EquippedSkins),
+		OwnedEmotes = table.clone(profile.OwnedEmotes or {}),
+		EquippedEmotes = table.clone(profile.EquippedEmotes or {}),
 
 		EquippedTitle = self:GetSafeEquippedTitle(player),
 		Equipped = table.clone(profile.Equipped),
@@ -1228,6 +1519,40 @@ function ProgressionService:HandleRemote(player, payload)
 			Reason = reason,
 			Profile = self:BuildSnapshot(player),
 		})
+	elseif payload.Action == "BuyEmote" and typeof(payload.EmoteId) == "string" then
+		local ok, reason = self:PurchaseEmote(player, payload.EmoteId)
+
+		self:GetRemote():FireClient(player, {
+			Action = "BuyEmoteResult",
+			EmoteId = payload.EmoteId,
+			Success = ok,
+			Reason = reason,
+			Profile = self:BuildSnapshot(player),
+		})
+	elseif payload.Action == "EquipEmote"
+		and typeof(payload.EmoteId) == "string"
+		and typeof(payload.Slot) == "number"
+	then
+		local ok, reason = self:EquipEmote(player, payload.EmoteId, payload.Slot)
+
+		self:GetRemote():FireClient(player, {
+			Action = "EquipEmoteResult",
+			EmoteId = payload.EmoteId,
+			Slot = payload.Slot,
+			Success = ok,
+			Reason = reason,
+			Profile = self:BuildSnapshot(player),
+		})
+	elseif payload.Action == "UnequipEmote" and typeof(payload.Slot) == "number" then
+		local ok, reason = self:UnequipEmote(player, payload.Slot)
+
+		self:GetRemote():FireClient(player, {
+			Action = "UnequipEmoteResult",
+			Slot = payload.Slot,
+			Success = ok,
+			Reason = reason,
+			Profile = self:BuildSnapshot(player),
+		})
 	elseif payload.Action == "RequestSnapshot" then
 		self:SendSnapshot(player)
 	end
@@ -1246,6 +1571,10 @@ end
 function ProgressionService:Start()
 	local remote = self:GetRemote()
 	local settingsRemote = self:GetSettingsRemote()
+
+	MarketplaceService.ProcessReceipt = function(receiptInfo)
+		return self:ProcessProductReceipt(receiptInfo)
+	end
 
 	remote.OnServerEvent:Connect(function(player, payload)
 		self:HandleRemote(player, payload)

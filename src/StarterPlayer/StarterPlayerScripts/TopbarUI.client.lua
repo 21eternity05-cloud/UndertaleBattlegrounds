@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -17,6 +18,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CharacterData = require(Shared:WaitForChild("CharacterData"))
 local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
+local EmoteData = require(Shared:WaitForChild("EmoteData"))
+local DevProductData = require(Shared:WaitForChild("DevProductData"))
 
 local ClientModules = script.Parent:WaitForChild("ClientModules")
 local ShopPreviewController = require(ClientModules:WaitForChild("ShopPreviewController"))
@@ -33,6 +36,13 @@ local selectedCharacter = "Chara"
 local selectedCustomizeCharacter = "Chara"
 local selectedCustomizeSkin = "Default"
 local selectedCustomizeCategory = "Characters"
+local selectedCustomizeEmote = "DefaultDance"
+local selectedEmoteSlot = 1
+local emoteStatusMessage = ""
+local shopStatusMessage = ""
+local shopExpandedSections = {
+	Support = true,
+}
 local morphEnabled = false
 local pendingPurchaseCharacter = nil
 local pendingPurchaseSkin = nil
@@ -366,6 +376,84 @@ local function getSortedTitles()
 	return titles
 end
 
+local getEquippedEmote
+local getEmoteEquippedSlot
+
+local function getSortedEmotes()
+	local emotes = {}
+
+	for emoteId, data in pairs(EmoteData) do
+		if typeof(data) == "table" then
+			table.insert(emotes, emoteId)
+		end
+	end
+
+	table.sort(emotes, function(left, right)
+		local leftData = EmoteData[left] or {}
+		local rightData = EmoteData[right] or {}
+		local leftSlot = getEmoteEquippedSlot(left)
+		local rightSlot = getEmoteEquippedSlot(right)
+
+		if leftSlot and rightSlot then
+			return leftSlot < rightSlot
+		end
+
+		if leftSlot then
+			return true
+		end
+
+		if rightSlot then
+			return false
+		end
+
+		local leftOrder = leftData.Order or math.huge
+		local rightOrder = rightData.Order or math.huge
+
+		if leftOrder == rightOrder then
+			return (leftData.DisplayName or left) < (rightData.DisplayName or right)
+		end
+
+		return leftOrder < rightOrder
+	end)
+
+	return emotes
+end
+
+local function isEmoteOwned(emoteId, emoteData)
+	if emoteData and (emoteData.Starter == true or emoteData.Free == true or (emoteData.Cost or 0) <= 0) then
+		return true
+	end
+
+	return profile and profile.OwnedEmotes and profile.OwnedEmotes[emoteId] == true
+end
+
+getEquippedEmote = function(slot)
+	if not profile or typeof(profile.EquippedEmotes) ~= "table" then
+		return nil
+	end
+
+	local emoteId = profile.EquippedEmotes[slot] or profile.EquippedEmotes[tostring(slot)]
+	if typeof(emoteId) == "string" and EmoteData[emoteId] then
+		return emoteId
+	end
+
+	return nil
+end
+
+getEmoteEquippedSlot = function(emoteId)
+	if not profile or typeof(profile.EquippedEmotes) ~= "table" then
+		return nil
+	end
+
+	for slot = 1, 8 do
+		if getEquippedEmote(slot) == emoteId then
+			return slot
+		end
+	end
+
+	return nil
+end
+
 local function hideCombatUI()
 	for _, child in ipairs(playerGui:GetChildren()) do
 		if child:IsA("ScreenGui") and HIDDEN_GUI_NAMES[child.Name] then
@@ -567,29 +655,231 @@ local function showShop()
 		root,
 		"ShopPanel",
 		UDim2.fromOffset(14, 54),
-		UDim2.fromOffset(430, 300),
+		UDim2.fromOffset(460, 470),
 		0.04
 	)
 
 	makeText(
 		panel,
 		"Title",
-		"Shop",
+		"SHOP",
 		UDim2.fromOffset(16, 14),
 		UDim2.new(1, -32, 0, 28),
 		22,
 		true
 	)
 
-	makeText(
+	local donatedLabel = makeText(
 		panel,
-		"Body",
-		"Future Robux shop placeholder.\n\nThis will be used for Robux purchases later, not normal Dust inventory.\n\nIdeas:\n- Gamepasses\n- Donation products\n- Premium bundles\n- Limited cosmetics",
-		UDim2.fromOffset(16, 58),
-		UDim2.new(1, -32, 0, 210),
-		15,
+		"DonatedTotal",
+		"Total donated: " .. tostring((profile and profile.DonatedRobux) or 0) .. " R$",
+		UDim2.fromOffset(16, 46),
+		UDim2.new(1, -32, 0, 22),
+		14,
+		true,
+		Color3.fromRGB(150, 210, 255)
+	)
+
+	local statusLabel = makeText(
+		panel,
+		"ShopStatus",
+		shopStatusMessage,
+		UDim2.fromOffset(16, 70),
+		UDim2.new(1, -32, 0, 34),
+		13,
 		false
 	)
+	statusLabel.TextColor3 = Color3.fromRGB(235, 210, 175)
+
+	local list = Instance.new("ScrollingFrame")
+	list.Name = "ShopList"
+	list.Position = UDim2.fromOffset(16, 110)
+	list.Size = UDim2.new(1, -32, 1, -126)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 4
+	list.CanvasSize = UDim2.fromOffset(0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = list
+
+	local function setShopStatus(message)
+		shopStatusMessage = message or ""
+		statusLabel.Text = shopStatusMessage
+		donatedLabel.Text = "Total donated: " .. tostring((profile and profile.DonatedRobux) or 0) .. " R$"
+	end
+
+	local function getSortedSections()
+		local sections = table.clone(DevProductData.Sections or {})
+
+		table.sort(sections, function(left, right)
+			local leftOrder = left.Order or math.huge
+			local rightOrder = right.Order or math.huge
+
+			if leftOrder == rightOrder then
+				return (left.DisplayName or left.Id or "") < (right.DisplayName or right.Id or "")
+			end
+
+			return leftOrder < rightOrder
+		end)
+
+		return sections
+	end
+
+	local function clearShopList()
+		for _, child in ipairs(list:GetChildren()) do
+			if child ~= layout then
+				child:Destroy()
+			end
+		end
+	end
+
+	local renderShopSections
+
+	local function addSectionHeader(section)
+		local sectionId = section.Id or section.DisplayName or "Section"
+		local isExpanded = shopExpandedSections[sectionId] == true
+		local arrow = isExpanded and "v" or ">"
+		local button = makeButton(
+			list,
+			sectionId .. "Header",
+			(section.DisplayName or sectionId) .. " " .. arrow,
+			UDim2.fromOffset(0, 0),
+			UDim2.new(1, -6, 0, 36),
+			Color3.fromRGB(34, 34, 44)
+		)
+		button.TextXAlignment = Enum.TextXAlignment.Left
+		button.Text = "  " .. button.Text
+
+		button.MouseButton1Click:Connect(function()
+			shopExpandedSections[sectionId] = not isExpanded
+			renderShopSections()
+		end)
+	end
+
+	local function addComingSoon(section)
+		makeText(
+			list,
+			(section.Id or "Section") .. "ComingSoon",
+			section.ComingSoonText or "Coming soon",
+			UDim2.fromOffset(0, 0),
+			UDim2.new(1, -6, 0, 28),
+			13,
+			false,
+			Color3.fromRGB(170, 170, 182)
+		)
+	end
+
+	local function addProductRow(productKey, product)
+		local row = Instance.new("Frame")
+		row.Name = productKey .. "Row"
+		row.Size = UDim2.new(1, -6, 0, 118)
+		row.BackgroundColor3 = Color3.fromRGB(24, 24, 31)
+		row.BackgroundTransparency = 0.08
+		row.BorderSizePixel = 0
+		row.Parent = list
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 7)
+		corner.Parent = row
+
+		makeText(
+			row,
+			"Name",
+			product.DisplayName or productKey,
+			UDim2.fromOffset(12, 10),
+			UDim2.new(1, -24, 0, 22),
+			16,
+			true
+		)
+
+		makeText(
+			row,
+			"Description",
+			product.Description or "",
+			UDim2.fromOffset(12, 36),
+			UDim2.new(1, -128, 0, 44),
+			13,
+			false,
+			Color3.fromRGB(210, 210, 220)
+		)
+
+		makeText(
+			row,
+			"Price",
+			tostring(product.AmountRobux or 0) .. " R$",
+			UDim2.fromOffset(12, 84),
+			UDim2.fromOffset(90, 22),
+			14,
+			true,
+			Color3.fromRGB(235, 210, 175)
+		)
+
+		local buyButton = makeButton(
+			row,
+			"BuyButton",
+			product.ProductType == "Donation" and "Donate" or "Buy",
+			UDim2.new(1, -104, 0, 76),
+			UDim2.fromOffset(88, 30),
+			Color3.fromRGB(42, 56, 80)
+		)
+
+		buyButton.MouseButton1Click:Connect(function()
+			local productId = tonumber(product.ProductId)
+			if not productId or productId <= 0 then
+				setShopStatus("Product not configured yet.")
+				showBottomRightNotification("Product not configured yet.", 2.5)
+				return
+			end
+
+			setShopStatus("Opening purchase prompt...")
+			MarketplaceService:PromptProductPurchase(player, productId)
+		end)
+	end
+
+	renderShopSections = function()
+		clearShopList()
+
+		for _, section in ipairs(getSortedSections()) do
+			local sectionId = section.Id or section.DisplayName or "Section"
+			if shopExpandedSections[sectionId] == nil then
+				shopExpandedSections[sectionId] = section.OpenByDefault == true
+			end
+
+			addSectionHeader(section)
+
+			if shopExpandedSections[sectionId] then
+				if section.Enabled == false then
+					addComingSoon(section)
+				else
+					local productKeys = table.clone(section.Products or {})
+					table.sort(productKeys, function(left, right)
+						local leftProduct = DevProductData.Products[left] or {}
+						local rightProduct = DevProductData.Products[right] or {}
+
+						return (leftProduct.Order or math.huge) < (rightProduct.Order or math.huge)
+					end)
+
+					if #productKeys == 0 then
+						addComingSoon(section)
+					end
+
+					for _, productKey in ipairs(productKeys) do
+						local product = DevProductData.Products[productKey]
+						if typeof(product) == "table" then
+							addProductRow(productKey, product)
+						end
+					end
+				end
+			end
+		end
+	end
+
+	renderShopSections()
 end
 
 local function showSettings()
@@ -751,6 +1041,10 @@ local function showCustomize()
 		14,
 		false
 	)
+	local normalDescriptionPosition = descriptionLabel.Position
+	local normalDescriptionSize = descriptionLabel.Size
+	local emoteDescriptionPosition = UDim2.fromOffset(16, 68)
+	local emoteDescriptionSize = UDim2.new(1, -360, 0, 52)
 
 	local playAsButton = makeButton(
 		bottomPanel,
@@ -802,6 +1096,63 @@ local function showCustomize()
 	confirmButton.Visible = false
 	cancelButton.Visible = false
 
+	local emoteSlotButtons = {}
+	for slot = 1, 8 do
+		local column = (slot - 1) % 4
+		local row = math.floor((slot - 1) / 4)
+		local slotButton = makeButton(
+			bottomPanel,
+			"EmoteSlot" .. tostring(slot),
+			tostring(slot),
+			UDim2.new(1, -336 + column * 34, 0, 54 + row * 34),
+			UDim2.fromOffset(28, 28),
+			Color3.fromRGB(42, 42, 50)
+		)
+		slotButton.TextSize = 13
+		slotButton.Visible = false
+		emoteSlotButtons[slot] = slotButton
+	end
+
+	local emoteBuyButton = makeButton(
+		bottomPanel,
+		"EmoteBuyButton",
+		"Buy",
+		UDim2.new(1, -190, 0, 16),
+		UDim2.fromOffset(82, 30),
+		Color3.fromRGB(90, 50, 36)
+	)
+	emoteBuyButton.Visible = false
+
+	local emoteEquipButton = makeButton(
+		bottomPanel,
+		"EmoteEquipButton",
+		"Equip",
+		UDim2.new(1, -98, 0, 16),
+		UDim2.fromOffset(82, 30),
+		Color3.fromRGB(42, 56, 80)
+	)
+	emoteEquipButton.Visible = false
+
+	local emoteClearButton = makeButton(
+		bottomPanel,
+		"EmoteClearButton",
+		"Clear Slot",
+		UDim2.new(1, -190, 0, 54),
+		UDim2.fromOffset(174, 30),
+		Color3.fromRGB(62, 45, 45)
+	)
+	emoteClearButton.Visible = false
+
+	local emotePreviewButton = makeButton(
+		bottomPanel,
+		"EmotePreviewButton",
+		"Preview",
+		UDim2.new(1, -190, 0, 92),
+		UDim2.fromOffset(174, 30),
+		Color3.fromRGB(42, 42, 50)
+	)
+	emotePreviewButton.Visible = false
+
 	local itemList = Instance.new("ScrollingFrame")
 	itemList.Name = "ItemList"
 	itemList.Position = UDim2.fromOffset(14, 54)
@@ -826,7 +1177,80 @@ local function showCustomize()
 		end
 	end
 
+	local function setEmoteControlsVisible(visible)
+		playAsButton.Visible = not visible
+		morphButton.Visible = not visible
+		emoteBuyButton.Visible = visible
+		emoteEquipButton.Visible = visible
+		emoteClearButton.Visible = visible
+		emotePreviewButton.Visible = visible
+		descriptionLabel.Position = visible and emoteDescriptionPosition or normalDescriptionPosition
+		descriptionLabel.Size = visible and emoteDescriptionSize or normalDescriptionSize
+
+		if not visible then
+			shopPreviewController:StopPreviewEmote()
+			if shopPreviewController.ActivePreviewModel and shopPreviewController.LastCharacterName then
+				shopPreviewController:PlayPreviewIdle(
+					shopPreviewController.LastCharacterName,
+					shopPreviewController.ActivePreviewModel
+				)
+			end
+		end
+
+		for _, slotButton in pairs(emoteSlotButtons) do
+			slotButton.Visible = visible
+		end
+	end
+
+	local function refreshEmoteBottom()
+		local emoteId = selectedCustomizeEmote
+		local data = emoteId and EmoteData[emoteId]
+		local owned = data and isEmoteOwned(emoteId, data)
+		local equippedSlot = emoteId and getEmoteEquippedSlot(emoteId)
+		local selectedSlotEmote = getEquippedEmote(selectedEmoteSlot)
+
+		if data then
+			characterNameLabel.Text = data.DisplayName or emoteId
+			roleLabel.Text = emoteStatusMessage ~= "" and emoteStatusMessage
+				or (owned and "Owned. Choose a slot to equip." or (tostring(data.Cost or 0) .. " Dust"))
+			descriptionLabel.Text = data.Description or "No description yet."
+		else
+			characterNameLabel.Text = "Emotes"
+			roleLabel.Text = ""
+			descriptionLabel.Text = "Select an emote."
+		end
+
+		if equippedSlot then
+			roleLabel.Text = "Equipped in slot " .. tostring(equippedSlot)
+		end
+
+		for slot, slotButton in pairs(emoteSlotButtons) do
+			local slotEmote = getEquippedEmote(slot)
+			slotButton.Text = slotEmote and tostring(slot) or tostring(slot)
+			slotButton.BackgroundColor3 = slot == selectedEmoteSlot
+				and Color3.fromRGB(58, 58, 70)
+				or (slotEmote and Color3.fromRGB(42, 56, 80) or Color3.fromRGB(42, 42, 50))
+		end
+
+		emoteBuyButton.Visible = data ~= nil and not owned
+		emoteBuyButton.Active = data ~= nil and not owned
+		emoteBuyButton.AutoButtonColor = data ~= nil and not owned
+		emoteBuyButton.Text = data and ("Buy " .. tostring(data.Cost or 0)) or "Buy"
+
+		emoteEquipButton.Visible = data ~= nil and owned == true
+		emoteEquipButton.Active = data ~= nil and owned == true
+		emoteEquipButton.AutoButtonColor = data ~= nil and owned == true
+		emoteEquipButton.Text = "Equip Slot " .. tostring(selectedEmoteSlot)
+
+		emoteClearButton.Visible = selectedSlotEmote ~= nil
+		emoteClearButton.Active = selectedSlotEmote ~= nil
+		emoteClearButton.AutoButtonColor = selectedSlotEmote ~= nil
+
+		emotePreviewButton.Visible = data ~= nil
+	end
+
 	local function setBottomInfo(characterName)
+		setEmoteControlsVisible(false)
 		local data = getCharacterData(characterName)
 
 		if not data then
@@ -919,6 +1343,59 @@ local function showCustomize()
 
 	cancelButton.MouseButton1Click:Connect(clearPurchaseConfirm)
 
+	for slot, slotButton in pairs(emoteSlotButtons) do
+		slotButton.MouseButton1Click:Connect(function()
+			selectedEmoteSlot = slot
+			emoteStatusMessage = ""
+			refreshEmoteBottom()
+		end)
+	end
+
+	emoteBuyButton.MouseButton1Click:Connect(function()
+		if not selectedCustomizeEmote then
+			return
+		end
+
+		progressionRemote:FireServer({
+			Action = "BuyEmote",
+			EmoteId = selectedCustomizeEmote,
+		})
+
+		emoteStatusMessage = "Purchase request sent."
+		refreshEmoteBottom()
+	end)
+
+	emoteEquipButton.MouseButton1Click:Connect(function()
+		if not selectedCustomizeEmote then
+			return
+		end
+
+		progressionRemote:FireServer({
+			Action = "EquipEmote",
+			EmoteId = selectedCustomizeEmote,
+			Slot = selectedEmoteSlot,
+		})
+
+		emoteStatusMessage = "Equip request sent."
+		refreshEmoteBottom()
+	end)
+
+	emoteClearButton.MouseButton1Click:Connect(function()
+		progressionRemote:FireServer({
+			Action = "UnequipEmote",
+			Slot = selectedEmoteSlot,
+		})
+
+		emoteStatusMessage = "Clear request sent."
+		refreshEmoteBottom()
+	end)
+
+	emotePreviewButton.MouseButton1Click:Connect(function()
+		if selectedCustomizeEmote then
+			shopPreviewController:PreviewEmote(selectedCustomizeEmote)
+		end
+	end)
+
 	local function addItemButton(text, callback, owned)
 		local safeName = text:gsub("%W+", "")
 
@@ -948,6 +1425,7 @@ local function showCustomize()
 		clearItems()
 
 		if category == "Characters" then
+			setEmoteControlsVisible(false)
 			for _, characterName in ipairs(getSortedCharacters(false)) do
 				local data = getCharacterData(characterName)
 
@@ -970,6 +1448,7 @@ local function showCustomize()
 				end
 			end
 		elseif category == "Titles" then
+			setEmoteControlsVisible(false)
 			for _, titleId in ipairs(getSortedTitles()) do
 				local data = TitleData[titleId]
 				if typeof(data) == "table" then
@@ -993,6 +1472,7 @@ local function showCustomize()
 				end
 			end
 		elseif category == "Skins" then
+			setEmoteControlsVisible(false)
 			local skinOrder, skins = getSkinOrder(selectedCustomizeCharacter)
 
 			if #skinOrder == 0 then
@@ -1028,7 +1508,33 @@ local function showCustomize()
 				end
 			end
 		elseif category == "Emotes" then
-			addItemButton("Future Emote Slot", function() end, false)
+			clearPurchaseConfirm()
+			setEmoteControlsVisible(true)
+
+			for _, emoteId in ipairs(getSortedEmotes()) do
+				local data = EmoteData[emoteId]
+				local owned = isEmoteOwned(emoteId, data)
+				local equippedSlot = getEmoteEquippedSlot(emoteId)
+				local text = data.DisplayName or emoteId
+
+				if equippedSlot then
+					text ..= "  -  Slot " .. tostring(equippedSlot)
+				elseif not owned then
+					text ..= "  -  " .. tostring(data.Cost or 0) .. " Dust"
+				end
+
+				addItemButton(text, function()
+					selectedCustomizeEmote = emoteId
+					if equippedSlot then
+						selectedEmoteSlot = equippedSlot
+					end
+					emoteStatusMessage = ""
+					shopPreviewController:PreviewEmote(emoteId)
+					refreshEmoteBottom()
+				end, owned)
+			end
+
+			refreshEmoteBottom()
 		end
 	end
 
@@ -1137,6 +1643,27 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 	end
 
 	if payload.Profile then
+		if payload.Action == "BuyEmoteResult" then
+			selectedCustomizeEmote = payload.EmoteId or selectedCustomizeEmote
+			emoteStatusMessage = payload.Success == true and "Owned. Choose a slot to equip."
+				or ("Could not buy emote: " .. tostring(payload.Reason or "Unknown"))
+		elseif payload.Action == "EquipEmoteResult" then
+			selectedCustomizeEmote = payload.EmoteId or selectedCustomizeEmote
+			selectedEmoteSlot = payload.Slot or selectedEmoteSlot
+			emoteStatusMessage = payload.Success == true and "Equipped."
+				or ("Could not equip emote: " .. tostring(payload.Reason or "Unknown"))
+		elseif payload.Action == "UnequipEmoteResult" then
+			selectedEmoteSlot = payload.Slot or selectedEmoteSlot
+			emoteStatusMessage = payload.Success == true and "Slot cleared."
+				or ("Could not clear slot: " .. tostring(payload.Reason or "Unknown"))
+		elseif payload.Action == "DonationProductResult" then
+			shopStatusMessage = payload.Message or "Thank you for supporting Undertale Battlegrounds!"
+			if typeof(payload.AmountRobux) == "number" and payload.AmountRobux > 0 then
+				shopStatusMessage = "Thanks for donating " .. tostring(payload.AmountRobux) .. " R$!"
+			end
+			showBottomRightNotification(shopStatusMessage, 3)
+		end
+
 		profile = payload.Profile
 		applySettingsSnapshot(profile.Settings)
 		refreshDust()
@@ -1146,14 +1673,23 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 			local oldCategory = selectedCustomizeCategory
 			local oldCharacter = selectedCustomizeCharacter
 			local oldSkin = selectedCustomizeSkin
+			local oldEmote = selectedCustomizeEmote
+			local oldEmoteSlot = selectedEmoteSlot
+			local oldEmoteStatusMessage = emoteStatusMessage
 
 			clearCurrentGui()
 
 			selectedCustomizeCategory = oldCategory
 			selectedCustomizeCharacter = oldCharacter
 			selectedCustomizeSkin = oldSkin
+			selectedCustomizeEmote = oldEmote
+			selectedEmoteSlot = oldEmoteSlot
+			emoteStatusMessage = oldEmoteStatusMessage
 
 			showCustomize()
+		elseif currentPanelName == "ShopUI" then
+			clearCurrentGui()
+			showShop()
 		end
 	end
 end)
