@@ -144,6 +144,10 @@ function CombatStatusService:CanAttackContinue(character, moveData)
 		return false
 	end
 
+	if character:GetAttribute("UsingMove") then
+		return true
+	end
+
 	if not character:GetAttribute("Stunned") then
 		return true
 	end
@@ -176,6 +180,8 @@ function CombatStatusService:ClearCombatWindows(character)
 	character:SetAttribute("ArmorPreventsStun", false)
 	character:SetAttribute("ArmorPreventsKnockback", false)
 	character:SetAttribute("ArmorPreventsHitCancel", false)
+	character:SetAttribute("ConfirmedCounterProtected", false)
+	character:SetAttribute("CounterConfirmed", false)
 end
 
 function CombatStatusService:ClearMoveStatus(character)
@@ -186,6 +192,16 @@ function CombatStatusService:ClearMoveStatus(character)
 	character:SetAttribute("MoveHitCancelsTarget", true)
 
 	self:ClearCombatWindows(character)
+end
+
+function CombatStatusService:HasConfirmedCounterProtection(character)
+	if not character or not character.Parent then
+		return false
+	end
+
+	return character:GetAttribute("ConfirmedCounterProtected") == true
+		or character:GetAttribute("CounterConfirmed") == true
+		or character:GetAttribute("CounterCinematicIFrames") == true
 end
 
 function CombatStatusService:StartTimedBoolWindow(character, moveToken, attributeName, startTime, endTime, onStart, onEnd)
@@ -334,42 +350,179 @@ function CombatStatusService:GetArmorInfo(character, attackData)
 	}
 end
 
-function CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
+function CombatStatusService:GetActiveActionInfo(character)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	if character:GetAttribute("UsingMove") == true then
+		return {
+			Type = "Move",
+			Id = character:GetAttribute("CurrentMoveId") or "Move",
+			TokenAttribute = "MoveToken",
+			Token = character:GetAttribute("MoveToken"),
+			CancelableByHit = character:GetAttribute("MoveCancelableByHit") ~= false,
+		}
+	end
+
+	if character:GetAttribute("Attacking") == true then
+		return {
+			Type = "M1",
+			Id = character:GetAttribute("CurrentM1Action") or "M1",
+			TokenAttribute = "M1Token",
+			Token = character:GetAttribute("M1Token"),
+			CancelableByHit = character:GetAttribute("M1CancelableByHit") ~= false,
+		}
+	end
+
+	return nil
+end
+
+function CombatStatusService:CanIncomingHitCancelActiveAction(targetCharacter, attackData)
 	if not targetCharacter or not targetCharacter.Parent then
-		return false
+		return false, "InvalidTarget"
+	end
+
+	if not self:IsAliveCharacter(targetCharacter) then
+		return false, "Dead"
 	end
 
 	local data = self:NormalizeAttackData(attackData)
 
 	if data.HitCancelsTarget == false then
-		return false
+		return false, "IncomingDoesNotCancel"
 	end
 
-	if not targetCharacter:GetAttribute("UsingMove") then
-		return false
+	if self:HasIFrames(targetCharacter, data) then
+		return false, "IFrame"
 	end
 
-	if targetCharacter:GetAttribute("MoveCancelableByHit") == false then
-		return false
+	if self:HasConfirmedCounterProtection(targetCharacter) then
+		return false, "ConfirmedCounterProtected"
+	end
+
+	local action = self:GetActiveActionInfo(targetCharacter)
+
+	if not action then
+		return false, "NoActiveAction"
+	end
+
+	if action.CancelableByHit == false then
+		return false, "ActionNotCancelable"
 	end
 
 	local armorInfo = self:GetArmorInfo(targetCharacter, data)
 
 	if armorInfo.Active and armorInfo.PreventsHitCancel then
+		return false, "ArmorPreventsHitCancel"
+	end
+
+	if targetCharacter:GetAttribute(action.TokenAttribute) ~= action.Token then
+		return false, "StaleActionToken"
+	end
+
+	return true, "CanCancel", action
+end
+
+function CombatStatusService:CancelActiveAction(targetCharacter, reason, action)
+	if not targetCharacter or not targetCharacter.Parent then
 		return false
 	end
 
-	local currentToken = targetCharacter:GetAttribute("MoveToken") or 0
+	action = action or self:GetActiveActionInfo(targetCharacter)
+	if not action then
+		return false
+	end
 
-	targetCharacter:SetAttribute("MoveToken", currentToken + 1)
-	targetCharacter:SetAttribute("UsingMove", false)
-	targetCharacter:SetAttribute("Attacking", false)
+	if action.Type == "Move" then
+		local currentToken = targetCharacter:GetAttribute("MoveToken") or 0
+		targetCharacter:SetAttribute("MoveToken", currentToken + 1)
+		targetCharacter:SetAttribute("UsingMove", false)
+		targetCharacter:SetAttribute("Attacking", false)
+		self:ClearMoveStatus(targetCharacter)
+	elseif action.Type == "M1" then
+		local currentToken = targetCharacter:GetAttribute("M1Token") or 0
+		targetCharacter:SetAttribute("M1Token", currentToken + 1)
+		targetCharacter:SetAttribute("Attacking", false)
+		targetCharacter:SetAttribute("M1CancelableByHit", true)
+		targetCharacter:SetAttribute("CurrentM1Action", nil)
+	else
+		return false
+	end
 
-	self:ClearMoveStatus(targetCharacter)
-
-	print("[CombatStatusService] Hit-canceled move on:", targetCharacter.Name)
+	if self.Config and self.Config.DebugHitCancel == true then
+		print("[CombatStatusService] Canceled active action:", targetCharacter.Name, action.Type, action.Id, reason or "HitCancel")
+	end
 
 	return true
+end
+
+function CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
+	local canCancel, reason, action = self:CanIncomingHitCancelActiveAction(targetCharacter, attackData)
+
+	if not canCancel then
+		if self.Config and self.Config.DebugHitCancel == true then
+			print("[CombatStatusService] Hit cancel rejected:", targetCharacter and targetCharacter.Name or "nil", reason)
+		end
+
+		return false
+	end
+
+	return self:CancelActiveAction(targetCharacter, "IncomingHit", action)
+end
+
+function CombatStatusService:BeginM1Action(character, actionName)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	local token = (character:GetAttribute("M1Token") or 0) + 1
+
+	character:SetAttribute("M1Token", token)
+	character:SetAttribute("Attacking", true)
+	character:SetAttribute("M1CancelableByHit", true)
+	character:SetAttribute("CurrentM1Action", actionName or "M1")
+
+	return token
+end
+
+function CombatStatusService:IsM1ActionActive(character, token)
+	if not character or not character.Parent then
+		return false
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return false
+	end
+
+	if character:GetAttribute("M1Token") ~= token then
+		return false
+	end
+
+	if character:GetAttribute("Attacking") ~= true then
+		return false
+	end
+
+	if character:GetAttribute("UsingMove") == true then
+		return false
+	end
+
+	return true
+end
+
+function CombatStatusService:EndM1Action(character, token)
+	if not character or not character.Parent then
+		return
+	end
+
+	if token ~= nil and character:GetAttribute("M1Token") ~= token then
+		return
+	end
+
+	character:SetAttribute("Attacking", false)
+	character:SetAttribute("M1CancelableByHit", true)
+	character:SetAttribute("CurrentM1Action", nil)
 end
 
 function CombatStatusService:GetOrCreateDamageOwnerValue(character)

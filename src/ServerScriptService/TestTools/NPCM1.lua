@@ -358,7 +358,7 @@ function NPCM1:GetFinalM1()
 end
 
 function NPCM1:GetComboResetTime()
-	return self.Config.ComboResetTime or self.Config.M1ComboResetTime or 1.3
+	return self.Config.M1ResetTime or self.Config.ComboResetTime or self.Config.M1ComboResetTime or 1.3
 end
 
 function NPCM1:GetM1Data(combo)
@@ -417,12 +417,14 @@ function NPCM1:GetDownslamData()
 	return copyData(FALLBACK_DOWNSLAM_DATA)
 end
 
-function NPCM1:SetupNPC(npc)
+function NPCM1:SetupNPC(npc, options)
+	options = options or {}
+
 	npc:SetAttribute("NPCComboCount", 0)
 	npc:SetAttribute("NPCLastM1Time", 0)
 	npc:SetAttribute("NPCAttacking", false)
 	npc:SetAttribute("NPCUsedUptilt", false)
-	npc:SetAttribute("NPCAirComboReady", false)
+	npc:SetAttribute("NPCAirComboReady", options.AirCombo == true)
 end
 
 function NPCM1:GetHumanoidAndRoot(model)

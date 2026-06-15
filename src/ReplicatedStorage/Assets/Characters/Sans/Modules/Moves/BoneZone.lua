@@ -33,7 +33,7 @@ local BoneZone = {
 	CanBeCountered = true,
 
 	HitCancelsTarget = false,
-	CancelableByHit = true,
+	CancelableByHit = false,
 
 	HasIFrames = false,
 	HasArmor = false,

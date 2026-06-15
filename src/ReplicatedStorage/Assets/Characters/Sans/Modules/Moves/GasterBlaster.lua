@@ -51,7 +51,7 @@ local GasterBlaster = {
 
 	-- Do not cancel the victim's current move/action.
 	HitCancelsTarget = false,
-	CancelableByHit = true,
+	CancelableByHit = false,
 
 	SpawnOffset = CFrame.new(0, 4.5, -5.5),
 

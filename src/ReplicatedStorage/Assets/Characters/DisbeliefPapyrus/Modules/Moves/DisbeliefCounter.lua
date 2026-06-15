@@ -39,7 +39,6 @@ local DisbeliefCounter = {
 
 	AttackerTriggerStun = 0.55,
 
-	-- One wall in front of Papyrus.
 	WallDistance = 3.75,
 	WallHeightOffset = -1.65,
 	WallRiseHeight = 4,
@@ -51,7 +50,6 @@ local DisbeliefCounter = {
 	HitboxTickRate = 0.035,
 	FadeTime = 0.2,
 
-	-- Strong outward knockback using MovementService.
 	KnockbackPreset = "PresetKnockback",
 	PresetKnockbackSpeed = 120,
 	PresetKnockbackUpward = 30,
@@ -65,7 +63,6 @@ local DisbeliefCounter = {
 
 	CounterUltBonusDamageValue = 35,
 
-	-- Counter stance locks combat inputs but should not suppress custom shift lock.
 	CameraPolicy = "ShiftLockAllowed",
 
 	Debug = false,
@@ -137,6 +134,59 @@ local function safeSetCounterInvincible(character, enabled)
 	end
 
 	character:SetAttribute("Countering", enabled == true)
+end
+
+local function beginConfirmedCounterProtection(character)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	local oldState = {
+		CounterConfirmed = character:GetAttribute("CounterConfirmed"),
+		ConfirmedCounterProtected = character:GetAttribute("ConfirmedCounterProtected"),
+
+		ArmorActive = character:GetAttribute("ArmorActive"),
+		ArmorDamageReduction = character:GetAttribute("ArmorDamageReduction"),
+		ArmorPreventsStun = character:GetAttribute("ArmorPreventsStun"),
+		ArmorPreventsKnockback = character:GetAttribute("ArmorPreventsKnockback"),
+		ArmorPreventsHitCancel = character:GetAttribute("ArmorPreventsHitCancel"),
+
+		MoveCancelableByHit = character:GetAttribute("MoveCancelableByHit"),
+	}
+
+	character:SetAttribute("CounterConfirmed", true)
+	character:SetAttribute("ConfirmedCounterProtected", true)
+
+	character:SetAttribute("ArmorActive", true)
+	character:SetAttribute("ArmorDamageReduction", 0)
+	character:SetAttribute("ArmorPreventsStun", true)
+	character:SetAttribute("ArmorPreventsKnockback", true)
+	character:SetAttribute("ArmorPreventsHitCancel", true)
+
+	character:SetAttribute("MoveCancelableByHit", false)
+
+	return oldState
+end
+
+local function endConfirmedCounterProtection(character, oldState)
+	if not oldState then
+		return
+	end
+
+	if not character or not character.Parent then
+		return
+	end
+
+	character:SetAttribute("CounterConfirmed", oldState.CounterConfirmed)
+	character:SetAttribute("ConfirmedCounterProtected", oldState.ConfirmedCounterProtected)
+
+	character:SetAttribute("ArmorActive", oldState.ArmorActive)
+	character:SetAttribute("ArmorDamageReduction", oldState.ArmorDamageReduction)
+	character:SetAttribute("ArmorPreventsStun", oldState.ArmorPreventsStun)
+	character:SetAttribute("ArmorPreventsKnockback", oldState.ArmorPreventsKnockback)
+	character:SetAttribute("ArmorPreventsHitCancel", oldState.ArmorPreventsHitCancel)
+
+	character:SetAttribute("MoveCancelableByHit", oldState.MoveCancelableByHit)
 end
 
 local function addCounterFrameGlow(character)
@@ -902,9 +952,6 @@ local function launchWallAndHit(ctx, wallData)
 
 			local wallHitboxCFrame = wallData.BaseCFrame * wallData.FinalLocalCFrame
 
-			-- Detection only.
-			-- The table must still be passed because HitboxService reads hitboxData.Offset internally.
-			-- No Damage/Stun exists in hitboxData, so ApplyStandardHit is the only damage source.
 			ctx.HitboxService:PerformSphereAtCFrame(
 				character,
 				wallHitboxCFrame,
@@ -995,6 +1042,7 @@ function DisbeliefCounter.Execute(ctx)
 
 	debugPrint(ctx, "Execute started")
 
+	local confirmedProtectionState = nil
 	local oldActionState = startActionLock(character, humanoid)
 	local track = playFirstAnimation(ctx, character, COUNTER_ANIMATION_NAMES, 0.04, 1, true)
 
@@ -1009,6 +1057,7 @@ function DisbeliefCounter.Execute(ctx)
 			track:Stop(0.05)
 		end
 
+		endConfirmedCounterProtection(character, confirmedProtectionState)
 		restoreActionLock(character, humanoid, oldActionState)
 		ctx:FinishMove(0)
 		return
@@ -1021,6 +1070,7 @@ function DisbeliefCounter.Execute(ctx)
 			track:Stop(0.05)
 		end
 
+		endConfirmedCounterProtection(character, confirmedProtectionState)
 		restoreActionLock(character, humanoid, oldActionState)
 		ctx:FinishMove(0)
 		return
@@ -1035,6 +1085,7 @@ function DisbeliefCounter.Execute(ctx)
 			track:Stop(0.05)
 		end
 
+		endConfirmedCounterProtection(character, confirmedProtectionState)
 		restoreActionLock(character, humanoid, oldActionState)
 		ctx:FinishMove(0)
 		return
@@ -1052,6 +1103,8 @@ function DisbeliefCounter.Execute(ctx)
 
 	addCounterFrameGlow(character)
 	tryCounterServiceStart(ctx, counterToken)
+
+	debugPrint(ctx, "Counter window started")
 
 	local finished = false
 	local triggered = false
@@ -1093,6 +1146,10 @@ function DisbeliefCounter.Execute(ctx)
 		end
 
 		task.delay(delayTime or 0, function()
+			safeSetCounterInvincible(character, false)
+			endConfirmedCounterProtection(character, confirmedProtectionState)
+			confirmedProtectionState = nil
+
 			restoreActionLock(character, humanoid, oldActionState)
 			ctx:FinishMove(0)
 		end)
@@ -1120,7 +1177,15 @@ function DisbeliefCounter.Execute(ctx)
 
 		removeCounterFrameGlow(character)
 
-		safeSetCounterInvincible(character, false)
+		-- Counter window is over. Now this becomes the confirmed punish state.
+		-- This mirrors Chara Killing Intent's confirmed-counter protection.
+		safeSetCounterInvincible(character, true)
+
+		if not confirmedProtectionState then
+			confirmedProtectionState = beginConfirmedCounterProtection(character)
+			debugPrint(ctx, "Confirmed counter protection started")
+		end
+
 		character:SetAttribute("Countering", false)
 		character:SetAttribute("CounterTriggered", true)
 
@@ -1148,6 +1213,8 @@ function DisbeliefCounter.Execute(ctx)
 				finish(0)
 				return
 			end
+
+			debugPrint(ctx, "Launching counter wall")
 
 			launchWallAndHit(ctx, wallData)
 			finish((moveData.ProjectileLifetime or 0.55) + (moveData.FadeTime or 0.2) + 0.1)

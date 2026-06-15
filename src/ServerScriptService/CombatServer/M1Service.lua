@@ -176,6 +176,49 @@ function M1Service:TryHitCancelTarget(targetCharacter, attackData)
 	return false
 end
 
+function M1Service:BeginM1Action(character, actionName)
+	if self.CombatStatusService and self.CombatStatusService.BeginM1Action then
+		return self.CombatStatusService:BeginM1Action(character, actionName)
+	end
+
+	local token = (character:GetAttribute("M1Token") or 0) + 1
+	character:SetAttribute("M1Token", token)
+	character:SetAttribute("Attacking", true)
+	character:SetAttribute("M1CancelableByHit", true)
+	character:SetAttribute("CurrentM1Action", actionName or "M1")
+
+	return token
+end
+
+function M1Service:IsM1ActionActive(character, token, attackData)
+	if self.CombatStatusService and self.CombatStatusService.IsM1ActionActive then
+		if not self.CombatStatusService:IsM1ActionActive(character, token) then
+			return false
+		end
+	else
+		if not character or not character.Parent then return false end
+		if character:GetAttribute("M1Token") ~= token then return false end
+		if character:GetAttribute("Attacking") ~= true then return false end
+		if character:GetAttribute("UsingMove") == true then return false end
+	end
+
+	return self:CanAttackContinue(character, attackData)
+end
+
+function M1Service:EndM1Action(character, token)
+	if self.CombatStatusService and self.CombatStatusService.EndM1Action then
+		self.CombatStatusService:EndM1Action(character, token)
+		return
+	end
+
+	if not character or not character.Parent then return end
+	if token ~= nil and character:GetAttribute("M1Token") ~= token then return end
+
+	character:SetAttribute("Attacking", false)
+	character:SetAttribute("M1CancelableByHit", true)
+	character:SetAttribute("CurrentM1Action", nil)
+end
+
 function M1Service:CanAttackContinue(character, attackData)
 	if self.CombatStatusService and self.CombatStatusService.CanAttackContinue then
 		return self.CombatStatusService:CanAttackContinue(character, attackData)
@@ -703,7 +746,7 @@ function M1Service:DoUptilt(player)
 		HitCancelsTarget = true,
 	})
 
-	character:SetAttribute("Attacking", true)
+	local m1Token = self:BeginM1Action(character, "Uptilt")
 	character:SetAttribute("LastM1Time", os.clock())
 	character:SetAttribute("UptiltCooldownUntil", os.clock() + rawData.MoveCooldown)
 
@@ -727,11 +770,7 @@ function M1Service:DoUptilt(player)
 		if humanoid.Health <= 0 then
 			return
 		end
-		if character:GetAttribute("UsingMove") then
-			return
-		end
-		if not self:CanAttackContinue(character, attackData) then
-			character:SetAttribute("Attacking", false)
+		if not self:IsM1ActionActive(character, m1Token, attackData) then
 			return
 		end
 
@@ -824,7 +863,7 @@ function M1Service:DoUptilt(player)
 
 	task.delay(rawData.Cooldown, function()
 		if character and character.Parent then
-			character:SetAttribute("Attacking", false)
+			self:EndM1Action(character, m1Token)
 		end
 	end)
 end
@@ -853,7 +892,7 @@ function M1Service:DoDownslam(player)
 		Stun = rawData.AirStunMax or rawData.Stun or 1.5,
 	})
 
-	character:SetAttribute("Attacking", true)
+	local m1Token = self:BeginM1Action(character, "Downslam")
 	character:SetAttribute("AirComboReady", false)
 
 	print("PLAYING DOWNSLAM ANIMATION")
@@ -874,11 +913,7 @@ function M1Service:DoDownslam(player)
 		if humanoid.Health <= 0 then
 			return
 		end
-		if character:GetAttribute("UsingMove") then
-			return
-		end
-		if not self:CanAttackContinue(character, attackData) then
-			character:SetAttribute("Attacking", false)
+		if not self:IsM1ActionActive(character, m1Token, attackData) then
 			return
 		end
 
@@ -965,8 +1000,10 @@ function M1Service:DoDownslam(player)
 
 	task.delay(rawData.Cooldown, function()
 		if character and character.Parent then
-			character:SetAttribute("Attacking", false)
-			self.StateService:ResetCombo(character)
+			if character:GetAttribute("M1Token") == m1Token then
+				self:EndM1Action(character, m1Token)
+				self.StateService:ResetCombo(character)
+			end
 		end
 	end)
 end
@@ -1001,7 +1038,7 @@ function M1Service:DoNormalM1(player)
 		GuardbreakStun = rawData.GuardbreakStun,
 	})
 
-	character:SetAttribute("Attacking", true)
+	local m1Token = self:BeginM1Action(character, "M" .. tostring(combo))
 	self.StateService:LockJump(character, self.Config.JumpLockAfterM1)
 
 	self:PlayM1StartFX(character, root, combo)
@@ -1015,11 +1052,7 @@ function M1Service:DoNormalM1(player)
 		if humanoid.Health <= 0 then
 			return
 		end
-		if character:GetAttribute("UsingMove") then
-			return
-		end
-		if not self:CanAttackContinue(character, attackData) then
-			character:SetAttribute("Attacking", false)
+		if not self:IsM1ActionActive(character, m1Token, attackData) then
 			return
 		end
 
@@ -1151,10 +1184,12 @@ function M1Service:DoNormalM1(player)
 
 	task.delay(rawData.Cooldown, function()
 		if character and character.Parent then
-			character:SetAttribute("Attacking", false)
+			if character:GetAttribute("M1Token") == m1Token then
+				self:EndM1Action(character, m1Token)
 
-			if combo == self.FinalM1 then
-				self.StateService:ResetCombo(character)
+				if combo == self.FinalM1 then
+					self.StateService:ResetCombo(character)
+				end
 			end
 		end
 	end)

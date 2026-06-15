@@ -283,6 +283,7 @@ function KillingIntent.Execute(context)
 
 	local focusedVictimCharacter = nil
 	local victimFocusActive = false
+	local confirmedCounterProtectionState = nil
 
 	local function addActiveFrameHighlight()
 		if not character or not character.Parent then
@@ -324,6 +325,54 @@ function KillingIntent.Execute(context)
 		local velocity = part.AssemblyLinearVelocity
 		part.AssemblyLinearVelocity = Vector3.new(0, velocity.Y, 0)
 		part.AssemblyAngularVelocity = Vector3.zero
+	end
+
+	local function beginConfirmedCounterProtection()
+		if confirmedCounterProtectionState or not character or not character.Parent then
+			return
+		end
+
+		confirmedCounterProtectionState = {
+			CounterConfirmed = character:GetAttribute("CounterConfirmed"),
+			ConfirmedCounterProtected = character:GetAttribute("ConfirmedCounterProtected"),
+			ArmorActive = character:GetAttribute("ArmorActive"),
+			ArmorDamageReduction = character:GetAttribute("ArmorDamageReduction"),
+			ArmorPreventsStun = character:GetAttribute("ArmorPreventsStun"),
+			ArmorPreventsKnockback = character:GetAttribute("ArmorPreventsKnockback"),
+			ArmorPreventsHitCancel = character:GetAttribute("ArmorPreventsHitCancel"),
+			MoveCancelableByHit = character:GetAttribute("MoveCancelableByHit"),
+		}
+
+		character:SetAttribute("CounterConfirmed", true)
+		character:SetAttribute("ConfirmedCounterProtected", true)
+		character:SetAttribute("ArmorActive", true)
+		character:SetAttribute("ArmorDamageReduction", 0)
+		character:SetAttribute("ArmorPreventsStun", true)
+		character:SetAttribute("ArmorPreventsKnockback", true)
+		character:SetAttribute("ArmorPreventsHitCancel", true)
+		character:SetAttribute("MoveCancelableByHit", false)
+	end
+
+	local function endConfirmedCounterProtection()
+		if not confirmedCounterProtectionState then
+			return
+		end
+
+		local oldState = confirmedCounterProtectionState
+		confirmedCounterProtectionState = nil
+
+		if not character or not character.Parent then
+			return
+		end
+
+		character:SetAttribute("CounterConfirmed", oldState.CounterConfirmed)
+		character:SetAttribute("ConfirmedCounterProtected", oldState.ConfirmedCounterProtected)
+		character:SetAttribute("ArmorActive", oldState.ArmorActive)
+		character:SetAttribute("ArmorDamageReduction", oldState.ArmorDamageReduction)
+		character:SetAttribute("ArmorPreventsStun", oldState.ArmorPreventsStun)
+		character:SetAttribute("ArmorPreventsKnockback", oldState.ArmorPreventsKnockback)
+		character:SetAttribute("ArmorPreventsHitCancel", oldState.ArmorPreventsHitCancel)
+		character:SetAttribute("MoveCancelableByHit", oldState.MoveCancelableByHit)
 	end
 
 	local function startHardMovementLock()
@@ -604,6 +653,7 @@ function KillingIntent.Execute(context)
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
 			stopVictimFocus()
+			endConfirmedCounterProtection()
 			context:FinishMove(0)
 			return
 		end
@@ -627,6 +677,7 @@ function KillingIntent.Execute(context)
 			playMoveVFX("KillingIntentCounterEnd")
 			stopHardMovementLock()
 			stopVictimFocus()
+			endConfirmedCounterProtection()
 			context:FinishMove(0)
 
 			return
@@ -637,6 +688,7 @@ function KillingIntent.Execute(context)
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
 			stopVictimFocus()
+			endConfirmedCounterProtection()
 			context:FinishMove(0)
 			return
 		end
@@ -706,6 +758,7 @@ function KillingIntent.Execute(context)
 			stopHardMovementLock()
 			removeActiveFrameHighlight()
 			stopVictimFocus()
+			endConfirmedCounterProtection()
 			context:FinishMove(0)
 		end)
 	end
@@ -748,6 +801,7 @@ function KillingIntent.Execute(context)
 
 		removeActiveFrameHighlight()
 		safeSetCounterInvincible(character, true)
+		beginConfirmedCounterProtection()
 
 		character:SetAttribute("CounterTriggered", true)
 		character:SetAttribute("DashLocked", true)

@@ -169,6 +169,22 @@ UltService.ProgressionService = ProgressionService
 UltService.KillCreditService = KillCreditService
 DebugService.SoulBurstService = SoulBurstService
 
+_G.UTBGDevServices = {
+	BlockService = BlockService,
+	CharacterMorphService = CharacterMorphService,
+	CombatStatusService = CombatStatusService,
+	Config = Config,
+	CounterService = CounterService,
+	DebugService = DebugService,
+	HitboxService = HitboxService,
+	MovementService = MovementService,
+	StateService = StateService,
+	UltService = UltService,
+	SoulBurstService = SoulBurstService,
+	VFXService = VFXService,
+	WeaponService = WeaponService,
+}
+
 -- Remotes
 combatRemote.OnServerEvent:Connect(function(player, action, payload)
 	local character = player.Character

@@ -216,6 +216,26 @@
 
       "Systems": {
         "$path": "src/ServerScriptService/Systems"
+      },
+
+      "TestTools": {
+        "$className": "Folder",
+
+        "DevAdminService": {
+          "$path": "src/ServerScriptService/TestTools/DevAdminService.lua"
+        },
+
+        "DebugDummyController": {
+          "$path": "src/ServerScriptService/TestTools/DebugDummyController.lua"
+        },
+
+        "NPCM1": {
+          "$path": "src/ServerScriptService/TestTools/NPCM1.lua"
+        },
+
+        "DevAdminServer": {
+          "$path": "src/ServerScriptService/TestTools/DevAdminServer.server.lua"
+        }
       }
     },
 

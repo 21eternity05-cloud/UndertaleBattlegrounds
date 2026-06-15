@@ -235,7 +235,10 @@ function MoveService:CancelM1IntoMove(character)
 		return
 	end
 
+	character:SetAttribute("M1Token", (character:GetAttribute("M1Token") or 0) + 1)
 	character:SetAttribute("Attacking", false)
+	character:SetAttribute("M1CancelableByHit", true)
+	character:SetAttribute("CurrentM1Action", nil)
 
 	if self.StateService.AnimationService then
 		self.StateService.AnimationService:StopCharacterAnimationByName(character, "M1", 0.04)
