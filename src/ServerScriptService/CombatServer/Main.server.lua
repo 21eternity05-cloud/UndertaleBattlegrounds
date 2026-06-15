@@ -122,7 +122,8 @@ local SoulBurstService = require(combatFolder:WaitForChild("SoulBurstService")).
 local KillCreditService = require(combatFolder:WaitForChild("KillCreditService")).new(
 	Config,
 	ProgressionService,
-	CombatStatusService
+	CombatStatusService,
+	VFXService
 )
 
 -- Cross-service wiring

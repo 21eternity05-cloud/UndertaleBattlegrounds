@@ -131,6 +131,24 @@
           "Chara": {
             "$className": "Folder",
 
+            "VFX": {
+              "$className": "Folder",
+
+              "HeartColor": {
+                "$className": "Color3Value",
+                "$properties": {
+                  "Value": [1, 0, 0]
+                }
+              },
+
+              "UltColor": {
+                "$className": "Color3Value",
+                "$properties": {
+                  "Value": [0.72, 0.06, 0.06]
+                }
+              }
+            },
+
             "Modules": {
               "$path": "src/ReplicatedStorage/Assets/Characters/Chara/Modules"
             }
@@ -138,6 +156,24 @@
 
           "Sans": {
             "$className": "Folder",
+
+            "VFX": {
+              "$className": "Folder",
+
+              "HeartColor": {
+                "$className": "Color3Value",
+                "$properties": {
+                  "Value": [1, 1, 1]
+                }
+              },
+
+              "UltColor": {
+                "$className": "Color3Value",
+                "$properties": {
+                  "Value": [0.12, 0.42, 1]
+                }
+              }
+            },
 
             "Modules": {
               "$path": "src/ReplicatedStorage/Assets/Characters/Sans/Modules"

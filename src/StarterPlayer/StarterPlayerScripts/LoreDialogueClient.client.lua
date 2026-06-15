@@ -41,8 +41,8 @@ gui.Parent = playerGui
 local dialogueBox = Instance.new("Frame")
 dialogueBox.Name = "DialogueBox"
 dialogueBox.AnchorPoint = Vector2.new(0.5, 1)
-dialogueBox.BackgroundColor3 = Color3.fromRGB(7, 7, 10)
-dialogueBox.BackgroundTransparency = 0.04
+dialogueBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+dialogueBox.BackgroundTransparency = 0
 dialogueBox.BorderSizePixel = 0
 dialogueBox.Position = UDim2.fromScale(0.5, 0.965)
 dialogueBox.Size = UDim2.new(0.88, 0, 0, 168)
@@ -56,23 +56,20 @@ sizeConstraint.Parent = dialogueBox
 
 local boxStroke = Instance.new("UIStroke")
 boxStroke.Color = Color3.fromRGB(245, 245, 245)
-boxStroke.Thickness = 3
+boxStroke.Thickness = 12
+boxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+boxStroke.LineJoinMode = Enum.LineJoinMode.Miter
 boxStroke.Parent = dialogueBox
 
 local portraitFrame = Instance.new("ViewportFrame")
 portraitFrame.Name = "Portrait"
-portraitFrame.BackgroundColor3 = Color3.fromRGB(13, 13, 17)
+portraitFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 portraitFrame.BorderSizePixel = 0
 portraitFrame.Position = UDim2.fromOffset(18, 18)
 portraitFrame.Size = UDim2.fromOffset(118, 118)
 portraitFrame.Ambient = Color3.fromRGB(220, 220, 220)
 portraitFrame.LightColor = Color3.fromRGB(255, 255, 235)
 portraitFrame.Parent = dialogueBox
-
-local portraitStroke = Instance.new("UIStroke")
-portraitStroke.Color = Color3.fromRGB(120, 120, 130)
-portraitStroke.Thickness = 1
-portraitStroke.Parent = portraitFrame
 
 local speakerLabel = Instance.new("TextLabel")
 speakerLabel.Name = "Speaker"
@@ -126,9 +123,7 @@ local eventSoundCache = {}
 
 local function clearPortrait()
 	for _, child in ipairs(portraitFrame:GetChildren()) do
-		if not child:IsA("UIStroke") then
-			child:Destroy()
-		end
+		child:Destroy()
 	end
 
 	portraitWorld = Instance.new("WorldModel")

@@ -5,6 +5,7 @@ SkinModule.DefaultSkin = "Default"
 SkinModule.Skins = {
 	Default = {
 		DisplayName = "Default",
+		Description = "Frisk's default Glitchtale-inspired loadout with sword, shield, and determination.",
 		Free = true,
 		Cost = 0,
 		CharacterModelName = "Default",

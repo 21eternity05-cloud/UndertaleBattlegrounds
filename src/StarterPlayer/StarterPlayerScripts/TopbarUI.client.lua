@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
+local Debris = game:GetService("Debris")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -36,6 +37,7 @@ local selectedCharacter = "Chara"
 local selectedCustomizeCharacter = "Chara"
 local selectedCustomizeSkin = "Default"
 local selectedCustomizeCategory = "Characters"
+local selectedCustomizeTitle = nil
 local selectedCustomizeEmote = "DefaultDance"
 local selectedEmoteSlot = 1
 local emoteStatusMessage = ""
@@ -60,7 +62,6 @@ local hiddenCombatGuiStates = {}
 
 local HIDDEN_GUI_NAMES = {
 	MoveHUD = true,
-	LoreGui = true,
 }
 
 local gui = Instance.new("ScreenGui")
@@ -72,10 +73,87 @@ gui.Parent = playerGui
 local activeNotification = nil
 local activeNotificationTween = nil
 local notificationToken = 0
+local PIXEL_FONT = Enum.Font.Arcade
+local UT_WHITE = Color3.fromRGB(255, 255, 255)
+local UT_BLACK = Color3.fromRGB(0, 0, 0)
+local UT_GRAY = Color3.fromRGB(150, 150, 150)
+local UT_ORANGE = Color3.fromRGB(255, 150, 40)
+local UT_YELLOW = Color3.fromRGB(255, 190, 40)
+
+local function getMenuSoundsFolder()
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	local ui = assets and assets:FindFirstChild("UI")
+	local menu = ui and ui:FindFirstChild("Menu")
+
+	return menu and menu:FindFirstChild("Sounds") or nil
+end
+
+local function playMenuSound(soundName)
+	local sounds = getMenuSoundsFolder()
+	local template = sounds and sounds:FindFirstChild(soundName)
+	if not template or not template:IsA("Sound") then
+		return
+	end
+
+	local sound = template:Clone()
+	sound.Parent = gui
+	sound:Play()
+	Debris:AddItem(sound, math.max(sound.TimeLength, 1) + 1)
+end
+
+local function addUndertaleStroke(instance, color, thickness)
+	local stroke = instance:FindFirstChildOfClass("UIStroke")
+	if not stroke then
+		stroke = Instance.new("UIStroke")
+		stroke.Parent = instance
+	end
+
+	stroke.Color = color or UT_WHITE
+	stroke.Thickness = thickness or 3
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.LineJoinMode = Enum.LineJoinMode.Miter
+
+	return stroke
+end
+
+local function setStrokeThickness(instance, thickness)
+	local stroke = instance:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Thickness = thickness
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.LineJoinMode = Enum.LineJoinMode.Miter
+	end
+end
+
+local function addListPadding(scrollingFrame, padding)
+	local inset = padding or 4
+	local listPadding = Instance.new("UIPadding")
+	listPadding.PaddingTop = UDim.new(0, inset)
+	listPadding.PaddingBottom = UDim.new(0, inset)
+	listPadding.PaddingLeft = UDim.new(0, inset)
+	listPadding.PaddingRight = UDim.new(0, inset)
+	listPadding.Parent = scrollingFrame
+
+	return listPadding
+end
+
+local function removeRoundedCorners(instance)
+	for _, child in ipairs(instance:GetChildren()) do
+		if child:IsA("UICorner") then
+			child:Destroy()
+		end
+	end
+end
+
+local function applyPixelText(textObject)
+	textObject.Font = PIXEL_FONT
+	textObject.TextColor3 = textObject.TextColor3 or UT_WHITE
+end
 
 local function showBottomRightNotification(text, duration)
 	notificationToken += 1
 	local token = notificationToken
+	playMenuSound("Notification")
 
 	if activeNotificationTween then
 		activeNotificationTween:Cancel()
@@ -89,27 +167,20 @@ local function showBottomRightNotification(text, duration)
 		activeNotification.Position = UDim2.new(1, -24, 1, -120)
 		activeNotification.Size = UDim2.fromOffset(330, 42)
 		activeNotification.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-		activeNotification.BackgroundTransparency = 0.08
+		activeNotification.BackgroundTransparency = 0
 		activeNotification.BorderSizePixel = 0
-		activeNotification.Font = Enum.Font.GothamSemibold
-		activeNotification.TextSize = 14
-		activeNotification.TextColor3 = Color3.fromRGB(245, 245, 245)
+		activeNotification.Font = PIXEL_FONT
+		activeNotification.TextSize = 12
+		activeNotification.TextColor3 = UT_WHITE
 		activeNotification.TextWrapped = true
 		activeNotification.Parent = gui
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 7)
-		corner.Parent = activeNotification
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(90, 90, 105)
-		stroke.Thickness = 1
-		stroke.Parent = activeNotification
+		addUndertaleStroke(activeNotification, UT_WHITE, 3)
 	end
 
 	activeNotification.Text = text or ""
 	activeNotification.TextTransparency = 0
-	activeNotification.BackgroundTransparency = 0.08
+	activeNotification.BackgroundTransparency = 0
 	activeNotification.Visible = true
 
 	task.delay(duration or 2.5, function()
@@ -506,12 +577,12 @@ local function makeText(parent, name, text, position, size, textSize, bold, colo
 	label.BackgroundTransparency = 1
 	label.Position = position
 	label.Size = size
-	label.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
-	label.TextSize = textSize or 14
+	label.Font = PIXEL_FONT
+	label.TextSize = (textSize or 13) + 2
 	label.TextWrapped = true
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextYAlignment = Enum.TextYAlignment.Top
-	label.TextColor3 = color or Color3.fromRGB(235, 235, 242)
+	label.TextColor3 = color or UT_WHITE
 	label.Text = text
 	label.Parent = parent
 
@@ -523,18 +594,25 @@ local function makeButton(parent, name, text, position, size, color)
 	button.Name = name
 	button.Position = position
 	button.Size = size
-	button.BackgroundColor3 = color or Color3.fromRGB(34, 34, 42)
+	button.BackgroundColor3 = color or UT_BLACK
+	button.BackgroundTransparency = 0
 	button.BorderSizePixel = 0
-	button.Font = Enum.Font.GothamBold
+	button.Font = PIXEL_FONT
 	button.TextSize = 14
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextColor3 = UT_WHITE
 	button.Text = text
 	button.AutoButtonColor = true
 	button.Parent = parent
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 7)
-	corner.Parent = button
+	local stroke = addUndertaleStroke(button, UT_WHITE, 3)
+
+	button.MouseEnter:Connect(function()
+		playMenuSound("Hover")
+	end)
+
+	button.MouseButton1Click:Connect(function()
+		playMenuSound("Press")
+	end)
 
 	return button
 end
@@ -559,19 +637,12 @@ local function makeFloatingPanel(parent, name, position, size, transparency)
 	panel.Name = name
 	panel.Position = position
 	panel.Size = size
-	panel.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-	panel.BackgroundTransparency = transparency or 0.08
+	panel.BackgroundColor3 = UT_BLACK
+	panel.BackgroundTransparency = 0
 	panel.BorderSizePixel = 0
 	panel.Parent = parent
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(76, 76, 92)
-	stroke.Thickness = 1
-	stroke.Parent = panel
+	addUndertaleStroke(panel, UT_WHITE, 4)
 
 	return panel
 end
@@ -701,6 +772,7 @@ local function showShop()
 	list.CanvasSize = UDim2.fromOffset(0, 0)
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	list.Parent = panel
+	local listPadding = addListPadding(list, 5)
 
 	local layout = Instance.new("UIListLayout")
 	layout.Padding = UDim.new(0, 8)
@@ -732,7 +804,7 @@ local function showShop()
 
 	local function clearShopList()
 		for _, child in ipairs(list:GetChildren()) do
-			if child ~= layout then
+			if child ~= layout and child ~= listPadding then
 				child:Destroy()
 			end
 		end
@@ -749,11 +821,15 @@ local function showShop()
 			sectionId .. "Header",
 			(section.DisplayName or sectionId) .. " " .. arrow,
 			UDim2.fromOffset(0, 0),
-			UDim2.new(1, -6, 0, 36),
+			UDim2.new(1, -12, 0, 36),
 			Color3.fromRGB(34, 34, 44)
 		)
 		button.TextXAlignment = Enum.TextXAlignment.Left
 		button.Text = "  " .. button.Text
+		local stroke = button:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = isExpanded and UT_ORANGE or UT_WHITE
+		end
 
 		button.MouseButton1Click:Connect(function()
 			shopExpandedSections[sectionId] = not isExpanded
@@ -777,15 +853,13 @@ local function showShop()
 	local function addProductRow(productKey, product)
 		local row = Instance.new("Frame")
 		row.Name = productKey .. "Row"
-		row.Size = UDim2.new(1, -6, 0, 118)
-		row.BackgroundColor3 = Color3.fromRGB(24, 24, 31)
-		row.BackgroundTransparency = 0.08
+		row.Size = UDim2.new(1, -12, 0, 118)
+		row.BackgroundColor3 = UT_BLACK
+		row.BackgroundTransparency = 0
 		row.BorderSizePixel = 0
 		row.Parent = list
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 7)
-		corner.Parent = row
+		addUndertaleStroke(row, UT_WHITE, 3)
 
 		makeText(
 			row,
@@ -1110,6 +1184,7 @@ local function showCustomize()
 		)
 		slotButton.TextSize = 13
 		slotButton.Visible = false
+		setStrokeThickness(slotButton, 2)
 		emoteSlotButtons[slot] = slotButton
 	end
 
@@ -1122,6 +1197,8 @@ local function showCustomize()
 		Color3.fromRGB(90, 50, 36)
 	)
 	emoteBuyButton.Visible = false
+	emoteBuyButton.TextSize = 12
+	setStrokeThickness(emoteBuyButton, 2)
 
 	local emoteEquipButton = makeButton(
 		bottomPanel,
@@ -1132,6 +1209,10 @@ local function showCustomize()
 		Color3.fromRGB(42, 56, 80)
 	)
 	emoteEquipButton.Visible = false
+	emoteEquipButton.TextSize = 11
+	emoteEquipButton.TextScaled = true
+	emoteEquipButton.TextWrapped = true
+	setStrokeThickness(emoteEquipButton, 2)
 
 	local emoteClearButton = makeButton(
 		bottomPanel,
@@ -1142,6 +1223,8 @@ local function showCustomize()
 		Color3.fromRGB(62, 45, 45)
 	)
 	emoteClearButton.Visible = false
+	emoteClearButton.TextSize = 12
+	setStrokeThickness(emoteClearButton, 2)
 
 	local emotePreviewButton = makeButton(
 		bottomPanel,
@@ -1152,6 +1235,8 @@ local function showCustomize()
 		Color3.fromRGB(42, 42, 50)
 	)
 	emotePreviewButton.Visible = false
+	emotePreviewButton.TextSize = 12
+	setStrokeThickness(emotePreviewButton, 2)
 
 	local itemList = Instance.new("ScrollingFrame")
 	itemList.Name = "ItemList"
@@ -1163,6 +1248,7 @@ local function showCustomize()
 	itemList.CanvasSize = UDim2.fromOffset(0, 0)
 	itemList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	itemList.Parent = rightPanel
+	local itemListPadding = addListPadding(itemList, 3)
 
 	local itemLayout = Instance.new("UIListLayout")
 	itemLayout.Padding = UDim.new(0, 8)
@@ -1171,7 +1257,7 @@ local function showCustomize()
 
 	local function clearItems()
 		for _, child in ipairs(itemList:GetChildren()) do
-			if child ~= itemLayout then
+			if child ~= itemLayout and child ~= itemListPadding then
 				child:Destroy()
 			end
 		end
@@ -1249,7 +1335,7 @@ local function showCustomize()
 		emotePreviewButton.Visible = data ~= nil
 	end
 
-	local function setBottomInfo(characterName)
+	local function setCharacterBottomInfo(characterName)
 		setEmoteControlsVisible(false)
 		local data = getCharacterData(characterName)
 
@@ -1300,6 +1386,86 @@ local function showCustomize()
 		purchaseLabel.Text = "Buy " .. (skinData.DisplayName or skinName) .. " for " .. tostring(skinData.Cost or 0) .. " Dust?"
 		confirmButton.Visible = true
 		cancelButton.Visible = true
+	end
+
+	local function setSkinBottomInfo(characterName, skinName, skinData)
+		local characterData = getCharacterData(characterName) or {}
+		characterNameLabel.Text = characterData.DisplayName or characterName
+		roleLabel.Text = skinData.DisplayName or skinName
+		descriptionLabel.Text = skinData.Description or "No skin description yet."
+	end
+
+	local function setTitleBottomInfo(titleId, titleData)
+		selectedCustomizeTitle = titleId
+		characterNameLabel.Text = "Title"
+		roleLabel.Text = titleData.DisplayName or titleId
+		descriptionLabel.Text = titleData.Description or "No title description yet."
+	end
+
+	local function findCurrentTitleInfo()
+		local titleId = selectedCustomizeTitle
+
+		if typeof(titleId) ~= "string" or not TitleData[titleId] then
+			titleId = profile and profile.EquippedTitle
+		end
+
+		if typeof(titleId) ~= "string" or not TitleData[titleId] then
+			titleId = "None"
+		end
+
+		if TitleData[titleId] then
+			return titleId, TitleData[titleId]
+		end
+
+		for _, fallbackTitleId in ipairs(getSortedTitles()) do
+			local data = TitleData[fallbackTitleId]
+			if typeof(data) == "table" then
+				return fallbackTitleId, data
+			end
+		end
+
+		return nil, nil
+	end
+
+	local function findCurrentSkinInfo()
+		local skinOrder, skins = getSkinOrder(selectedCustomizeCharacter)
+		local skinName = selectedCustomizeSkin
+
+		if typeof(skinName) ~= "string" or skinName == "" or not skins[skinName] then
+			skinName = getEquippedSkin(selectedCustomizeCharacter)
+		end
+
+		if typeof(skinName) ~= "string" or skinName == "" or not skins[skinName] then
+			skinName = skinOrder[1] or "Default"
+		end
+
+		return skinName, skins[skinName] or {
+			DisplayName = skinName == "Default" and "Default" or skinName,
+			Description = "No skin description yet.",
+		}
+	end
+
+	local function refreshBottomForCategory(category)
+		if category == "Skins" then
+			setEmoteControlsVisible(false)
+			local skinName, skinData = findCurrentSkinInfo()
+			setSkinBottomInfo(selectedCustomizeCharacter, skinName, skinData)
+		elseif category == "Titles" then
+			setEmoteControlsVisible(false)
+			local titleId, titleData = findCurrentTitleInfo()
+			if titleId and titleData then
+				setTitleBottomInfo(titleId, titleData)
+			else
+				characterNameLabel.Text = "Title"
+				roleLabel.Text = ""
+				descriptionLabel.Text = "No title description yet."
+			end
+		elseif category == "Emotes" then
+			setEmoteControlsVisible(true)
+			refreshEmoteBottom()
+		else
+			setCharacterBottomInfo(selectedCustomizeCharacter)
+		end
 	end
 
 	playAsButton.MouseButton1Click:Connect(function()
@@ -1403,17 +1569,29 @@ local function showCustomize()
 			safeName = "Item"
 		end
 
-		local button = makeButton(
-			itemList,
-			safeName .. "Button",
-			text,
-			UDim2.fromOffset(0, 0),
-			UDim2.new(1, -6, 0, 38),
-			owned == false and Color3.fromRGB(62, 45, 34) or Color3.fromRGB(36, 36, 46)
-		)
+		local button = Instance.new("TextButton")
+		button.Name = safeName .. "Button"
+		button.Size = UDim2.new(1, -8, 0, 40)
+		button.BackgroundColor3 = owned == false and Color3.fromRGB(62, 45, 34) or Color3.fromRGB(36, 36, 46)
+		button.BackgroundTransparency = 0
+		button.BorderSizePixel = 0
+		button.Font = PIXEL_FONT
+		button.TextSize = 16
+		button.TextColor3 = UT_WHITE
+		button.TextWrapped = true
+		button.AutoButtonColor = true
+		button.Parent = itemList
 
 		button.TextXAlignment = Enum.TextXAlignment.Left
 		button.Text = "  " .. text
+
+		button.MouseEnter:Connect(function()
+			playMenuSound("Hover")
+		end)
+
+		button.MouseButton1Click:Connect(function()
+			playMenuSound("Press")
+		end)
 
 		button.MouseButton1Click:Connect(callback)
 
@@ -1423,6 +1601,7 @@ local function showCustomize()
 	local function showCategory(category)
 		selectedCustomizeCategory = category
 		clearItems()
+		refreshBottomForCategory(category)
 
 		if category == "Characters" then
 			setEmoteControlsVisible(false)
@@ -1439,7 +1618,7 @@ local function showCustomize()
 
 					addItemButton(text, function()
 						clearPurchaseConfirm()
-						setBottomInfo(characterName)
+						setCharacterBottomInfo(characterName)
 
 						if not owned then
 							showPurchaseConfirm(characterName)
@@ -1462,6 +1641,9 @@ local function showCustomize()
 					end
 
 					addItemButton(text, function()
+						clearPurchaseConfirm()
+						setTitleBottomInfo(titleId, data)
+
 						if owned then
 							progressionRemote:FireServer({
 								Action = "EquipTitle",
@@ -1477,8 +1659,13 @@ local function showCustomize()
 
 			if #skinOrder == 0 then
 				addItemButton("Default Skin", function()
+					clearPurchaseConfirm()
 					selectedCustomizeSkin = "Default"
 					shopPreviewController:Enter(selectedCustomizeCharacter, selectedCustomizeSkin)
+					setSkinBottomInfo(selectedCustomizeCharacter, "Default", {
+						DisplayName = "Default",
+						Description = "No skin description yet.",
+					})
 				end, true)
 			else
 				for _, skinName in ipairs(skinOrder) do
@@ -1494,6 +1681,7 @@ local function showCustomize()
 						clearPurchaseConfirm()
 						selectedCustomizeSkin = skinName
 						shopPreviewController:Enter(selectedCustomizeCharacter, selectedCustomizeSkin)
+						setSkinBottomInfo(selectedCustomizeCharacter, skinName, skin)
 
 						if owned then
 							progressionRemote:FireServer({
@@ -1560,7 +1748,6 @@ local function showCustomize()
 		end)
 	end
 
-	setBottomInfo(selectedCustomizeCharacter)
 	showCategory(selectedCustomizeCategory or "Characters")
 end
 
@@ -1625,6 +1812,9 @@ icons.Characters = Icon.new()
 makeTopbarIcon("Customize", "Customize", showCustomize)
 makeTopbarIcon("Shop", "Shop", showShop)
 makeTopbarIcon("Settings", "Settings", showSettings)
+if icons.Settings then
+	icons.Settings:setImage("rbxassetid://7059346373")
+end
 
 dustIcon = Icon.new()
 	:setName("Dust")
@@ -1673,6 +1863,7 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 			local oldCategory = selectedCustomizeCategory
 			local oldCharacter = selectedCustomizeCharacter
 			local oldSkin = selectedCustomizeSkin
+			local oldTitle = selectedCustomizeTitle
 			local oldEmote = selectedCustomizeEmote
 			local oldEmoteSlot = selectedEmoteSlot
 			local oldEmoteStatusMessage = emoteStatusMessage
@@ -1682,6 +1873,7 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 			selectedCustomizeCategory = oldCategory
 			selectedCustomizeCharacter = oldCharacter
 			selectedCustomizeSkin = oldSkin
+			selectedCustomizeTitle = oldTitle
 			selectedCustomizeEmote = oldEmote
 			selectedEmoteSlot = oldEmoteSlot
 			emoteStatusMessage = oldEmoteStatusMessage

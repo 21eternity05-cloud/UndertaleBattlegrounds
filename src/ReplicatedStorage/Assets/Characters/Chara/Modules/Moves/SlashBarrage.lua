@@ -1,7 +1,7 @@
 local RunService = game:GetService("RunService")
 
 local SlashBarrage = {
-	DisplayName = "SlashBarrage",
+	DisplayName = "Slash Barrage",
 
 	AnimationName = nil,
 

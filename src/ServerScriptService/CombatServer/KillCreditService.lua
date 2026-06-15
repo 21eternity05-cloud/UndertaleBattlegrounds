@@ -3,12 +3,13 @@ local Players = game:GetService("Players")
 local KillCreditService = {}
 KillCreditService.__index = KillCreditService
 
-function KillCreditService.new(config, progressionService, combatStatusService)
+function KillCreditService.new(config, progressionService, combatStatusService, vfxService)
 	local self = setmetatable({}, KillCreditService)
 
 	self.Config = config
 	self.ProgressionService = progressionService
 	self.CombatStatusService = combatStatusService
+	self.VFXService = vfxService
 	self.SetupCharacters = setmetatable({}, { __mode = "k" })
 	self.AwardedCharacters = setmetatable({}, { __mode = "k" })
 	self.LastHealthByHumanoid = setmetatable({}, { __mode = "k" })
@@ -159,9 +160,20 @@ function KillCreditService:ApplyHealOnKill(attackerCharacter)
 	local humanoid = self:GetHumanoid(attackerCharacter)
 	if not humanoid or humanoid.Health <= 0 then return end
 
+	local oldHealth = humanoid.Health
 	attackerCharacter:SetAttribute("AllowCombatHealUntil", os.clock() + 0.2)
 	humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + healAmount)
 	self.LastHealthByHumanoid[humanoid] = humanoid.Health
+
+	if humanoid.Health > oldHealth then
+		local root = attackerCharacter:FindFirstChild("HumanoidRootPart")
+			or attackerCharacter:FindFirstChild("Torso")
+			or attackerCharacter:FindFirstChild("UpperTorso")
+
+		if root and self.VFXService and self.VFXService.PlayCharacterSFXAtPart then
+			self.VFXService:PlayCharacterSFXAtPart("Universal", "Heal", root, 3)
+		end
+	end
 end
 
 function KillCreditService:AwardKill(attackerCharacter, victimCharacter, reason)
