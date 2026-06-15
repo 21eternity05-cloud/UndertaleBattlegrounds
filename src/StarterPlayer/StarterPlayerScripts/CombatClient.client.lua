@@ -18,6 +18,8 @@ local emoteRemote = remotes:WaitForChild("EmoteRemote")
 
 local assets = ReplicatedStorage:WaitForChild("Assets")
 local charactersFolder = assets:WaitForChild("Characters")
+local ClientModules = script.Parent:WaitForChild("ClientModules")
+local MoveHudController = require(ClientModules:WaitForChild("MoveHudController"))
 
 local mouseHeld = false
 local localM1Cooldown = false
@@ -38,14 +40,9 @@ local currentUltMax = 100
 local currentUltAlpha = 0
 local currentUltFull = false
 
-local ultimateFillTween = nil
-local ULT_BAR_TWEEN_TIME = 0.18
-
 local currentSoulBurst = 0
 local currentSoulBurstMax = 100
 local currentSoulBurstAlpha = 0
-local soulBurstFillTween = nil
-local SOUL_BURST_BAR_TWEEN_TIME = 0.18
 
 local MOVE_KEYS = {
 	[Enum.KeyCode.One] = "Move1",
@@ -89,154 +86,8 @@ local DEFAULT_MOVE_DISPLAY = {
 
 local currentMoveDisplay = table.clone(DEFAULT_MOVE_DISPLAY)
 local localMoveCooldowns = {}
-
-local moveButtons = {}
-local moveButtonStrokes = {}
-local moveNameLabels = {}
-local cooldownOverlays = {}
-local cooldownTexts = {}
-
-local ultimateFill = nil
-local ultimateText = nil
-local ultimateStroke = nil
-local ultimateHeartImage = nil
-local ultimateHeartGlow = nil
-
-local soulBurstFill = nil -- Alias for the heart image fill.
-local soulBurstText = nil
-local soulHeartBackImage = nil
-local soulHeartFillImage = nil
-local soulHeartGlow = nil
-local soulHeartOutlineImage = nil
-
-local SILKSCREEN_FONT = Font.new("rbxassetid://12187371840")
-local UT_BLACK = Color3.fromRGB(0, 0, 0)
-local UT_WHITE = Color3.fromRGB(255, 255, 255)
-local UT_ORANGE = Color3.fromRGB(255, 150, 40)
-local UT_YELLOW = Color3.fromRGB(255, 190, 40)
-local DEFAULT_HEART_COLOR = Color3.fromRGB(220, 20, 45)
-local DEFAULT_ULT_COLOR = Color3.fromRGB(180, 35, 35)
-local DEFAULT_ULT_READY_COLOR = Color3.fromRGB(255, 70, 70)
-
-local HEART_IMAGE = "rbxassetid://125096613002078"
-local FLOWEY_IMAGE = "rbxassetid://15703651166"
-local HEART_GLOW_IMAGE = "rbxassetid://867619398"
-
-local SOUL_HEART_SIZE = 60
-local SOUL_HEART_OUTLINE_SIZE = 68
-local SOUL_GLOW_NORMAL_SIZE = 78
-local SOUL_GLOW_READY_SIZE = 112
-
-local currentHeartColor = DEFAULT_HEART_COLOR
-local currentUltColor = DEFAULT_ULT_COLOR
-local currentUltReadyColor = DEFAULT_ULT_READY_COLOR
-local currentHeartIsWhite = false
 local getCurrentCharacterName
-
-local function applySilkscreen(textObject)
-	local success = pcall(function()
-		textObject.FontFace = SILKSCREEN_FONT
-	end)
-
-	if not success then
-		textObject.Font = Enum.Font.Arcade
-	end
-end
-
-local function addWhiteStroke(instance, thickness)
-	local stroke = instance:FindFirstChildOfClass("UIStroke")
-	if not stroke then
-		stroke = Instance.new("UIStroke")
-		stroke.Parent = instance
-	end
-
-	stroke.Color = UT_WHITE
-	stroke.Thickness = thickness or 3
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.LineJoinMode = Enum.LineJoinMode.Miter
-
-	return stroke
-end
-
-local function removeCorners(instance)
-	for _, child in ipairs(instance:GetChildren()) do
-		if child:IsA("UICorner") then
-			child:Destroy()
-		end
-	end
-end
-
-local function isNearWhite(color)
-	return color.R >= 0.96 and color.G >= 0.96 and color.B >= 0.96
-end
-
-local function lightenColor(color, amount)
-	local alpha = math.clamp(amount or 0.2, 0, 1)
-	return Color3.new(
-		color.R + (1 - color.R) * alpha,
-		color.G + (1 - color.G) * alpha,
-		color.B + (1 - color.B) * alpha
-	)
-end
-
-local function getCharacterVFXColor(characterName, valueName)
-	local characterFolder = charactersFolder:FindFirstChild(characterName)
-	local vfxFolder = characterFolder and characterFolder:FindFirstChild("VFX")
-	local colorValue = vfxFolder and vfxFolder:FindFirstChild(valueName)
-
-	if colorValue and colorValue:IsA("Color3Value") then
-		return colorValue.Value
-	end
-
-	return nil
-end
-
-local function applyCharacterUIColor()
-	local characterName = getCurrentCharacterName()
-	local heartColor = getCharacterVFXColor(characterName, "HeartColor") or DEFAULT_HEART_COLOR
-	local ultColor = getCharacterVFXColor(characterName, "UltColor") or DEFAULT_ULT_COLOR
-
-	currentHeartColor = heartColor
-	currentUltColor = ultColor
-	currentUltReadyColor = lightenColor(ultColor, 0.28)
-	currentHeartIsWhite = isNearWhite(heartColor)
-
-	local heartRotation = currentHeartIsWhite and 180 or 0
-
-	if ultimateHeartImage then
-		ultimateHeartImage.Image = HEART_IMAGE
-		ultimateHeartImage.ImageColor3 = currentHeartColor
-		ultimateHeartImage.Rotation = heartRotation
-	end
-
-	if ultimateHeartGlow then
-		ultimateHeartGlow.ImageColor3 = currentHeartColor
-		ultimateHeartGlow.ImageTransparency = 0.25
-	end
-
-	if soulHeartFillImage then
-		soulHeartFillImage.Image = HEART_IMAGE
-		soulHeartFillImage.ImageColor3 = currentHeartColor
-		soulHeartFillImage.Rotation = heartRotation
-	end
-
-	if soulHeartGlow then
-		soulHeartGlow.ImageColor3 = currentHeartColor
-		soulHeartGlow.ImageTransparency = 0.25
-	end
-
-	if soulHeartBackImage then
-		soulHeartBackImage.Image = HEART_IMAGE
-		soulHeartBackImage.ImageColor3 = UT_BLACK
-		soulHeartBackImage.Rotation = heartRotation
-	end
-
-	if soulHeartOutlineImage then
-		soulHeartOutlineImage.Image = HEART_IMAGE
-		soulHeartOutlineImage.ImageColor3 = UT_BLACK
-		soulHeartOutlineImage.Rotation = heartRotation
-	end
-end
+local moveHudController = nil
 
 local function getCharacter()
 	local character = player.Character
@@ -371,7 +222,7 @@ local function buildMoveDisplayFromModule(characterName)
 	return display
 end
 
-function updateUltimateBar()
+local function updateUltimateHud()
 	local alpha = math.clamp(currentUltAlpha or 0, 0, 1)
 
 	if currentUltMax and currentUltMax > 0 then
@@ -381,51 +232,18 @@ function updateUltimateBar()
 	currentUltAlpha = alpha
 	currentUltFull = alpha >= 1
 
-	if ultimateFill then
-		if ultimateFillTween then
-			ultimateFillTween:Cancel()
-			ultimateFillTween = nil
-		end
-
-		ultimateFillTween = TweenService:Create(
-			ultimateFill,
-			TweenInfo.new(
-				ULT_BAR_TWEEN_TIME,
-				Enum.EasingStyle.Quad,
-				Enum.EasingDirection.Out
-			),
-			{
-				Size = UDim2.fromScale(alpha, 1),
-				BackgroundColor3 = currentUltFull
-					and currentUltReadyColor
-					or currentUltColor,
-			}
-		)
-
-		ultimateFillTween:Play()
-	end
-
-	if ultimateStroke then
-		ultimateStroke.Color = UT_WHITE
-		ultimateStroke.Thickness = 4
-	end
-
-	if ultimateText then
-		local ultName = "Ultimate"
-
-		if currentMoveDisplay.Ultimate and currentMoveDisplay.Ultimate.Name then
-			ultName = currentMoveDisplay.Ultimate.Name
-		end
-
-		if currentUltFull then
-			ultimateText.Text = string.upper(ultName) .. " READY"
-		else
-			ultimateText.Text = string.upper(ultName) .. " " .. tostring(math.floor(alpha * 100)) .. "%"
-		end
+	if moveHudController then
+		moveHudController:UpdateUltimate({
+			Current = currentUlt,
+			Max = currentUltMax,
+			Alpha = currentUltAlpha,
+			Full = currentUltFull,
+			UltName = currentMoveDisplay.Ultimate and currentMoveDisplay.Ultimate.Name,
+		})
 	end
 end
 
-local function updateSoulBurstBar()
+local function updateSoulBurstHud()
 	local alpha = math.clamp(currentSoulBurstAlpha or 0, 0, 1)
 
 	if currentSoulBurstMax and currentSoulBurstMax > 0 then
@@ -434,57 +252,25 @@ local function updateSoulBurstBar()
 
 	currentSoulBurstAlpha = alpha
 
-	if soulHeartFillImage then
-		if soulBurstFillTween then
-			soulBurstFillTween:Cancel()
-			soulBurstFillTween = nil
-		end
-
-		local fillSize = SOUL_HEART_SIZE * alpha
-
-		soulBurstFillTween = TweenService:Create(
-			soulHeartFillImage,
-			TweenInfo.new(
-				SOUL_BURST_BAR_TWEEN_TIME,
-				Enum.EasingStyle.Quad,
-				Enum.EasingDirection.Out
-			),
-			{
-				Size = UDim2.fromOffset(fillSize, fillSize),
-			}
-		)
-
-		soulBurstFillTween:Play()
-	end
-
-	if soulBurstText then
-		soulBurstText.Text = alpha >= 1 and "BURST" or "SOUL"
-	end
-
-	if soulHeartGlow then
-		local glowSize = alpha >= 1 and SOUL_GLOW_READY_SIZE or SOUL_GLOW_NORMAL_SIZE
-		local glowTransparency = alpha >= 1 and 0.18 or 0.28
-
-		soulHeartGlow.Size = UDim2.fromOffset(glowSize, glowSize)
-		soulHeartGlow.ImageTransparency = glowTransparency
-		soulHeartGlow.ImageColor3 = currentHeartColor
+	if moveHudController then
+		moveHudController:UpdateSoulBurst({
+			Current = currentSoulBurst,
+			Max = currentSoulBurstMax,
+			Alpha = currentSoulBurstAlpha,
+		})
 	end
 end
 
 local function refreshMoveDisplay()
 	local characterName = getCurrentCharacterName()
 	currentMoveDisplay = buildMoveDisplayFromModule(characterName)
-	applyCharacterUIColor()
 
-	for slot, label in pairs(moveNameLabels) do
-		local data = currentMoveDisplay[slot]
-		if data then
-			label.Text = data.Name or slot
-		end
+	if moveHudController then
+		moveHudController:RefreshMoveDisplay(currentMoveDisplay)
 	end
 
-	updateUltimateBar()
-	updateSoulBurstBar()
+	updateUltimateHud()
+	updateSoulBurstHud()
 end
 
 local function canRequestAttack()
@@ -584,48 +370,9 @@ local function startLocalCooldown(moveSlot)
 	local cooldown = getCooldownForSlot(moveSlot)
 	local lockTime = getLockTimeForSlot(moveSlot)
 
-	local overlay = cooldownOverlays[moveSlot]
-	local cooldownText = cooldownTexts[moveSlot]
-
-	if not overlay then return end
-
-	task.delay(lockTime, function()
-		if not localMoveCooldowns[moveSlot] then
-			return
-		end
-
-		overlay.Visible = true
-		overlay.Size = UDim2.fromScale(1, 1)
-
-		if cooldownText then
-			cooldownText.Visible = true
-		end
-
-		local startTime = os.clock()
-
-		task.spawn(function()
-			while os.clock() - startTime < cooldown do
-				local elapsed = os.clock() - startTime
-				local remaining = math.max(cooldown - elapsed, 0)
-				local alpha = math.clamp(elapsed / cooldown, 0, 1)
-
-				overlay.Size = UDim2.fromScale(1, 1 - alpha)
-
-				if cooldownText then
-					cooldownText.Text = string.format("%.1f", remaining)
-				end
-
-				task.wait()
-			end
-
-			overlay.Visible = false
-			overlay.Size = UDim2.fromScale(1, 1)
-
-			if cooldownText then
-				cooldownText.Visible = false
-			end
-		end)
-	end)
+	if moveHudController then
+		moveHudController:StartCooldown(moveSlot, cooldown, lockTime)
+	end
 end
 
 local function getMouseTargetCharacter()
@@ -719,11 +466,9 @@ local function requestMove(moveSlot)
 
 	local lockTime = getLockTimeForSlot(moveSlot)
 	local cooldown = lockTime + getCooldownForSlot(moveSlot)
-	local stroke = moveButtonStrokes[moveSlot]
 
-	if stroke then
-		stroke.Color = UT_ORANGE
-		stroke.Thickness = 4
+	if moveHudController then
+		moveHudController:SetActiveMove(moveSlot, true)
 	end
 
 	if moveSlot == "Ultimate" then
@@ -734,9 +479,8 @@ local function requestMove(moveSlot)
 		})
 
 		task.delay(0.35, function()
-			if stroke then
-				stroke.Color = UT_WHITE
-				stroke.Thickness = 3
+			if moveHudController then
+				moveHudController:SetActiveMove(moveSlot, false)
 			end
 		end)
 
@@ -755,285 +499,18 @@ local function requestMove(moveSlot)
 	startLocalCooldown(moveSlot)
 
 	task.delay(math.max(lockTime, 0.15), function()
-		if stroke and localMoveCooldowns[moveSlot] then
-			stroke.Color = UT_WHITE
-			stroke.Thickness = 3
+		if localMoveCooldowns[moveSlot] and moveHudController then
+			moveHudController:SetActiveMove(moveSlot, false)
 		end
 	end)
 
 	task.delay(cooldown, function()
 		localMoveCooldowns[moveSlot] = false
 
-		if stroke then
-			stroke.Color = UT_WHITE
-			stroke.Thickness = 3
+		if moveHudController then
+			moveHudController:SetActiveMove(moveSlot, false)
 		end
 	end)
-end
-
-local function createMoveGui()
-	local oldGui = playerGui:FindFirstChild("MoveHUD")
-	if oldGui then
-		oldGui:Destroy()
-	end
-
-	table.clear(moveButtonStrokes)
-	table.clear(moveButtons)
-	table.clear(moveNameLabels)
-	table.clear(cooldownOverlays)
-	table.clear(cooldownTexts)
-
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "MoveHUD"
-	screenGui.ResetOnSpawn = false
-	screenGui.IgnoreGuiInset = true
-	screenGui.Parent = playerGui
-
-	local holder = Instance.new("Frame")
-	holder.Name = "Holder"
-	holder.AnchorPoint = Vector2.new(0.5, 1)
-	holder.Position = UDim2.fromScale(0.5, 0.965)
-	holder.Size = UDim2.fromOffset(360, 118)
-	holder.BackgroundTransparency = 1
-	holder.Parent = screenGui
-
-	local ultBack = Instance.new("Frame")
-	ultBack.Name = "UltimateBack"
-	ultBack.Position = UDim2.fromOffset(0, 0)
-	ultBack.Size = UDim2.fromOffset(360, 22)
-	ultBack.BackgroundColor3 = UT_BLACK
-	ultBack.BorderSizePixel = 0
-	ultBack.Parent = holder
-
-	ultimateStroke = addWhiteStroke(ultBack, 4)
-
-	ultimateFill = Instance.new("Frame")
-	ultimateFill.Name = "UltimateFill"
-	ultimateFill.Size = UDim2.fromScale(0, 1)
-	ultimateFill.BackgroundColor3 = currentUltColor
-	ultimateFill.BorderSizePixel = 0
-	ultimateFill.Parent = ultBack
-
-	local leftFlowey = Instance.new("ImageLabel")
-	leftFlowey.Name = "LeftFlowey"
-	leftFlowey.BackgroundTransparency = 1
-	leftFlowey.AnchorPoint = Vector2.new(1, 0.5)
-	leftFlowey.Position = UDim2.new(0, -8, 0.5, 0)
-	leftFlowey.Size = UDim2.fromOffset(42, 42)
-	leftFlowey.Image = FLOWEY_IMAGE
-	leftFlowey.Parent = ultBack
-
-	local rightFlowey = Instance.new("ImageLabel")
-	rightFlowey.Name = "RightFlowey"
-	rightFlowey.BackgroundTransparency = 1
-	rightFlowey.AnchorPoint = Vector2.new(0, 0.5)
-	rightFlowey.Position = UDim2.new(1, 8, 0.5, 0)
-	rightFlowey.Size = UDim2.fromOffset(42, 42)
-	rightFlowey.Image = FLOWEY_IMAGE
-	rightFlowey.Parent = ultBack
-
-	ultimateHeartGlow = Instance.new("ImageLabel")
-	ultimateHeartGlow.Name = "HeartGlow"
-	ultimateHeartGlow.BackgroundTransparency = 1
-	ultimateHeartGlow.AnchorPoint = Vector2.new(0.5, 0.5)
-	ultimateHeartGlow.Position = UDim2.new(0.5, 0, 0, -10)
-	ultimateHeartGlow.Size = UDim2.fromOffset(88, 88)
-	ultimateHeartGlow.Image = HEART_GLOW_IMAGE
-	ultimateHeartGlow.ImageColor3 = currentHeartColor
-	ultimateHeartGlow.ImageTransparency = 0.25
-	ultimateHeartGlow.ZIndex = 1
-	ultimateHeartGlow.Parent = ultBack
-
-	ultimateHeartImage = Instance.new("ImageLabel")
-	ultimateHeartImage.Name = "Heart"
-	ultimateHeartImage.BackgroundTransparency = 1
-	ultimateHeartImage.AnchorPoint = Vector2.new(0.5, 0.5)
-	ultimateHeartImage.Position = UDim2.new(0.5, 0, 0, -10)
-	ultimateHeartImage.Size = UDim2.fromOffset(36, 36)
-	ultimateHeartImage.Image = HEART_IMAGE
-	ultimateHeartImage.ImageColor3 = currentHeartColor
-	ultimateHeartImage.Rotation = currentHeartIsWhite and 180 or 0
-	ultimateHeartImage.ZIndex = 2
-	ultimateHeartImage.Parent = ultBack
-
-	ultimateText = Instance.new("TextLabel")
-	ultimateText.Name = "UltimateText"
-	ultimateText.BackgroundTransparency = 1
-	ultimateText.Size = UDim2.fromScale(1, 1)
-	ultimateText.TextSize = 13
-	ultimateText.TextColor3 = UT_WHITE
-	ultimateText.Text = "ULTIMATE 0%"
-	ultimateText.ZIndex = 3
-	ultimateText.Parent = ultBack
-	applySilkscreen(ultimateText)
-
-	local buttonsFrame = Instance.new("Frame")
-	buttonsFrame.Name = "Buttons"
-	buttonsFrame.Position = UDim2.fromOffset(0, 34)
-	buttonsFrame.Size = UDim2.fromOffset(360, 84)
-	buttonsFrame.BackgroundTransparency = 1
-	buttonsFrame.Parent = holder
-
-	local soulBack = Instance.new("Frame")
-	soulBack.Name = "SoulBurstBack"
-	soulBack.Position = UDim2.fromOffset(370, 42)
-	soulBack.Size = UDim2.fromOffset(70, 70)
-	soulBack.BackgroundTransparency = 1
-	soulBack.BorderSizePixel = 0
-	soulBack.ClipsDescendants = false
-	soulBack.Parent = holder
-
-	soulHeartGlow = Instance.new("ImageLabel")
-	soulHeartGlow.Name = "HeartGlow"
-	soulHeartGlow.BackgroundTransparency = 1
-	soulHeartGlow.AnchorPoint = Vector2.new(0.5, 0.5)
-	soulHeartGlow.Position = UDim2.fromScale(0.5, 0.5)
-	soulHeartGlow.Size = UDim2.fromOffset(SOUL_GLOW_NORMAL_SIZE, SOUL_GLOW_NORMAL_SIZE)
-	soulHeartGlow.Image = HEART_GLOW_IMAGE
-	soulHeartGlow.ImageColor3 = currentHeartColor
-	soulHeartGlow.ImageTransparency = 0.28
-	soulHeartGlow.ZIndex = 1
-	soulHeartGlow.Parent = soulBack
-
-	-- Black context heart behind everything. This is the outline/context border.
-	soulHeartOutlineImage = Instance.new("ImageLabel")
-	soulHeartOutlineImage.Name = "HeartContext"
-	soulHeartOutlineImage.BackgroundTransparency = 1
-	soulHeartOutlineImage.AnchorPoint = Vector2.new(0.5, 0.5)
-	soulHeartOutlineImage.Position = UDim2.fromScale(0.5, 0.5)
-	soulHeartOutlineImage.Size = UDim2.fromOffset(SOUL_HEART_OUTLINE_SIZE, SOUL_HEART_OUTLINE_SIZE)
-	soulHeartOutlineImage.Image = HEART_IMAGE
-	soulHeartOutlineImage.ImageColor3 = UT_BLACK
-	soulHeartOutlineImage.Rotation = currentHeartIsWhite and 180 or 0
-	soulHeartOutlineImage.ZIndex = 2
-	soulHeartOutlineImage.Parent = soulBack
-
-	-- Empty black heart background.
-	soulHeartBackImage = Instance.new("ImageLabel")
-	soulHeartBackImage.Name = "HeartBack"
-	soulHeartBackImage.BackgroundTransparency = 1
-	soulHeartBackImage.AnchorPoint = Vector2.new(0.5, 0.5)
-	soulHeartBackImage.Position = UDim2.fromScale(0.5, 0.5)
-	soulHeartBackImage.Size = UDim2.fromOffset(SOUL_HEART_SIZE, SOUL_HEART_SIZE)
-	soulHeartBackImage.Image = HEART_IMAGE
-	soulHeartBackImage.ImageColor3 = UT_BLACK
-	soulHeartBackImage.Rotation = currentHeartIsWhite and 180 or 0
-	soulHeartBackImage.ZIndex = 3
-	soulHeartBackImage.Parent = soulBack
-
-	-- This is the actual fill. It is the heart image itself, scaled from center outward.
-	soulHeartFillImage = Instance.new("ImageLabel")
-	soulHeartFillImage.Name = "SoulFillHeart"
-	soulHeartFillImage.BackgroundTransparency = 1
-	soulHeartFillImage.AnchorPoint = Vector2.new(0.5, 0.5)
-	soulHeartFillImage.Position = UDim2.fromScale(0.5, 0.5)
-	soulHeartFillImage.Size = UDim2.fromOffset(0, 0)
-	soulHeartFillImage.Image = HEART_IMAGE
-	soulHeartFillImage.ImageColor3 = currentHeartColor
-	soulHeartFillImage.Rotation = currentHeartIsWhite and 180 or 0
-	soulHeartFillImage.ZIndex = 4
-	soulHeartFillImage.Parent = soulBack
-
-	soulBurstFill = soulHeartFillImage
-
-	soulBurstText = Instance.new("TextLabel")
-	soulBurstText.Name = "SoulBurstText"
-	soulBurstText.BackgroundTransparency = 1
-	soulBurstText.Size = UDim2.fromScale(1, 1)
-	soulBurstText.TextSize = 11
-	soulBurstText.TextColor3 = UT_WHITE
-	soulBurstText.TextStrokeTransparency = 0.2
-	soulBurstText.TextWrapped = true
-	soulBurstText.Text = "SOUL"
-	soulBurstText.ZIndex = 6
-	soulBurstText.Parent = soulBack
-	applySilkscreen(soulBurstText)
-
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.VerticalAlignment = Enum.VerticalAlignment.Center
-	layout.Padding = UDim.new(0, 8)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = buttonsFrame
-
-	local slots = { "Move1", "Move2", "Move3", "Move4" }
-
-	for index, moveSlot in ipairs(slots) do
-		local data = currentMoveDisplay[moveSlot] or DEFAULT_MOVE_DISPLAY[moveSlot]
-
-		local button = Instance.new("TextButton")
-		button.Name = moveSlot
-		button.LayoutOrder = index
-		button.Size = UDim2.fromOffset(78, 78)
-		button.BackgroundColor3 = UT_BLACK
-		button.BorderSizePixel = 0
-		button.AutoButtonColor = true
-		button.Text = ""
-		button.Parent = buttonsFrame
-
-		local stroke = addWhiteStroke(button, 3)
-
-		local keyLabel = Instance.new("TextLabel")
-		keyLabel.Name = "Key"
-		keyLabel.BackgroundTransparency = 1
-		keyLabel.Position = UDim2.fromOffset(6, 4)
-		keyLabel.Size = UDim2.fromOffset(24, 22)
-		keyLabel.TextSize = 18
-		keyLabel.TextColor3 = UT_WHITE
-		keyLabel.Text = data.Key
-		keyLabel.Parent = button
-		applySilkscreen(keyLabel)
-
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Name = "MoveName"
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.AnchorPoint = Vector2.new(0.5, 1)
-		nameLabel.Position = UDim2.fromScale(0.5, 0.92)
-		nameLabel.Size = UDim2.fromOffset(70, 32)
-		nameLabel.TextSize = 12
-		nameLabel.TextWrapped = true
-		nameLabel.TextColor3 = UT_WHITE
-		nameLabel.Text = data.Name
-		nameLabel.Parent = button
-		applySilkscreen(nameLabel)
-
-		local overlay = Instance.new("Frame")
-		overlay.Name = "CooldownOverlay"
-		overlay.AnchorPoint = Vector2.new(0, 1)
-		overlay.Position = UDim2.fromScale(0, 1)
-		overlay.Size = UDim2.fromScale(1, 1)
-		overlay.BackgroundColor3 = UT_WHITE
-		overlay.BackgroundTransparency = 0.15
-		overlay.BorderSizePixel = 0
-		overlay.Visible = false
-		overlay.Parent = button
-
-		local cooldownText = Instance.new("TextLabel")
-		cooldownText.Name = "CooldownText"
-		cooldownText.BackgroundTransparency = 1
-		cooldownText.Size = UDim2.fromScale(1, 1)
-		cooldownText.TextSize = 22
-		cooldownText.TextColor3 = UT_YELLOW
-		cooldownText.TextStrokeTransparency = 0.4
-		cooldownText.Visible = false
-		cooldownText.Parent = button
-		applySilkscreen(cooldownText)
-
-		moveButtons[moveSlot] = button
-		moveButtonStrokes[moveSlot] = stroke
-		moveNameLabels[moveSlot] = nameLabel
-		cooldownOverlays[moveSlot] = overlay
-		cooldownTexts[moveSlot] = cooldownText
-
-		button.MouseButton1Click:Connect(function()
-			requestMove(moveSlot)
-		end)
-	end
-
-	refreshMoveDisplay()
-	updateUltimateBar()
-	updateSoulBurstBar()
 end
 
 local function requestAttack()
@@ -1097,7 +574,7 @@ ultRemote.OnClientEvent:Connect(function(payload)
 
 		currentUltFull = payload.Full == true or currentUltAlpha >= 1
 
-		updateUltimateBar()
+		updateUltimateHud()
 	end
 end)
 
@@ -1121,7 +598,7 @@ soulBurstRemote.OnClientEvent:Connect(function(payload)
 			currentSoulBurstAlpha = math.clamp(currentSoulBurst / currentSoulBurstMax, 0, 1)
 		end
 
-		updateSoulBurstBar()
+		updateSoulBurstHud()
 	end
 end)
 
@@ -1670,19 +1147,19 @@ local function hookCharacter(character)
 	task.wait(0.25)
 
 	refreshMoveDisplay()
-	updateUltimateBar()
-	updateSoulBurstBar()
+	updateUltimateHud()
+	updateSoulBurstHud()
 
 	character:GetAttributeChangedSignal("CharacterName"):Connect(function()
 		refreshMoveDisplay()
-		updateUltimateBar()
-		updateSoulBurstBar()
+		updateUltimateHud()
+		updateSoulBurstHud()
 	end)
 
 	character:GetAttributeChangedSignal("CombatMode"):Connect(function()
 		refreshMoveDisplay()
-		updateUltimateBar()
-		updateSoulBurstBar()
+		updateUltimateHud()
+		updateSoulBurstHud()
 	end)
 
 	character:GetAttributeChangedSignal("Guardbroken"):Connect(function()
@@ -1694,13 +1171,25 @@ end
 
 player:GetAttributeChangedSignal("CharacterName"):Connect(function()
 	refreshMoveDisplay()
-	updateUltimateBar()
-	updateSoulBurstBar()
+	updateUltimateHud()
+	updateSoulBurstHud()
 end)
 
-player.CharacterAdded:Connect(hookCharacter)
+moveHudController = MoveHudController.new({
+	Player = player,
+	ReplicatedStorage = ReplicatedStorage,
+	CharactersFolder = charactersFolder,
+	TweenService = TweenService,
+	GetCurrentCharacterName = getCurrentCharacterName,
+	GetCurrentCombatMode = getCurrentCombatMode,
+	OnMoveButtonPressed = function(moveSlot)
+		requestMove(moveSlot)
+	end,
+})
+moveHudController:Create()
+refreshMoveDisplay()
 
-createMoveGui()
+player.CharacterAdded:Connect(hookCharacter)
 
 if player.Character then
 	hookCharacter(player.Character)
