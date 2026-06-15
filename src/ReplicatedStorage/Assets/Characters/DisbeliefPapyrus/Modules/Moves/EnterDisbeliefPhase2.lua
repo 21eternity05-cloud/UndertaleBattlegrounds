@@ -24,7 +24,8 @@ local EnterDisbeliefPhase2 = {
 	Guardbreak = false,
 
 	CounterWindow = 1.45,
-	WhiffEndlag = 0.35,
+	CounterGraceTime = 0.15,
+	WhiffEndlag = 0.1,
 	StartupTime = 0.05,
 
 	CounterAnimationName = "EnterDisbeliefPhase2Counter",
@@ -46,10 +47,36 @@ local EnterDisbeliefPhase2 = {
 	BlasterBackwardOffset = 4,
 	BlasterChargeTime = 0.65,
 	BlasterLifetime = 1.8,
+
+	-- This needs to last through the awakening animation, not just the blaster hit.
+	AttackerCounterStun = 7.75,
+	CounterCinematicLockTime = 7.75,
+
+	-- Iframes stay on during the whole counter cinematic, then linger after movement/camera restore.
+	PostCounterIFrameLinger = 2.3,
+
+	-- Camera: in front of Papyrus, looking at him.
+	CounterCameraDistance = 8,
+	CounterCameraHeight = 2.6,
+	CounterCameraLookHeight = 2.2,
+	CounterCameraTweenTime = 0.25,
+
+	-- Optional debug prints.
+	DebugCounter = false,
 }
 
+local function debugPrint(ctx, ...)
+	local moveData = ctx and ctx.MoveData or EnterDisbeliefPhase2
+
+	if moveData.DebugCounter == true then
+		print("[EnterDisbeliefPhase2]", ...)
+	end
+end
+
 local function contextIsActive(ctx)
-	if not ctx then return false end
+	if not ctx then
+		return false
+	end
 
 	if ctx.IsActive and typeof(ctx.IsActive) == "function" then
 		local success, result = pcall(function()
@@ -100,13 +127,17 @@ end
 
 local function fireScreenEffect(character, effectName)
 	local player = getPlayerFromCharacter(character)
-	if not player then return end
+	if not player then
+		return
+	end
 
 	getScreenEffectRemote():FireClient(player, effectName)
 end
 
 local function zeroVelocity(root)
-	if not root or not root.Parent then return end
+	if not root or not root.Parent then
+		return
+	end
 
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
@@ -147,9 +178,15 @@ local function getStoredAttacker(character)
 end
 
 local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx or not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
+	if not ctx or not ctx.VFXService then
+		return
+	end
+	if not ctx.VFXService.PlayCharacterSFXAtPart then
+		return
+	end
+	if not parentPart or not parentPart.Parent then
+		return
+	end
 
 	local success, played = pcall(function()
 		return ctx.VFXService:PlayCharacterSFXAtPart("DisbeliefPapyrus", soundName, parentPart, lifetime or 2)
@@ -163,7 +200,9 @@ local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
 end
 
 local function playCharacterAnimation(ctx, animationName, looped)
-	if not ctx or not ctx.Character then return nil end
+	if not ctx or not ctx.Character then
+		return nil
+	end
 
 	local animationService = ctx.StateService and ctx.StateService.AnimationService
 
@@ -185,10 +224,12 @@ local function playCharacterAnimation(ctx, animationName, looped)
 	return track
 end
 
-local function beginPapyrusIFrames(character)
-	if not character or not character.Parent then return nil end
+local function savePapyrusIFrameState(character)
+	if not character or not character.Parent then
+		return nil
+	end
 
-	local oldState = {
+	return {
 		IFrameActive = character:GetAttribute("IFrameActive"),
 		ArmorActive = character:GetAttribute("ArmorActive"),
 		ArmorDamageReduction = character:GetAttribute("ArmorDamageReduction"),
@@ -196,6 +237,12 @@ local function beginPapyrusIFrames(character)
 		ArmorPreventsKnockback = character:GetAttribute("ArmorPreventsKnockback"),
 		ArmorPreventsHitCancel = character:GetAttribute("ArmorPreventsHitCancel"),
 	}
+end
+
+local function forcePapyrusIFrames(character)
+	if not character or not character.Parent then
+		return
+	end
 
 	character:SetAttribute("IFrameActive", true)
 	character:SetAttribute("ArmorActive", true)
@@ -204,12 +251,20 @@ local function beginPapyrusIFrames(character)
 	character:SetAttribute("ArmorPreventsKnockback", true)
 	character:SetAttribute("ArmorPreventsHitCancel", true)
 
-	return oldState
+	-- Extra move-local flag. This helps debugging and can be used later by shared hit logic if needed.
+	character:SetAttribute("CounterCinematicIFrames", true)
 end
 
 local function restorePapyrusIFrames(character, oldState)
-	if not oldState then return end
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
+
+	character:SetAttribute("CounterCinematicIFrames", false)
+
+	if not oldState then
+		return
+	end
 
 	character:SetAttribute("IFrameActive", oldState.IFrameActive)
 	character:SetAttribute("ArmorActive", oldState.ArmorActive)
@@ -220,7 +275,9 @@ local function restorePapyrusIFrames(character, oldState)
 end
 
 local function beginCinematicLock(character, lockToken)
-	if not character or not character.Parent then return nil end
+	if not character or not character.Parent then
+		return nil
+	end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 
@@ -256,7 +313,9 @@ local function beginCinematicLock(character, lockToken)
 end
 
 local function enforceCinematicLock(character, lockToken)
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	if character:GetAttribute("CinematicLockToken") ~= lockToken then
 		return
@@ -294,10 +353,14 @@ local function enforceCinematicLock(character, lockToken)
 end
 
 local function restoreCinematicLock(oldState, lockToken)
-	if not oldState then return end
+	if not oldState then
+		return
+	end
 
 	local character = oldState.Character
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	if character:GetAttribute("CinematicLockToken") ~= lockToken then
 		return
@@ -326,7 +389,9 @@ local function restoreCinematicLock(oldState, lockToken)
 end
 
 local function softDamageStun(ctx, targetCharacter, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
 
 	if ctx.StateService and ctx.StateService.StunCharacter then
 		pcall(function()
@@ -335,9 +400,48 @@ local function softDamageStun(ctx, targetCharacter, duration)
 	end
 end
 
+local function stunCounterAttacker(ctx, attackerCharacter, duration)
+	if not attackerCharacter or not attackerCharacter.Parent then
+		return
+	end
+
+	duration = duration or 1
+
+	if ctx.StateService and ctx.StateService.StunCharacter then
+		pcall(function()
+			ctx.StateService:StunCharacter(attackerCharacter, duration)
+		end)
+	end
+
+	local humanoid = attackerCharacter:FindFirstChildOfClass("Humanoid")
+	local root = attackerCharacter:FindFirstChild("HumanoidRootPart")
+
+	attackerCharacter:SetAttribute("Stunned", true)
+	attackerCharacter:SetAttribute("Blocking", false)
+	attackerCharacter:SetAttribute("DashLocked", true)
+	attackerCharacter:SetAttribute("MovementLocked", true)
+	attackerCharacter:SetAttribute("M1Locked", true)
+	attackerCharacter:SetAttribute("MoveLocked", true)
+	attackerCharacter:SetAttribute("BlockLocked", true)
+	attackerCharacter:SetAttribute("ActionLocked", true)
+
+	if humanoid and humanoid.Health > 0 then
+		humanoid.WalkSpeed = 0
+		humanoid.Jump = false
+		humanoid.JumpPower = 0
+		humanoid.JumpHeight = 0
+	end
+
+	if root then
+		zeroVelocity(root)
+	end
+end
+
 local function tryCounterServiceStart(ctx, token)
 	local service = ctx.CounterService
-	if not service then return end
+	if not service then
+		return
+	end
 
 	local methods = {
 		"StartCounter",
@@ -364,7 +468,9 @@ end
 
 local function tryCounterServiceEnd(ctx, token)
 	local service = ctx.CounterService
-	if not service then return end
+	if not service then
+		return
+	end
 
 	local methods = {
 		"EndCounter",
@@ -388,7 +494,9 @@ local function enterPhase2Attributes(ctx)
 	local character = ctx.Character
 	local moveData = ctx.MoveData
 
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	character:SetAttribute("CombatMode", "Phase2")
 	character:SetAttribute("AwakeningActive", true)
@@ -399,14 +507,18 @@ local function enterPhase2Attributes(ctx)
 	character:SetAttribute("Phase2Active", true)
 end
 
--- Starts Disbelief Papyrus's awakening music.
--- This must only be called after the counter successfully commits to Phase 2.
 local function startAwakeningTheme(ctx)
-	if not ctx then return end
-	if not ctx.AwakeningMusicService then return end
+	if not ctx then
+		return
+	end
+	if not ctx.AwakeningMusicService then
+		return
+	end
 
 	local character = ctx.Character
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	local player = ctx.Player
 
@@ -436,7 +548,9 @@ end
 
 local function equipPhase2Weapons(ctx)
 	local character = ctx.Character
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
 
 	if ctx.WeaponService and ctx.WeaponService.EquipWeapon then
 		local success = pcall(function()
@@ -457,6 +571,135 @@ local function equipPhase2Weapons(ctx)
 	weaponModule:Equip(character)
 end
 
+local function getPapyrusCameraCFrame(ctx)
+	local root = ctx.Root
+	local moveData = ctx.MoveData or EnterDisbeliefPhase2
+
+	if not root or not root.Parent then
+		return nil
+	end
+
+	local distance = moveData.CounterCameraDistance or 7
+	local height = moveData.CounterCameraHeight or 2.8
+	local lookHeight = moveData.CounterCameraLookHeight or 2.1
+
+	local flatLook = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+
+	if flatLook.Magnitude < 0.05 then
+		flatLook = Vector3.new(0, 0, -1)
+	else
+		flatLook = flatLook.Unit
+	end
+
+	local cameraPosition = root.Position + (flatLook * distance) + Vector3.new(0, height, 0)
+	local lookAtPosition = root.Position + Vector3.new(0, lookHeight, 0)
+
+	return CFrame.lookAt(cameraPosition, lookAtPosition)
+end
+
+local function startPapyrusCamera(ctx, lockToken)
+	if not ctx or not ctx.CinematicService then
+		return false
+	end
+
+	local character = ctx.Character
+	local moveData = ctx.MoveData or EnterDisbeliefPhase2
+
+	if not character or not character.Parent then
+		return false
+	end
+
+	local cameraCFrame = getPapyrusCameraCFrame(ctx)
+	if not cameraCFrame then
+		return false
+	end
+
+	character:SetAttribute("CinematicCameraToken", lockToken)
+
+	local tweenTime = moveData.CounterCameraTweenTime or 0.25
+	local service = ctx.CinematicService
+	local success = false
+
+	if service.TweenCamera then
+		success = pcall(function()
+			service:TweenCamera(character, cameraCFrame, tweenTime)
+		end)
+	end
+
+	if not success and service.SetCamera then
+		success = pcall(function()
+			service:SetCamera(character, cameraCFrame)
+		end)
+	end
+
+	-- Send one hard SetCamera after the tween window. This helps if another local camera update fights the first tween.
+	if success and service.SetCamera then
+		task.delay(tweenTime + 0.05, function()
+			if character and character.Parent and character:GetAttribute("CinematicCameraToken") == lockToken then
+				local lockedCFrame = getPapyrusCameraCFrame(ctx)
+				if lockedCFrame then
+					pcall(function()
+						service:SetCamera(character, lockedCFrame)
+					end)
+				end
+			end
+		end)
+	end
+
+	return success
+end
+
+local function maintainPapyrusCamera(ctx, lockToken)
+	if not ctx or not ctx.CinematicService then
+		return
+	end
+	if not ctx.CinematicService.SetCamera then
+		return
+	end
+
+	local character = ctx.Character
+	if not character or not character.Parent then
+		return
+	end
+	if character:GetAttribute("CinematicCameraToken") ~= lockToken then
+		return
+	end
+
+	local cameraCFrame = getPapyrusCameraCFrame(ctx)
+	if not cameraCFrame then
+		return
+	end
+
+	pcall(function()
+		ctx.CinematicService:SetCamera(character, cameraCFrame)
+	end)
+end
+
+local function resetPapyrusCamera(ctx, lockToken)
+	if not ctx or not ctx.CinematicService then
+		return
+	end
+
+	local character = ctx.Character
+	if not character or not character.Parent then
+		return
+	end
+
+	if character:GetAttribute("CinematicCameraToken") ~= lockToken then
+		return
+	end
+
+	character:SetAttribute("CinematicCameraToken", nil)
+
+	local service = ctx.CinematicService
+
+	if service.ResetCamera then
+		pcall(function()
+			service:ResetCamera(character)
+		end)
+	end
+end
+
 local function findBlasterTemplate()
 	local assets = ReplicatedStorage:WaitForChild("Assets")
 	local charactersFolder = assets:WaitForChild("Characters")
@@ -470,8 +713,7 @@ local function findBlasterTemplate()
 
 	local sans = charactersFolder:FindFirstChild("Sans")
 	if sans and sans:FindFirstChild("VFX") then
-		return sans.VFX:FindFirstChild("GasterBlaster")
-			or sans.VFX:FindFirstChild("Blaster")
+		return sans.VFX:FindFirstChild("GasterBlaster") or sans.VFX:FindFirstChild("Blaster")
 	end
 
 	return nil
@@ -517,7 +759,7 @@ local function getPrimaryPart(object)
 	return nil
 end
 
-local function pivotObject(object, cframe)
+local function pivotVFXObject(object, cframe)
 	if object:IsA("Model") then
 		if getPrimaryPart(object) then
 			object:PivotTo(cframe)
@@ -528,7 +770,9 @@ local function pivotObject(object, cframe)
 end
 
 local function emitParticles(object, wantedNames, fallbackAll)
-	if not object then return end
+	if not object then
+		return
+	end
 
 	local matched = false
 	local wanted = {}
@@ -574,7 +818,9 @@ local function emitParticles(object, wantedNames, fallbackAll)
 end
 
 local function setBeamState(object, enabled)
-	if not object then return end
+	if not object then
+		return
+	end
 
 	for _, descendant in ipairs(object:GetDescendants()) do
 		if descendant:IsA("Beam") or descendant:IsA("Trail") then
@@ -641,7 +887,9 @@ local function getBlasterSidePositions(ctx, targetRoot)
 end
 
 local function spawnGasterBlasters(ctx, targetRoot)
-	if not targetRoot or not targetRoot.Parent then return {} end
+	if not targetRoot or not targetRoot.Parent then
+		return {}
+	end
 
 	local template = findBlasterTemplate()
 	if not template then
@@ -658,7 +906,7 @@ local function spawnGasterBlasters(ctx, targetRoot)
 		prepareVFXObject(blaster)
 		blaster.Parent = workspace
 
-		pivotObject(blaster, CFrame.lookAt(info.Position, targetRoot.Position + Vector3.new(0, 2, 0)))
+		pivotVFXObject(blaster, CFrame.lookAt(info.Position, targetRoot.Position + Vector3.new(0, 2, 0)))
 
 		setBeamState(blaster, false)
 		emitParticles(blaster, { "Charge" }, true)
@@ -696,13 +944,19 @@ local function makeBlasterHitData(moveData)
 
 		Knockback = 0,
 		UpwardKnockback = 0,
+
+		HitCancelsTarget = false,
+		AwardsUlt = false,
 	}
 end
 
-local function applyBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot)
-	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then return end
-
-	local hitData = makeBlasterHitData(ctx.MoveData)
+local function applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData)
+	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then
+		return
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
 
 	if ctx.ApplyStandardHit and typeof(ctx.ApplyStandardHit) == "function" then
 		local success = pcall(function()
@@ -715,11 +969,79 @@ local function applyBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot)
 			)
 		end)
 
-		if success then return end
+		if success then
+			return
+		end
 	end
 
 	targetHumanoid:TakeDamage(hitData.Damage or 18)
 	softDamageStun(ctx, targetCharacter, hitData.Stun or 1.15)
+end
+
+local function applyBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot)
+	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then
+		return
+	end
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
+
+	local hitData = makeBlasterHitData(ctx.MoveData)
+	local hitDone = false
+
+	local function tryHit(hitCharacter, hitHumanoid, hitRoot)
+		if hitDone then
+			return
+		end
+		if hitCharacter ~= targetCharacter then
+			return
+		end
+		if not hitHumanoid or hitHumanoid.Health <= 0 then
+			return
+		end
+		if not hitRoot or not hitRoot.Parent then
+			return
+		end
+
+		hitDone = true
+		applyConfirmedBlasterHit(ctx, hitCharacter, hitHumanoid, hitRoot, hitData)
+	end
+
+	if ctx.HitboxService and ctx.HitboxService.PerformSphereAtCFrame then
+		local success = pcall(function()
+			ctx.HitboxService:PerformSphereAtCFrame(
+				ctx.Character,
+				targetRoot.CFrame,
+				hitData.Radius or 7,
+				function(hitCharacter, hitHumanoid, hitRoot)
+					tryHit(hitCharacter, hitHumanoid, hitRoot)
+				end
+			)
+		end)
+
+		if success and hitDone then
+			return
+		end
+	end
+
+	if ctx.HitboxService and ctx.HitboxService.PerformSphereAtPosition then
+		local success = pcall(function()
+			ctx.HitboxService:PerformSphereAtPosition(
+				ctx.Character,
+				targetRoot.Position,
+				hitData.Radius or 7,
+				function(hitCharacter, hitHumanoid, hitRoot)
+					tryHit(hitCharacter, hitHumanoid, hitRoot)
+				end
+			)
+		end)
+
+		if success and hitDone then
+			return
+		end
+	end
+
+	applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData)
 end
 
 local function chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
@@ -737,19 +1059,31 @@ local function chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
 
 	local moveData = ctx.MoveData
 	local chargeTime = moveData.BlasterChargeTime or 0.65
+	local lockTime = moveData.CounterCinematicLockTime
+		or moveData.AttackerCounterStun
+		or math.max(moveData.TransformFallbackTime or 7, chargeTime + 0.75)
 
 	enforceCinematicLock(attackerCharacter, lockToken)
+	stunCounterAttacker(ctx, attackerCharacter, lockTime)
 	zeroVelocity(attackerRoot)
 
 	local blasters = spawnGasterBlasters(ctx, attackerRoot)
 	playPapyrusSFX(ctx, "Ding", attackerRoot, 2)
 
 	task.delay(chargeTime, function()
-		if not attackerCharacter or not attackerCharacter.Parent then return end
-		if not attackerHumanoid or not attackerHumanoid.Parent or attackerHumanoid.Health <= 0 then return end
-		if not attackerRoot or not attackerRoot.Parent then return end
+		if not attackerCharacter or not attackerCharacter.Parent then
+			return
+		end
+		if not attackerHumanoid or not attackerHumanoid.Parent or attackerHumanoid.Health <= 0 then
+			return
+		end
+		if not attackerRoot or not attackerRoot.Parent then
+			return
+		end
 
 		enforceCinematicLock(attackerCharacter, lockToken)
+		stunCounterAttacker(ctx, attackerCharacter, lockTime)
+
 		fireSpawnedBlasters(ctx, blasters)
 		playPapyrusSFX(ctx, "M1", attackerRoot, 2)
 
@@ -789,11 +1123,22 @@ function EnterDisbeliefPhase2.Execute(context)
 
 	local casterOldState = beginCinematicLock(character, lockToken)
 	local papyrusIFrameState = nil
+	local papyrusIFramesActive = false
+	local protectionActive = false
 
 	local attackerCharacter = nil
 	local attackerOldState = nil
 
-	local lockConnection
+	local counterSucceeded = false
+	local cameraStarted = false
+	local lastCameraMaintain = 0
+
+	local finished = false
+	local triggered = false
+	local counterConnection = nil
+	local lockConnection = nil
+	local protectionConnection = nil
+
 	lockConnection = RunService.Heartbeat:Connect(function()
 		if character and character.Parent then
 			enforceCinematicLock(character, lockToken)
@@ -804,14 +1149,42 @@ function EnterDisbeliefPhase2.Execute(context)
 		end
 	end)
 
-	local counterTrack = playCharacterAnimation(ctx, moveData.CounterAnimationName or "EnterDisbeliefPhase2Counter", true)
+	protectionConnection = RunService.Heartbeat:Connect(function()
+		if not protectionActive then
+			return
+		end
+
+		if character and character.Parent then
+			forcePapyrusIFrames(character)
+		end
+
+		if cameraStarted then
+			local now = os.clock()
+
+			-- Do not spam every frame, but keep the camera locked if another camera script fights it.
+			if now - lastCameraMaintain >= 0.35 then
+				lastCameraMaintain = now
+				maintainPapyrusCamera(ctx, lockToken)
+			end
+		end
+	end)
+
+	local counterTrack =
+		playCharacterAnimation(ctx, moveData.CounterAnimationName or "EnterDisbeliefPhase2Counter", false)
 	playPapyrusSFX(ctx, "Summon", root, 2)
 
 	task.wait(moveData.StartupTime or 0.05)
 
 	if not contextIsActive(ctx) or not character.Parent or humanoid.Health <= 0 then
-		if lockConnection then lockConnection:Disconnect() end
-		if counterTrack and counterTrack.IsPlaying then counterTrack:Stop(0.05) end
+		if lockConnection then
+			lockConnection:Disconnect()
+		end
+		if protectionConnection then
+			protectionConnection:Disconnect()
+		end
+		if counterTrack and counterTrack.IsPlaying then
+			counterTrack:Stop(0.05)
+		end
 
 		restorePapyrusIFrames(character, papyrusIFrameState)
 		restoreCinematicLock(casterOldState, lockToken)
@@ -823,6 +1196,9 @@ function EnterDisbeliefPhase2.Execute(context)
 	local attackerValue = getOrCreateCounterAttackerValue(character)
 	attackerValue.Value = nil
 
+	-- Important:
+	-- Do NOT set IFrameActive here.
+	-- NPCM1 / player M1 must be allowed to touch Papyrus so CounterService can trigger.
 	character:SetAttribute("Countering", true)
 	character:SetAttribute("CounterTriggered", false)
 	character:SetAttribute("CounterToken", counterToken)
@@ -830,10 +1206,6 @@ function EnterDisbeliefPhase2.Execute(context)
 	character:SetAttribute("CounterAttackName", nil)
 
 	tryCounterServiceStart(ctx, counterToken)
-
-	local finished = false
-	local triggered = false
-	local counterConnection
 
 	local function cleanupCounterState()
 		if character and character.Parent and character:GetAttribute("CounterToken") == counterToken then
@@ -847,9 +1219,53 @@ function EnterDisbeliefPhase2.Execute(context)
 		tryCounterServiceEnd(ctx, counterToken)
 	end
 
+	local function disconnectProtectionAfterRestore()
+		protectionActive = false
+
+		if protectionConnection then
+			protectionConnection:Disconnect()
+			protectionConnection = nil
+		end
+	end
+
+	local function restoreIFramesWithLinger()
+		if not papyrusIFrameState then
+			disconnectProtectionAfterRestore()
+			if character and character.Parent then
+				character:SetAttribute("CounterCinematicIFrames", false)
+			end
+			return
+		end
+
+		if counterSucceeded then
+			local linger = moveData.PostCounterIFrameLinger or EnterDisbeliefPhase2.PostCounterIFrameLinger or 1.6
+
+			debugPrint(ctx, "Iframe linger started:", linger)
+
+			task.delay(linger, function()
+				if character and character.Parent then
+					restorePapyrusIFrames(character, papyrusIFrameState)
+				end
+
+				disconnectProtectionAfterRestore()
+				debugPrint(ctx, "Iframe linger ended")
+			end)
+		else
+			if character and character.Parent then
+				restorePapyrusIFrames(character, papyrusIFrameState)
+			end
+
+			disconnectProtectionAfterRestore()
+		end
+	end
+
 	local function finish(delayTime)
-		if finished then return end
+		if finished then
+			return
+		end
 		finished = true
+
+		debugPrint(ctx, "Finish called. CounterSucceeded:", counterSucceeded)
 
 		if counterConnection then
 			counterConnection:Disconnect()
@@ -864,34 +1280,71 @@ function EnterDisbeliefPhase2.Execute(context)
 				lockConnection = nil
 			end
 
-			restorePapyrusIFrames(character, papyrusIFrameState)
+			if cameraStarted then
+				resetPapyrusCamera(ctx, lockToken)
+				cameraStarted = false
+			end
+
 			restoreCinematicLock(attackerOldState, lockToken)
 			restoreCinematicLock(casterOldState, lockToken)
+
+			-- Keep Papyrus protected after the animation ends, then restore.
+			restoreIFramesWithLinger()
 
 			finishContext(ctx)
 		end)
 	end
 
+	local function beginTransformIFramesOnce()
+		if papyrusIFramesActive then
+			return
+		end
+		papyrusIFramesActive = true
+		papyrusIFrameState = savePapyrusIFrameState(character)
+		protectionActive = true
+		forcePapyrusIFrames(character)
+		debugPrint(ctx, "Transform iframes started")
+	end
+
 	local function triggerUltimate()
-		if finished or triggered then return end
-		if character:GetAttribute("CounterToken") ~= counterToken then return end
+		if finished or triggered then
+			return
+		end
+		if character:GetAttribute("CounterToken") ~= counterToken then
+			return
+		end
 
 		triggered = true
+		counterSucceeded = true
+
+		debugPrint(ctx, "Counter triggered")
+
+		-- Successful counter confirmed:
+		-- Papyrus now gets protected. This protection is re-applied every Heartbeat until after linger.
+		beginTransformIFramesOnce()
+
+		cameraStarted = startPapyrusCamera(ctx, lockToken)
+		lastCameraMaintain = os.clock()
+		debugPrint(ctx, "Camera started:", cameraStarted)
 
 		attackerCharacter = getStoredAttacker(character)
 
 		if attackerCharacter then
 			attackerOldState = beginCinematicLock(attackerCharacter, lockToken)
+
+			local lockTime = moveData.CounterCinematicLockTime
+				or moveData.AttackerCounterStun
+				or (moveData.TransformFallbackTime or 7)
+
+			stunCounterAttacker(ctx, attackerCharacter, lockTime)
+			enforceCinematicLock(attackerCharacter, lockToken)
+			debugPrint(ctx, "Attacker locked:", attackerCharacter.Name, lockTime)
 		end
 
 		character:SetAttribute("Countering", false)
 		character:SetAttribute("CounterTriggered", true)
 
 		enforceCinematicLock(character, lockToken)
-
-		if attackerCharacter then
-			enforceCinematicLock(attackerCharacter, lockToken)
-		end
 
 		playPapyrusSFX(ctx, "Ding", root, 2)
 
@@ -901,9 +1354,8 @@ function EnterDisbeliefPhase2.Execute(context)
 
 		task.wait(0.05)
 
-		papyrusIFrameState = beginPapyrusIFrames(character)
-
-		local transformTrack = playCharacterAnimation(ctx, moveData.TransformAnimationName or "EnterDisbeliefPhase2Transform", false)
+		local transformTrack =
+			playCharacterAnimation(ctx, moveData.TransformAnimationName or "EnterDisbeliefPhase2Transform", false)
 
 		local blackScreenStarted = false
 		local blackScreenEnded = false
@@ -912,30 +1364,38 @@ function EnterDisbeliefPhase2.Execute(context)
 		local blasterFired = false
 
 		local function setPhase2AttributesOnce()
-			if phase2AttributesSet then return end
+			if phase2AttributesSet then
+				return
+			end
 			phase2AttributesSet = true
 
 			enterPhase2Attributes(ctx)
-
-			-- AwakeningTheme starts only after the counter succeeded and Phase 2 is actually committed.
-			-- Do not move this to Execute startup, G press, or counter-window startup.
 			startAwakeningTheme(ctx)
+			debugPrint(ctx, "Phase 2 attributes set")
 		end
 
 		local function weaponChangeOnce()
-			if weaponChanged then return end
+			if weaponChanged then
+				return
+			end
 			weaponChanged = true
 
 			setPhase2AttributesOnce()
 			equipPhase2Weapons(ctx)
+			debugPrint(ctx, "Weapons changed")
 		end
 
 		local function gasterBlasterOnce()
-			if blasterFired then return end
+			if blasterFired then
+				return
+			end
 			blasterFired = true
 
 			if attackerCharacter then
 				chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
+				debugPrint(ctx, "Counter blasters fired")
+			else
+				debugPrint(ctx, "No attacker found for blasters")
 			end
 		end
 
@@ -943,6 +1403,7 @@ function EnterDisbeliefPhase2.Execute(context)
 			if blackScreenStarted and not blackScreenEnded then
 				blackScreenEnded = true
 				fireScreenEffect(character, "BlackScreenEnd")
+				debugPrint(ctx, "Forced BlackScreenEnd")
 			end
 		end
 
@@ -952,23 +1413,37 @@ function EnterDisbeliefPhase2.Execute(context)
 			transformTrack:GetMarkerReachedSignal(moveData.BlackScreenMarkerName or "BlackScreen"):Connect(function()
 				blackScreenStarted = true
 				fireScreenEffect(character, "BlackScreen")
+				debugPrint(ctx, "BlackScreen marker")
 			end)
 
 			transformTrack:GetMarkerReachedSignal(moveData.WeaponChangeMarkerName or "WeaponChange"):Connect(function()
 				weaponChangeOnce()
+				debugPrint(ctx, "WeaponChange marker")
 			end)
 
-			transformTrack:GetMarkerReachedSignal(moveData.GasterBlasterMarkerName or "GasterBlaster"):Connect(function()
-				gasterBlasterOnce()
-			end)
+			transformTrack
+				:GetMarkerReachedSignal(moveData.GasterBlasterMarkerName or "GasterBlaster")
+				:Connect(function()
+					gasterBlasterOnce()
+					debugPrint(ctx, "GasterBlaster marker")
+				end)
 
-			transformTrack:GetMarkerReachedSignal(moveData.BlackScreenEndMarkerName or "BlackScreenEnd"):Connect(function()
-				blackScreenEnded = true
-				fireScreenEffect(character, "BlackScreenEnd")
-				setPhase2AttributesOnce()
-			end)
+			transformTrack
+				:GetMarkerReachedSignal(moveData.BlackScreenEndMarkerName or "BlackScreenEnd")
+				:Connect(function()
+					blackScreenEnded = true
+					fireScreenEffect(character, "BlackScreenEnd")
+					setPhase2AttributesOnce()
+
+					-- Important:
+					-- Do NOT reset camera or remove iframes here.
+					-- The camera/iframes last until the whole transform animation ends.
+					debugPrint(ctx, "BlackScreenEnd marker")
+				end)
 
 			transformTrack.Stopped:Connect(function()
+				debugPrint(ctx, "Transform animation stopped")
+
 				setPhase2AttributesOnce()
 
 				if not weaponChanged then
@@ -979,16 +1454,18 @@ function EnterDisbeliefPhase2.Execute(context)
 				finish(0)
 			end)
 
-			pcall(function()
-				if transformTrack.IsPlaying then
-					transformTrack:Stop(0)
+			-- IMPORTANT:
+			-- Do not Stop/Play this track here.
+			-- playCharacterAnimation already started the animation.
+			-- Stopping here can fire transformTrack.Stopped instantly and end camera/iframes too early.
+		else
+			debugPrint(ctx, "Missing transform track, using fallback")
+
+			task.delay(moveData.TransformFallbackTime or 7, function()
+				if finished then
+					return
 				end
 
-				transformTrack.TimePosition = 0
-				transformTrack:Play(0.05, 1, 1)
-			end)
-		else
-			task.delay(moveData.TransformFallbackTime or 7, function()
 				setPhase2AttributesOnce()
 
 				if not weaponChanged then
@@ -1001,7 +1478,11 @@ function EnterDisbeliefPhase2.Execute(context)
 		end
 
 		task.delay(moveData.TransformFallbackTime or 7, function()
-			if finished then return end
+			if finished then
+				return
+			end
+
+			debugPrint(ctx, "Transform fallback finished")
 
 			setPhase2AttributesOnce()
 
@@ -1022,8 +1503,11 @@ function EnterDisbeliefPhase2.Execute(context)
 
 	local startTime = os.clock()
 	local counterWindow = moveData.CounterWindow or 1.45
+	local graceTime = moveData.CounterGraceTime or 0.15
+	local counterEndTime = startTime + counterWindow
+	local graceEndTime = counterEndTime + graceTime
 
-	while contextIsActive(ctx) and not finished and os.clock() - startTime < counterWindow do
+	while contextIsActive(ctx) and not finished and os.clock() < counterEndTime do
 		enforceCinematicLock(character, lockToken)
 
 		if character:GetAttribute("CounterTriggered") == true then
@@ -1035,11 +1519,26 @@ function EnterDisbeliefPhase2.Execute(context)
 	end
 
 	if not finished and not triggered then
+		while contextIsActive(ctx) and not finished and os.clock() < graceEndTime do
+			enforceCinematicLock(character, lockToken)
+
+			if character:GetAttribute("CounterTriggered") == true then
+				triggerUltimate()
+				break
+			end
+
+			task.wait()
+		end
+	end
+
+	if not finished and not triggered then
+		debugPrint(ctx, "Counter whiffed")
+
 		if counterTrack and counterTrack.IsPlaying then
 			counterTrack:Stop(0.08)
 		end
 
-		finish(moveData.WhiffEndlag or 0.35)
+		finish(moveData.WhiffEndlag or 0.1)
 	end
 end
 

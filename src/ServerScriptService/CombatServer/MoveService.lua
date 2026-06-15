@@ -34,6 +34,7 @@ function MoveService.new(
 
 	self.LoadedMoveModules = {}
 	self.Cooldowns = {}
+	self.ActiveMoveContexts = {}
 
 	local assetsFolder = ReplicatedStorage:WaitForChild(config.AssetsFolderName or "Assets")
 	self.CharactersFolder = assetsFolder:WaitForChild(config.CharactersFolderName or "Characters")
@@ -305,6 +306,12 @@ function MoveService:EndMove(character, moveToken)
 		return
 	end
 
+	if self.ActiveMoveContexts[character]
+		and self.ActiveMoveContexts[character].MoveToken == moveToken
+	then
+		self.ActiveMoveContexts[character] = nil
+	end
+
 	character:SetAttribute("UsingMove", false)
 
 	if self.CombatStatusService then
@@ -312,6 +319,37 @@ function MoveService:EndMove(character, moveToken)
 	end
 
 	self:RestoreMoveMovement(character)
+end
+
+function MoveService:TryRequestBadTimeEarlyCancel(player, character, moveSlot)
+	if moveSlot ~= "Ultimate" then
+		return false
+	end
+	if not player or not character or player.Character ~= character then
+		return false
+	end
+
+	local context = self.ActiveMoveContexts[character]
+	if not context or context.Player ~= player then
+		return false
+	end
+	if not context:IsActive() then
+		return false
+	end
+	if context.MoveId ~= "BadTime"
+		and not (context.MoveData and context.MoveData.DisplayName == "Bad Time")
+	then
+		return false
+	end
+	if context.BadTimeFinaleStarted == true then
+		return true
+	end
+	if context.BadTimeCanEarlyCancel ~= true then
+		return false
+	end
+
+	context.BadTimeEarlyCancelRequested = true
+	return true
 end
 
 function MoveService:BuildAttackData(baseData, extraData)
@@ -845,6 +883,10 @@ function MoveService:PerformMove(player, moveRequest)
 		return
 	end
 
+	if self:TryRequestBadTimeEarlyCancel(player, character, moveSlot) then
+		return
+	end
+
 	if moveSlot == "Ultimate" then
 		if not self.UltService or not self.UltService:CanUseUltimate(player) then
 			warn("[MoveService] Ultimate is not ready")
@@ -931,6 +973,8 @@ function MoveService:PerformMove(player, moveRequest)
 		moveToken,
 		payload
 	)
+
+	self.ActiveMoveContexts[character] = context
 
 	if moveData.Execute then
 		task.spawn(function()

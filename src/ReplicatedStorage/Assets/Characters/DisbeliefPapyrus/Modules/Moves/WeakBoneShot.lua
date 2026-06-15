@@ -1,6 +1,10 @@
 -- WeakBoneShot
 -- ReplicatedStorage > Assets > Characters > DisbeliefPapyrus > Modules > Moves > WeakBoneShot
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
 local WeakBoneShot = {
 	DisplayName = "Weak Bone Shot",
 	AnimationName = "WeakBoneShot",
@@ -49,8 +53,6 @@ local WeakBoneShot = {
 }
 
 local function getBoneTemplate(ctx)
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
 	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
 	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
 
@@ -279,8 +281,6 @@ local function setVisualTransparency(projectile, transparency)
 end
 
 local function tweenBoneIntoFormation(projectile, startCFrame, endCFrame, data)
-	local TweenService = game:GetService("TweenService")
-
 	local cframeValue = Instance.new("CFrameValue")
 	cframeValue.Value = startCFrame
 
@@ -339,6 +339,9 @@ local function tweenBoneIntoFormation(projectile, startCFrame, endCFrame, data)
 end
 
 local function setProjectileSpawnProperties(projectile)
+	projectile:SetAttribute("IsProjectile", true)
+	projectile:SetAttribute("ProjectileOwner", "WeakBoneShot")
+
 	for _, descendant in ipairs(projectile:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = true
@@ -346,6 +349,8 @@ local function setProjectileSpawnProperties(projectile)
 			descendant.CanTouch = false
 			descendant.CanQuery = false
 			descendant.Massless = true
+			descendant:SetAttribute("IsProjectile", true)
+			descendant:SetAttribute("ProjectileOwner", "WeakBoneShot")
 		end
 	end
 
@@ -355,16 +360,38 @@ local function setProjectileSpawnProperties(projectile)
 		projectile.CanTouch = false
 		projectile.CanQuery = false
 		projectile.Massless = true
+		projectile:SetAttribute("IsProjectile", true)
+		projectile:SetAttribute("ProjectileOwner", "WeakBoneShot")
 	end
 
 	forcePrimaryInvisible(projectile)
 end
 
+local function buildProjectileIgnoreList(ctx, launchedBone, allBones)
+	local ignore = {}
+
+	if ctx.Character then
+		table.insert(ignore, ctx.Character)
+	end
+
+	if allBones then
+		for _, boneData in ipairs(allBones) do
+			if boneData.Bone then
+				table.insert(ignore, boneData.Bone)
+			end
+		end
+	end
+
+	if launchedBone then
+		table.insert(ignore, launchedBone)
+	end
+
+	return ignore
+end
+
 function WeakBoneShot.Execute(ctx)
 	local data = ctx.MoveData
 	local root = ctx.Root
-
-	local Debris = game:GetService("Debris")
 
 	if not ctx.ProjectileService then
 		warn("[WeakBoneShot] Missing ProjectileService in move context")
@@ -488,9 +515,12 @@ function WeakBoneShot.Execute(ctx)
 		local _, _, currentTargetRoot = ctx:GetValidTarget()
 
 		if currentTargetRoot then
+			local ignoreList = buildProjectileIgnoreList(ctx, bone, bones)
+
 			ctx.ProjectileService:LaunchProjectile({
 				OwnerCharacter = ctx.Character,
 				Projectile = bone,
+				CollisionProfile = "BoneProjectile",
 				TargetRoot = currentTargetRoot,
 
 				Speed = data.ProjectileSpeed or 145,
@@ -507,6 +537,8 @@ function WeakBoneShot.Execute(ctx)
 				DestroyOnExpire = true,
 				FadeLifetime = 0.2,
 
+				IgnoreInstances = ignoreList,
+
 				HitSoundCharacter = "DisbeliefPapyrus",
 				HitSoundName = "M1",
 
@@ -518,16 +550,13 @@ function WeakBoneShot.Execute(ctx)
 					end
 				end,
 
-				OnHit = function(targetCharacter2, targetHumanoid2, targetRoot2, result)
-					print("[WeakBoneShot] Projectile result:", result)
+				OnHit = function(hitInfo)
 				end,
 
-				OnWorldHit = function(projectile)
-					print("[WeakBoneShot] Projectile hit world")
+				OnWorldHit = function(hitInfo)
 				end,
 
 				OnExpire = function(projectile)
-					print("[WeakBoneShot] Projectile expired")
 				end,
 			})
 		else

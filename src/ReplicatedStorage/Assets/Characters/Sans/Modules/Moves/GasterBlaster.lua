@@ -34,18 +34,23 @@ local GasterBlaster = {
 	FinalUpwardKnockback = 28,
 	UseAttackerPositionForFinalKnockback = true,
 	FinalKnockbackSource = "Attacker",
+	FinalKnockbackDuration = 0.28,
+	FinalKnockbackMaxForce = 130000,
 
 	Blockable = true,
 	CanBeBlocked = true,
 	Unblockable = false,
 
+	-- Whole beam guardbreaks now, not just the final tick.
 	Guardbreak = true,
-	GuardbreakFinalOnly = true,
-	GuardbreakStun = 1.35,
+	GuardbreakFinalOnly = false,
+	GuardbreakStun = 2.45,
 
 	CanBeCountered = true,
 	AllowLongRangeCounter = false,
-	HitCancelsTarget = true,
+
+	-- Do not cancel the victim's current move/action.
+	HitCancelsTarget = false,
 	CancelableByHit = true,
 
 	SpawnOffset = CFrame.new(0, 4.5, -5.5),
@@ -601,6 +606,60 @@ local function createBeamVisual(startPosition, direction, data, isFinalTick)
 	Debris:AddItem(beam, fadeTime + 0.08)
 end
 
+local function getFinalKnockbackDirection(ctx, data, targetRoot, beamDirection)
+	local direction = beamDirection
+
+	if data.UseAttackerPositionForFinalKnockback == true or data.FinalKnockbackSource == "Attacker" then
+		local root = ctx.Root
+
+		if root and root.Parent and targetRoot and targetRoot.Parent then
+			local fromAttacker = targetRoot.Position - root.Position
+			local flat = Vector3.new(fromAttacker.X, 0, fromAttacker.Z)
+
+			if flat.Magnitude >= 0.05 then
+				direction = flat.Unit
+			end
+		end
+	end
+
+	if not direction or direction.Magnitude < 0.05 then
+		direction = Vector3.new(0, 0, -1)
+	else
+		direction = direction.Unit
+	end
+
+	return direction
+end
+
+local function applyManualFinalKnockback(ctx, data, targetRoot, beamDirection)
+	if not targetRoot or not targetRoot.Parent then return end
+
+	local direction = getFinalKnockbackDirection(ctx, data, targetRoot, beamDirection)
+	local speed = data.FinalKnockback or data.Knockback or 95
+	local upward = data.FinalUpwardKnockback or data.UpwardKnockback or 28
+	local duration = data.FinalKnockbackDuration or data.KnockbackDuration or 0.28
+	local maxForce = data.FinalKnockbackMaxForce or data.KnockbackMaxForce or 130000
+	local velocity = (direction * speed) + Vector3.new(0, upward, 0)
+
+	if ctx.MovementService and ctx.MovementService.ApplyForceKnockback then
+		ctx.MovementService:ApplyForceKnockback(
+			targetRoot,
+			velocity,
+			duration,
+			maxForce,
+			"GasterBlasterFinal",
+			{
+				EnableWallComboPrevention = data.WallComboPrevention == true,
+				AttackerCharacter = ctx.Character,
+			}
+		)
+
+		return
+	end
+
+	targetRoot.AssemblyLinearVelocity = velocity
+end
+
 function GasterBlaster.Execute(ctx)
 	local data = ctx.MoveData
 	local character = ctx.Character
@@ -696,6 +755,30 @@ function GasterBlaster.Execute(ctx)
 	local finalBeamPolishPlayed = false
 	local hitPolishLastPlayed = {}
 
+	-- Tracks anyone guardbroken by this beam. If they are guardbroken,
+	-- the final tick will NOT launch them, so Sans can combo extend.
+	local guardbrokenTargets = {}
+	local finalKnockbackApplied = {}
+	local currentBeamTickIsFinal = false
+
+	local beamAttackData = {}
+
+	for key, value in pairs(data) do
+		beamAttackData[key] = value
+	end
+
+	beamAttackData.Guardbreak = true
+	beamAttackData.GuardbreakFinalOnly = false
+	beamAttackData.HitCancelsTarget = false
+
+	-- Important:
+	-- ProjectileService normally applies beam knockback inside ApplyProjectileHit.
+	-- We zero it here and manually apply final knockback only to targets that were NOT guardbroken.
+	beamAttackData.Knockback = 0
+	beamAttackData.UpwardKnockback = 0
+	beamAttackData.FinalKnockback = 0
+	beamAttackData.FinalUpwardKnockback = 0
+
 	ctx.ProjectileService:RunBeam({
 		OwnerCharacter = character,
 		BeamStartPosition = beamStart,
@@ -703,7 +786,7 @@ function GasterBlaster.Execute(ctx)
 		BeamDirection = direction,
 		KnockbackDirection = direction,
 
-		AttackData = data,
+		AttackData = beamAttackData,
 		AttackName = ctx.MoveId or "GasterBlaster",
 
 		BeamLength = data.BeamLength or 90,
@@ -720,6 +803,7 @@ function GasterBlaster.Execute(ctx)
 			beamTickCount += 1
 
 			local isFinalTick = beamTickCount >= expectedTicks
+			currentBeamTickIsFinal = isFinalTick
 
 			createBeamVisual(beamStart, direction, data, isFinalTick)
 
@@ -730,14 +814,17 @@ function GasterBlaster.Execute(ctx)
 		end,
 
 		OnBeamHit = function(targetCharacter, targetHumanoid, targetRoot, result)
-			if result == "Hit" or result == "ArmoredHit" then
-				print("[GasterBlaster] Hit:", targetCharacter.Name)
-			elseif result == "Guardbreak" then
-				print("[GasterBlaster] Guardbreak:", targetCharacter.Name)
-			elseif result == "Blocked" then
-				print("[GasterBlaster] Blocked:", targetCharacter.Name)
-			elseif result == "Countered" then
-				print("[GasterBlaster] Countered:", targetCharacter.Name)
+			if result == "Guardbreak" then
+				guardbrokenTargets[targetCharacter] = true
+			end
+
+			if currentBeamTickIsFinal
+				and result == "Hit"
+				and not guardbrokenTargets[targetCharacter]
+				and not finalKnockbackApplied[targetCharacter]
+			then
+				finalKnockbackApplied[targetCharacter] = true
+				applyManualFinalKnockback(ctx, data, targetRoot, direction)
 			end
 
 			local now = os.clock()

@@ -30,6 +30,10 @@ local selectedSlot = 1
 local selectedEmoteId = nil
 local wheelOpen = false
 
+local function setMouseFreeMode(active)
+	player:SetAttribute("MouseFreeMode", active == true)
+end
+
 local function getCharacter()
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -202,6 +206,7 @@ local function createWheel()
 			end
 			gui.Enabled = false
 			wheelOpen = false
+			setMouseFreeMode(false)
 		end)
 
 		buttons[index] = button
@@ -249,6 +254,7 @@ local function openWheel()
 	highlightSelection(selectedSlot or 1)
 	gui.Enabled = true
 	wheelOpen = true
+	setMouseFreeMode(true)
 	selectFromMouse()
 end
 
@@ -259,6 +265,7 @@ local function closeWheel(playSelection)
 
 	gui.Enabled = false
 	wheelOpen = false
+	setMouseFreeMode(false)
 
 	if playSelection and selectedEmoteId then
 		requestPlay(selectedEmoteId)
@@ -315,6 +322,7 @@ end)
 
 player.CharacterAdded:Connect(function()
 	closeWheel(false)
+	setMouseFreeMode(false)
 end)
 
 createWheel()

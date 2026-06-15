@@ -19,7 +19,7 @@ local BadTime = {
 	RequiresAim = false,
 
 	WarningTime = 0.8,
-	ConfirmRange = 80,
+	ConfirmRange = math.huge,
 
 	SequenceTime = 25,
 
@@ -89,11 +89,8 @@ local BadTime = {
 	GravitySpamTotalDamage = 10,
 	FinalSlamDamage = 35,
 
-	-- Bad Time transition cut timing.
-	-- Undertale-style: instant black, teleport cue, instant unblack, teleport cue.
 	TransitionBlackTime = 0.14,
 
-	-- Consistent Sans polish.
 	SequenceHitVictimShakeMagnitude = 0.45,
 	SequenceHitVictimShakeRoughness = 8,
 	SequenceHitVictimShakeDuration = 0.09,
@@ -219,6 +216,10 @@ local function fireScreenEffect(character, effectNameOrPayload)
 	end
 
 	getScreenEffectRemote():FireClient(player, effectNameOrPayload)
+end
+
+local function shouldSkipToBadTimeFinale(ctx)
+	return ctx.BadTimeEarlyCancelRequested == true
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
@@ -879,7 +880,6 @@ local function makeSequenceAttackData(blockMode)
 		CanBeBlocked = true,
 		Unblockable = false,
 
-		-- All-round block ignores facing direction. Normal block uses front-block checks.
 		IgnoreBlockDirection = isAllRoundBlock,
 		AllRoundBlock = isAllRoundBlock,
 
@@ -897,15 +897,7 @@ local function makeAllRoundBlockableAttackData()
 	return makeSequenceAttackData(BLOCK_MODE_ALL_ROUND)
 end
 
-local function blockableSequenceDamage(
-	ctx,
-	targetCharacter,
-	targetHumanoid,
-	targetRoot,
-	sourcePosition,
-	damage,
-	blockMode
-)
+local function blockableSequenceDamage(ctx, targetCharacter, targetHumanoid, targetRoot, sourcePosition, damage, blockMode)
 	if not isReservedVictim(ctx, targetCharacter) then
 		return false
 	end
@@ -949,10 +941,6 @@ local function teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 		transitionTime = math.max(0, ctx.MoveData.TransitionBlackTime)
 	end
 
-	-- Bad Time / Undertale-style transition:
-	-- instant black screen + Teleport sound,
-	-- move victim while black,
-	-- instant unblack + same Teleport sound.
 	fireScreenEffect(targetCharacter, "BlackScreen")
 	playSansSFX(ctx, "Teleport", targetRoot, 2)
 
@@ -1000,7 +988,7 @@ local function cloneM1Bone(ctx)
 end
 
 local function spawnBoneShotAtVictim(ctx, data, index, count)
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		return
 	end
 
@@ -1045,9 +1033,7 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 	local tween = TweenService:Create(
 		cframeValue,
 		TweenInfo.new(data.BoneShotTravelTime or 0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{
-			Value = endCFrame,
-		}
+		{ Value = endCFrame }
 	)
 
 	tween:Play()
@@ -1059,7 +1045,7 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 
 		cframeValue:Destroy()
 
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			fadeOutObject(bone, 0.08)
 			return
 		end
@@ -1071,7 +1057,7 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 			targetPosition,
 			data.BoneShotRadius or 7.5,
 			function(hitCharacter, hitHumanoid, hitRoot)
-				if not ctx:IsActive() then
+				if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 					return
 				end
 				if not isReservedVictim(ctx, hitCharacter) then
@@ -1100,7 +1086,7 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 end
 
 local function spawnBoneZoneAtVictim(ctx, data)
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		return
 	end
 
@@ -1129,7 +1115,7 @@ local function spawnBoneZoneAtVictim(ctx, data)
 
 	task.wait(0.34)
 
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		fadeOutObject(zoneModel, 0.16)
 		return
 	end
@@ -1161,10 +1147,9 @@ local function spawnBoneZoneAtVictim(ctx, data)
 			end
 		end)
 
-		local tween =
-			TweenService:Create(cframeValue, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Value = endCFrame,
-			})
+		local tween = TweenService:Create(cframeValue, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Value = endCFrame,
+		})
 
 		tween:Play()
 
@@ -1180,7 +1165,7 @@ local function spawnBoneZoneAtVictim(ctx, data)
 	local hitOnce = false
 
 	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, position, 10, function(hitCharacter, hitHumanoid, hitRoot)
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
 		if not isReservedVictim(ctx, hitCharacter) then
@@ -1202,7 +1187,7 @@ local function spawnBoneZoneAtVictim(ctx, data)
 end
 
 local function spawnTrackingBoneWall(ctx, data, sideIndex)
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		return
 	end
 
@@ -1259,7 +1244,7 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 	end
 
 	while os.clock() - startTime < duration do
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			fadeOutObject(wall, 0.1)
 			return
 		end
@@ -1280,7 +1265,7 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 				wallCFrame.Position,
 				8,
 				function(hitCharacter, hitHumanoid, hitRoot)
-					if not ctx:IsActive() then
+					if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 						return
 					end
 					if not isReservedVictim(ctx, hitCharacter) then
@@ -1475,7 +1460,7 @@ local function createBeamVisual(startPosition, direction, length, radius, fadeTi
 end
 
 local function hitVictimWithBeam(ctx, data, startPosition, direction, length, radius, damage, blockable, giant, finalPulse)
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		return
 	end
 	if not ctx.HitboxService or not ctx.HitboxService.PerformSphereChain then
@@ -1493,7 +1478,7 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 		data.BlasterBeamStep or 6,
 		radius,
 		function(hitCharacter, hitHumanoid, hitRoot, hitPosition)
-			if not ctx:IsActive() then
+			if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 				return
 			end
 			if not isReservedVictim(ctx, hitCharacter) then
@@ -1552,9 +1537,7 @@ local function tweenBlasterIn(blaster, startCFrame, finalCFrame, tweenTime)
 	local moveTween = TweenService:Create(
 		cframeValue,
 		TweenInfo.new(tweenTime or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{
-			Value = finalCFrame,
-		}
+		{ Value = finalCFrame }
 	)
 
 	for _, part in ipairs(getVisualParts(blaster)) do
@@ -1625,20 +1608,8 @@ local function tweenBlasterOut(blaster, currentCFrame, moveDirection, distance, 
 	end)
 end
 
-local function spawnGasterBlasterAtVictim(
-	ctx,
-	data,
-	angle,
-	scale,
-	damage,
-	chargeTime,
-	beamLength,
-	beamRadius,
-	beamStep,
-	giant,
-	finalPulse
-)
-	if not ctx:IsActive() then
+local function spawnGasterBlasterAtVictim(ctx, data, angle, scale, damage, chargeTime, beamLength, beamRadius, beamStep, giant, finalPulse)
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		return
 	end
 
@@ -1687,7 +1658,7 @@ local function spawnGasterBlasterAtVictim(
 
 	task.wait(tweenTime)
 
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		if tweenConnection then
 			tweenConnection:Disconnect()
 		end
@@ -1725,7 +1696,7 @@ local function spawnGasterBlasterAtVictim(
 
 	task.wait(chargeTime or 0.75)
 
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		tweenBlasterOut(
 			blaster,
 			finalCFrame,
@@ -1765,7 +1736,7 @@ local function spawnGasterBlasterAtVictim(
 	playSansSFX(ctx, "GasterBlasterShoot", primary, 3)
 	hideBlasterRightEye(blaster)
 
-	if not ctx:IsActive() then
+	if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 		tweenBlasterOut(
 			blaster,
 			finalCFrame,
@@ -1815,52 +1786,62 @@ local function spawnGasterBlasterAtVictim(
 	Debris:AddItem(blaster, 2)
 end
 
+local function waitCancelable(ctx, duration)
+	local startTime = os.clock()
+
+	while os.clock() - startTime < duration do
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
+			return
+		end
+
+		task.wait()
+	end
+end
+
 local function runBoneShotSpam(ctx, data)
 	for index = 1, data.BoneShotCount or 18 do
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
 
 		spawnBoneShotAtVictim(ctx, data, index, data.BoneShotCount or 18)
-
 		task.wait(0.075)
 	end
 
-	task.wait(0.35)
+	waitCancelable(ctx, 0.35)
 end
 
 local function runBoneZones(ctx, data)
 	for _ = 1, data.BoneZoneCount or 4 do
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
 
 		spawnBoneZoneAtVictim(ctx, data)
-
-		task.wait(0.2)
+		waitCancelable(ctx, 0.2)
 	end
 
-	task.wait(0.35)
+	waitCancelable(ctx, 0.35)
 end
 
 local function runBoneWalls(ctx, data)
 	for index = 1, data.BoneWallCount or 2 do
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
 
 		task.spawn(function()
-			if not ctx:IsActive() then
+			if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 				return
 			end
 
 			spawnTrackingBoneWall(ctx, data, index)
 		end)
 
-		task.wait(data.BoneWallFireInterval or 0.18)
+		waitCancelable(ctx, data.BoneWallFireInterval or 0.18)
 	end
 
-	task.wait(0.55)
+	waitCancelable(ctx, 0.55)
 end
 
 local function runBlasterRing(ctx, data)
@@ -1868,12 +1849,12 @@ local function runBlasterRing(ctx, data)
 	local rounds = data.BlasterCircleRounds or 6
 
 	for round = 1, rounds do
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
 
 		for index = 1, count do
-			if not ctx:IsActive() then
+			if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 				return
 			end
 
@@ -1882,7 +1863,7 @@ local function runBlasterRing(ctx, data)
 			local isFinalPulse = round == rounds and index == count
 
 			task.spawn(function()
-				if not ctx:IsActive() then
+				if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 					return
 				end
 
@@ -1901,13 +1882,13 @@ local function runBlasterRing(ctx, data)
 				)
 			end)
 
-			task.wait(data.BlasterShotInterval or 0.055)
+			waitCancelable(ctx, data.BlasterShotInterval or 0.055)
 		end
 
-		task.wait(0.12)
+		waitCancelable(ctx, 0.12)
 	end
 
-	task.wait(0.8)
+	waitCancelable(ctx, 0.8)
 end
 
 local function runGiantBlasters(ctx, data)
@@ -1919,12 +1900,12 @@ local function runGiantBlasters(ctx, data)
 	}
 
 	for _, angle in ipairs(angles) do
-		if not ctx:IsActive() then
+		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
 
 		task.spawn(function()
-			if not ctx:IsActive() then
+			if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 				return
 			end
 
@@ -1943,10 +1924,10 @@ local function runGiantBlasters(ctx, data)
 			)
 		end)
 
-		task.wait(0.28)
+		waitCancelable(ctx, 0.28)
 	end
 
-	task.wait(1.35)
+	waitCancelable(ctx, 1.35)
 end
 
 local function runBlueGravityFinale(ctx, data)
@@ -2048,11 +2029,16 @@ function BadTime.Execute(ctx)
 	local humanoid = ctx.Humanoid
 	local root = ctx.Root
 	local data = {}
+
 	for key, value in pairs(ctx.MoveData or {}) do
 		data[key] = value
 	end
+
 	ctx.BadTimeReservedTargetCharacter = nil
 	ctx.BadTimeHadReservedTarget = false
+	ctx.BadTimeCanEarlyCancel = false
+	ctx.BadTimeEarlyCancelRequested = false
+	ctx.BadTimeFinaleStarted = false
 
 	if not character or not character.Parent then
 		ctx:FinishMove(0)
@@ -2087,7 +2073,12 @@ function BadTime.Execute(ctx)
 		if finished then
 			return
 		end
+
 		finished = true
+
+		ctx.BadTimeCanEarlyCancel = false
+		ctx.BadTimeEarlyCancelRequested = false
+		ctx.BadTimeFinaleStarted = false
 
 		if eyeGlowAttachment then
 			eyeGlowAttachment:Destroy()
@@ -2158,13 +2149,6 @@ function BadTime.Execute(ctx)
 		return
 	end
 
-	if (targetRoot.Position - root.Position).Magnitude > (data.ConfirmRange or 80) then
-		print("[BadTime] Target escaped confirm range")
-		cleanup()
-		ctx:FinishMove(0.35)
-		return
-	end
-
 	local confirmResult =
 		ctx:ApplyStandardHit(targetCharacter, targetHumanoid, targetRoot, makeConfirmAttackData(data), "BadTime")
 
@@ -2197,17 +2181,19 @@ function BadTime.Execute(ctx)
 	end
 
 	print("[BadTime] Confirmed:", targetCharacter.Name)
+
 	confirmedVictim = targetCharacter
 	ctx.BadTimeReservedTargetCharacter = confirmedVictim
 	ctx.BadTimeHadReservedTarget = true
+	ctx.BadTimeCanEarlyCancel = true
+
 	beatdownBlockToken = (targetCharacter:GetAttribute("BadTimeBlockPermissionToken") or 0) + 1
 	setReservedVictim(character, confirmedVictim)
 
-	-- DamageLock only prevents other players from damaging/stealing this victim.
-	-- It does NOT stun, grab, movement-lock, dash-lock, or block-lock the victim.
 	if ctx.CombatStatusService and ctx.CombatStatusService.SetDamageLock then
 		ctx.CombatStatusService:SetDamageLock(targetCharacter, character, data.SequenceTime or 11.5)
 	end
+
 	setBeatdownBlockPermission(targetCharacter, beatdownBlockToken, true)
 
 	if cinematicService then
@@ -2223,8 +2209,47 @@ function BadTime.Execute(ctx)
 
 	local victimSpotCFrame = targetRoot.CFrame
 
+	local function prepareFinale()
+		targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
+
+		if not targetCharacter then
+			cleanup()
+			ctx:FinishMove(0)
+			return false
+		end
+
+		clearBeatdownBlockPermission(targetCharacter, beatdownBlockToken)
+		forceStopBlocking(ctx, targetCharacter)
+		teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
+
+		return true
+	end
+
+	local function runFinaleAndFinish()
+		if ctx.BadTimeFinaleStarted == true then
+			return
+		end
+
+		ctx.BadTimeFinaleStarted = true
+		ctx.BadTimeCanEarlyCancel = false
+		ctx.BadTimeEarlyCancelRequested = false
+
+		if prepareFinale() then
+			runBlueGravityFinale(ctx, data)
+			finalSlam(ctx, data)
+		end
+
+		cleanup()
+		ctx:FinishMove(0)
+	end
+
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runBoneShotSpam(ctx, data)
+
+	if shouldSkipToBadTimeFinale(ctx) then
+		runFinaleAndFinish()
+		return
+	end
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then
@@ -2236,6 +2261,11 @@ function BadTime.Execute(ctx)
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runBoneZones(ctx, data)
 
+	if shouldSkipToBadTimeFinale(ctx) then
+		runFinaleAndFinish()
+		return
+	end
+
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then
 		cleanup()
@@ -2245,6 +2275,11 @@ function BadTime.Execute(ctx)
 
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runBoneWalls(ctx, data)
+
+	if shouldSkipToBadTimeFinale(ctx) then
+		runFinaleAndFinish()
+		return
+	end
 
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then
@@ -2256,6 +2291,11 @@ function BadTime.Execute(ctx)
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runGiantBlasters(ctx, data)
 
+	if shouldSkipToBadTimeFinale(ctx) then
+		runFinaleAndFinish()
+		return
+	end
+
 	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
 	if not targetCharacter then
 		cleanup()
@@ -2266,19 +2306,7 @@ function BadTime.Execute(ctx)
 	teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
 	runBlasterRing(ctx, data)
 
-	targetCharacter, targetHumanoid, targetRoot = getVictim(ctx)
-
-	if targetCharacter then
-		clearBeatdownBlockPermission(targetCharacter, beatdownBlockToken)
-		forceStopBlocking(ctx, targetCharacter)
-		teleportVictimToSpot(ctx, targetRoot, victimSpotCFrame)
-		runBlueGravityFinale(ctx, data)
-	end
-
-	finalSlam(ctx, data)
-
-	cleanup()
-	ctx:FinishMove(0)
+	runFinaleAndFinish()
 end
 
 return BadTime

@@ -22,6 +22,11 @@ local runningConnection = nil
 local diedConnection = nil
 local attributeConnections = {}
 local setupToken = 0
+local activeCharacter = nil
+local currentAnimationSetKey = nil
+local reloadRequestToken = 0
+
+local RELOAD_DEBOUNCE_TIME = 0.1
 
 local function disconnectAttributeConnections()
 	for _, connection in ipairs(attributeConnections) do
@@ -98,6 +103,29 @@ local function getMovementAnimationName(character, animationType)
 	end
 
 	return ANIMATION_NAMES[animationType]
+end
+
+local function stringifyAttribute(value)
+	if value == nil then
+		return ""
+	end
+
+	return tostring(value)
+end
+
+local function buildAnimationSetKey(character)
+	if not character then
+		return ""
+	end
+
+	return table.concat({
+		getCharacterName(character),
+		stringifyAttribute(character:GetAttribute("CombatMode")),
+		stringifyAttribute(character:GetAttribute("PapyrusMode")),
+		stringifyAttribute(character:GetAttribute("DisbeliefPhase")),
+		stringifyAttribute(character:GetAttribute("Phase2Active")),
+		stringifyAttribute(player:GetAttribute("CharacterName")),
+	}, "|")
 end
 
 local function getFallbackMovementAnimationName(animationType)
@@ -223,12 +251,23 @@ local function updateMovementState(humanoid)
 	end
 end
 
-local function setupCharacter(character)
+local function setupCharacter(character, forceReload)
+	local nextAnimationSetKey = buildAnimationSetKey(character)
+	if not forceReload
+		and character == activeCharacter
+		and nextAnimationSetKey == currentAnimationSetKey
+		and next(activeTracks) ~= nil
+	then
+		return
+	end
+
 	setupToken += 1
 
 	local myToken = setupToken
 
 	stopTracks()
+	activeCharacter = character
+	currentAnimationSetKey = nextAnimationSetKey
 
 	if not character or not character.Parent then
 		return
@@ -292,23 +331,35 @@ local function setupCharacter(character)
 
 	diedConnection = humanoid.Died:Connect(stopTracks)
 
-	local function refreshForAwakenChange()
+	local function requestAnimationReload()
 		if myToken ~= setupToken then
 			return
 		end
 
-		task.defer(function()
+		local nextKey = buildAnimationSetKey(character)
+		if nextKey == currentAnimationSetKey then
+			return
+		end
+
+		reloadRequestToken += 1
+		local requestToken = reloadRequestToken
+
+		task.delay(RELOAD_DEBOUNCE_TIME, function()
+			if requestToken ~= reloadRequestToken then
+				return
+			end
+
 			if myToken == setupToken and character and character.Parent then
-				setupCharacter(character)
+				setupCharacter(character, true)
 			end
 		end)
 	end
 
-	table.insert(attributeConnections, character:GetAttributeChangedSignal("CharacterName"):Connect(refreshForAwakenChange))
-	table.insert(attributeConnections, character:GetAttributeChangedSignal("CombatMode"):Connect(refreshForAwakenChange))
-	table.insert(attributeConnections, character:GetAttributeChangedSignal("PapyrusMode"):Connect(refreshForAwakenChange))
-	table.insert(attributeConnections, character:GetAttributeChangedSignal("DisbeliefPhase"):Connect(refreshForAwakenChange))
-	table.insert(attributeConnections, character:GetAttributeChangedSignal("Phase2Active"):Connect(refreshForAwakenChange))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("CharacterName"):Connect(requestAnimationReload))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("CombatMode"):Connect(requestAnimationReload))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("PapyrusMode"):Connect(requestAnimationReload))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("DisbeliefPhase"):Connect(requestAnimationReload))
+	table.insert(attributeConnections, character:GetAttributeChangedSignal("Phase2Active"):Connect(requestAnimationReload))
 
 	task.defer(function()
 		if myToken == setupToken then

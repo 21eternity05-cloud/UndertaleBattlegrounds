@@ -1,6 +1,7 @@
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
 
 local ProjectileService = {}
 ProjectileService.__index = ProjectileService
@@ -32,6 +33,7 @@ function ProjectileService.new(
 
 	self.UltService = nil
 	self.KillCreditService = nil
+	self.SoulBurstService = nil
 
 	return self
 end
@@ -122,6 +124,7 @@ function ProjectileService:SetProjectilePhysics(projectile, anchored)
 			descendant.CanTouch = false
 			descendant.CanQuery = false
 			descendant.Massless = true
+			descendant:SetAttribute("IsProjectile", true)
 		end
 	end
 
@@ -131,7 +134,10 @@ function ProjectileService:SetProjectilePhysics(projectile, anchored)
 		projectile.CanTouch = false
 		projectile.CanQuery = false
 		projectile.Massless = true
+		projectile:SetAttribute("IsProjectile", true)
 	end
+
+	projectile:SetAttribute("IsProjectile", true)
 end
 
 function ProjectileService:SetNetworkOwnerServer(projectile)
@@ -273,13 +279,268 @@ function ProjectileService:BuildBeamAttackData(data, isFinalTick)
 		attackData.FinalKnockbackSource = data.FinalKnockbackSource
 		attackData.UseAttackerPositionForFinalKnockback = data.UseAttackerPositionForFinalKnockback == true
 	else
-		-- By default, beam guardbreak happens only on the final tick.
 		if data.GuardbreakFinalOnly ~= false then
 			attackData.Guardbreak = false
 		end
 	end
 
 	return attackData
+end
+
+function ProjectileService:GetBattlegroundsMap()
+	return workspace:FindFirstChild("BattlegroundsMap")
+end
+
+function ProjectileService:IsMapPart(part, mapFolder)
+	if not part or not part:IsA("BasePart") then
+		return false
+	end
+
+	local map = mapFolder or self:GetBattlegroundsMap()
+	return map ~= nil and part:IsDescendantOf(map)
+end
+
+function ProjectileService:GetCharacterFromPart(part)
+	local current = part
+
+	while current and current ~= workspace do
+		if current:IsA("Model") then
+			local humanoid = current:FindFirstChildOfClass("Humanoid")
+			local root = current:FindFirstChild("HumanoidRootPart")
+
+			if humanoid and root then
+				return current, humanoid, root
+			end
+		end
+
+		current = current.Parent
+	end
+
+	return nil, nil, nil
+end
+
+function ProjectileService:IsProjectileInstance(instance)
+	if not instance then
+		return false
+	end
+
+	local current = instance
+
+	while current and current ~= workspace do
+		if current:GetAttribute("IsProjectile") == true then
+			return true
+		end
+
+		local owner = current:GetAttribute("ProjectileOwner")
+		if typeof(owner) == "string" and owner ~= "" then
+			return true
+		end
+
+		if current.Name == "SansBoneShotProjectile" or current.Name == "WeakBoneShotProjectile" then
+			return true
+		end
+
+		current = current.Parent
+	end
+
+	return false
+end
+
+function ProjectileService:IsValidProjectileCharacterTarget(ownerCharacter, targetCharacter, options)
+	if not targetCharacter or not targetCharacter.Parent then
+		return false
+	end
+
+	if targetCharacter == ownerCharacter then
+		return false
+	end
+
+	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+	local root = targetCharacter:FindFirstChild("HumanoidRootPart")
+
+	if not humanoid or not root or humanoid.Health <= 0 then
+		return false
+	end
+
+	options = options or {}
+
+	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
+	local ownerPlayer = ownerCharacter and Players:GetPlayerFromCharacter(ownerCharacter)
+
+	if ownerPlayer and targetPlayer and targetPlayer == ownerPlayer then
+		return false
+	end
+
+	if options.PlayersOnly == true then
+		if targetPlayer then
+			return true
+		end
+
+		return options.AllowDummies == true
+	end
+
+	return true
+end
+
+function ProjectileService:AddIgnoreInstance(ignoreList, seen, instance)
+	if not instance or seen[instance] then
+		return
+	end
+
+	seen[instance] = true
+	table.insert(ignoreList, instance)
+end
+
+function ProjectileService:BuildProjectileIgnoreList(ownerCharacter, projectile, extraIgnore)
+	local ignore = {}
+	local seen = {}
+
+	self:AddIgnoreInstance(ignore, seen, ownerCharacter)
+	self:AddIgnoreInstance(ignore, seen, projectile)
+
+	local function addList(list)
+		if typeof(list) ~= "table" then
+			return
+		end
+
+		for _, instance in ipairs(list) do
+			self:AddIgnoreInstance(ignore, seen, instance)
+		end
+	end
+
+	addList(extraIgnore)
+
+	return ignore
+end
+
+function ProjectileService:CollectProjectileIgnoreInstances(info)
+	local combined = {}
+
+	local function addList(list)
+		if typeof(list) ~= "table" then
+			return
+		end
+
+		for _, instance in ipairs(list) do
+			table.insert(combined, instance)
+		end
+	end
+
+	addList(info.ExcludeList)
+	addList(info.IgnoreInstances)
+	addList(info.ExtraIgnoreInstances)
+	addList(info.RaycastIgnoreInstances)
+	addList(info.OverlapIgnoreInstances)
+
+	return combined
+end
+
+function ProjectileService:GetCollisionProfileOptions(info)
+	if info.CollisionProfile ~= "BoneProjectile" then
+		return nil
+	end
+
+	return {
+		-- Bone projectiles should hit real players and training dummies by default.
+		PlayersOnly = info.PlayersOnly ~= false,
+		AllowDummies = info.AllowDummies ~= false,
+		MapFolder = info.MapFolder or info.WorldFolder or info.WorldHitFolder or self:GetBattlegroundsMap(),
+	}
+end
+
+function ProjectileService:BuildProjectileRaycastParams(info)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = self:BuildProjectileIgnoreList(
+		info.OwnerCharacter,
+		info.Projectile,
+		self:CollectProjectileIgnoreInstances(info)
+	)
+
+	return params
+end
+
+function ProjectileService:NormalizeWorldHit(projectile, hit)
+	if typeof(hit) == "table" then
+		local hitPart = hit.HitPart or hit.Part
+
+		if not hitPart and typeof(hit.RaycastResult) == "RaycastResult" then
+			hitPart = hit.RaycastResult.Instance
+		end
+
+		return {
+			Projectile = hit.Projectile or projectile,
+			HitPart = hitPart,
+			HitPosition = hit.HitPosition or hit.Position or (hit.RaycastResult and hit.RaycastResult.Position),
+			HitNormal = hit.HitNormal or hit.Normal or (hit.RaycastResult and hit.RaycastResult.Normal),
+			RaycastResult = hit.RaycastResult,
+		}
+	end
+
+	if typeof(hit) == "RaycastResult" then
+		return {
+			Projectile = projectile,
+			HitPart = hit.Instance,
+			HitPosition = hit.Position,
+			HitNormal = hit.Normal,
+			RaycastResult = hit,
+		}
+	end
+
+	if typeof(hit) == "Instance" then
+		return {
+			Projectile = projectile,
+			HitPart = hit:IsA("BasePart") and hit or nil,
+		}
+	end
+
+	return {
+		Projectile = projectile,
+	}
+end
+
+function ProjectileService:InvokeProjectileHitCallback(callback, hitInfo)
+	if not callback then
+		return
+	end
+
+	local ok, parameterCount = pcall(debug.info, callback, "a")
+
+	if ok and typeof(parameterCount) == "number" and parameterCount > 1 then
+		pcall(function()
+			callback(
+				hitInfo.TargetCharacter,
+				hitInfo.TargetHumanoid,
+				hitInfo.TargetRoot,
+				hitInfo.Result,
+				hitInfo
+			)
+		end)
+
+		return
+	end
+
+	pcall(function()
+		callback(hitInfo)
+	end)
+end
+
+function ProjectileService:InvokeProjectileWorldHitCallback(callback, hitInfo)
+	if not callback then
+		return
+	end
+
+	local success = pcall(function()
+		callback(hitInfo)
+	end)
+
+	if success then
+		return
+	end
+
+	pcall(function()
+		callback(hitInfo.Projectile, hitInfo.HitPart or hitInfo.RaycastResult)
+	end)
 end
 
 function ProjectileService:ShowDamageNumber(targetRoot, amount, options)
@@ -455,9 +716,11 @@ function ProjectileService:ApplyProjectileHit(info)
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
+
 		if self.CombatStatusService and self.CombatStatusService.TagCombatPair then
 			self.CombatStatusService:TagCombatPair(ownerCharacter, targetCharacter)
 		end
+
 		self:ReportDamage(ownerCharacter, targetCharacter, targetRoot, finalDamage, attackData)
 
 		if self.SoulBurstService then
@@ -595,6 +858,88 @@ function ProjectileService:ApplyProjectileHit(info)
 	return "Hit"
 end
 
+function ProjectileService:IsSuccessfulProjectileResult(result)
+	return result == "Hit"
+		or result == "ArmoredHit"
+		or result == "Blocked"
+		or result == "Guardbreak"
+		or result == "Countered"
+end
+
+function ProjectileService:TryProjectileCharacterHit(info, targetCharacter, targetHumanoid, targetRoot, hitPosition, hitPart)
+	if not targetCharacter or not targetHumanoid or not targetRoot then
+		return false, "Invalid"
+	end
+
+	if targetCharacter == info.OwnerCharacter then
+		return false, "Owner"
+	end
+
+	local profileOptions = self:GetCollisionProfileOptions(info)
+
+	if profileOptions and not self:IsValidProjectileCharacterTarget(
+		info.OwnerCharacter,
+		targetCharacter,
+		profileOptions
+	) then
+		return false, "Filtered"
+	end
+
+	if info.ShouldHitCharacter and info.ShouldHitCharacter(targetCharacter) == false then
+		return false, "Filtered"
+	end
+
+	if info.CharacterFilter and info.CharacterFilter(targetCharacter) == false then
+		return false, "Filtered"
+	end
+
+	local result = self:ApplyProjectileHit({
+		OwnerCharacter = info.OwnerCharacter,
+		ProjectilePosition = hitPosition or self:GetProjectilePosition(info.Projectile),
+		TargetCharacter = targetCharacter,
+		TargetHumanoid = targetHumanoid,
+		TargetRoot = targetRoot,
+		AttackData = info.AttackData,
+		AttackName = info.AttackName,
+		HitSoundCharacter = info.HitSoundCharacter,
+		HitSoundName = info.HitSoundName,
+		KnockbackDirection = info.KnockbackDirection,
+		BeamDirection = info.BeamDirection,
+	})
+
+	if result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
+		if info.OnPassThrough then
+			pcall(function()
+				info.OnPassThrough(targetCharacter, targetHumanoid, targetRoot, result)
+			end)
+		end
+
+		return false, result
+	end
+
+	if self:IsSuccessfulProjectileResult(result) then
+		if info.OnHit then
+			self:InvokeProjectileHitCallback(info.OnHit, {
+				Projectile = info.Projectile,
+				TargetCharacter = targetCharacter,
+				TargetHumanoid = targetHumanoid,
+				TargetRoot = targetRoot,
+				HitPart = hitPart or targetRoot,
+				HitPosition = hitPosition or targetRoot.Position,
+				Result = result,
+			})
+		end
+
+		if info.DestroyOnCharacterHit ~= false then
+			self:FadeOutProjectile(info.Projectile, info.FadeLifetime or 0.2)
+		end
+
+		return true, result
+	end
+
+	return false, result
+end
+
 function ProjectileService:PerformBeamTick(info)
 	local ownerCharacter = info.OwnerCharacter
 	local startPosition = info.BeamStartPosition or info.StartPosition
@@ -701,43 +1046,93 @@ function ProjectileService:RunBeam(info)
 end
 
 function ProjectileService:CheckWorldHit(info, previousPosition, currentPosition)
-	if info.CanHitWorld == false then
+	if info.CanHitWorld == false and info.CollisionProfile ~= "BoneProjectile" then
 		return false
 	end
 
 	local projectile = info.Projectile
-	local ownerCharacter = info.OwnerCharacter
 
 	local direction = currentPosition - previousPosition
 	if direction.Magnitude < 0.05 then return false end
 
-	local excludeList = {
-		ownerCharacter,
-		projectile,
-	}
+	local params = self:BuildProjectileRaycastParams(info)
+	local profileOptions = self:GetCollisionProfileOptions(info)
+	local raycastOrigin = previousPosition
+	local raycastDirection = direction
+	local unitDirection = direction.Unit
 
-	if info.ExcludeList then
-		for _, item in ipairs(info.ExcludeList) do
-			table.insert(excludeList, item)
-		end
-	end
+	for _ = 1, 8 do
+		local result = workspace:Raycast(raycastOrigin, raycastDirection, params)
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = excludeList
-
-	local result = workspace:Raycast(previousPosition, direction, params)
-
-	if result then
-		if info.OnWorldHit then
-			info.OnWorldHit(projectile, result)
+		if not result then
+			return false
 		end
 
-		if info.DestroyOnWorldHit ~= false then
-			self:FadeOutProjectile(projectile, info.FadeLifetime or 0.2)
+		local hitPart = result.Instance
+
+		if not hitPart or not hitPart.Parent then
+			return false
 		end
 
-		return true
+		if self:IsProjectileInstance(hitPart) then
+			-- Skip other bones/projectiles.
+		else
+			local targetCharacter, targetHumanoid, targetRoot = self:GetCharacterFromPart(hitPart)
+
+			if targetCharacter then
+				local didCharacterHit = self:TryProjectileCharacterHit(
+					info,
+					targetCharacter,
+					targetHumanoid,
+					targetRoot,
+					result.Position,
+					hitPart
+				)
+
+				if didCharacterHit then
+					return true
+				end
+
+				-- Invalid/iframe/damage-locked targets are skipped so the projectile can keep moving.
+			else
+				local shouldHitWorld = true
+
+				if profileOptions then
+					shouldHitWorld = self:IsMapPart(hitPart, profileOptions.MapFolder)
+				elseif info.ShouldHitPart and info.ShouldHitPart(hitPart) == false then
+					shouldHitWorld = false
+				elseif info.ShouldHitWorldPart and info.ShouldHitWorldPart(hitPart) == false then
+					shouldHitWorld = false
+				elseif info.WorldHitFilter and info.WorldHitFilter(hitPart) == false then
+					shouldHitWorld = false
+				elseif info.PartFilter and info.PartFilter(hitPart) == false then
+					shouldHitWorld = false
+				end
+
+				if shouldHitWorld then
+					local hitInfo = self:NormalizeWorldHit(projectile, result)
+
+					if info.OnWorldHit then
+						self:InvokeProjectileWorldHitCallback(info.OnWorldHit, hitInfo)
+					end
+
+					if info.DestroyOnWorldHit ~= false then
+						self:FadeOutProjectile(projectile, info.FadeLifetime or 0.2)
+					end
+
+					return true
+				end
+			end
+		end
+
+		local remaining = (currentPosition - result.Position).Magnitude
+
+		if remaining <= 0.05 then
+			return false
+		end
+
+		raycastOrigin = result.Position + unitDirection * 0.05
+		raycastDirection = unitDirection * remaining
 	end
 
 	return false
@@ -758,40 +1153,22 @@ function ProjectileService:CheckCharacterHit(info)
 		function(targetCharacter, targetHumanoid, targetRoot)
 			if didHit then return end
 
-			local result = self:ApplyProjectileHit({
-				OwnerCharacter = info.OwnerCharacter,
-				ProjectilePosition = position,
-				TargetCharacter = targetCharacter,
-				TargetHumanoid = targetHumanoid,
-				TargetRoot = targetRoot,
-				AttackData = info.AttackData,
-				AttackName = info.AttackName,
-				HitSoundCharacter = info.HitSoundCharacter,
-				HitSoundName = info.HitSoundName,
-			})
+			local hit, result = self:TryProjectileCharacterHit(
+				info,
+				targetCharacter,
+				targetHumanoid,
+				targetRoot,
+				position,
+				targetRoot
+			)
 
-			if result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
-				if info.OnPassThrough then
-					info.OnPassThrough(targetCharacter, targetHumanoid, targetRoot, result)
-				end
-
-				return
-			end
-
-			if result == "Hit"
-				or result == "ArmoredHit"
-				or result == "Blocked"
-				or result == "Guardbreak"
-				or result == "Countered"
-			then
+			if hit then
 				didHit = true
-
-				if info.OnHit then
-					info.OnHit(targetCharacter, targetHumanoid, targetRoot, result)
-				end
-
-				if info.DestroyOnCharacterHit ~= false then
-					self:FadeOutProjectile(projectile, info.FadeLifetime or 0.2)
+			elseif result == "IFrame" or result == "DamageLocked" or result == "Invalid" then
+				if info.OnPassThrough then
+					pcall(function()
+						info.OnPassThrough(targetCharacter, targetHumanoid, targetRoot, result)
+					end)
 				end
 			end
 		end
@@ -841,6 +1218,11 @@ function ProjectileService:LaunchProjectile(info)
 
 	if velocity.Magnitude < 0.1 then
 		velocity = Vector3.new(0, 0, -speed)
+	end
+
+	if info.CollisionProfile == "BoneProjectile" then
+		projectile:SetAttribute("IsProjectile", true)
+		projectile:SetAttribute("ProjectileOwner", info.AttackName or "BoneProjectile")
 	end
 
 	self:PivotProjectile(projectile, self:MakeLookCFrame(startPosition, startPosition + velocity))

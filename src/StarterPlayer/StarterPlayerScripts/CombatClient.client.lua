@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -83,6 +84,16 @@ local DEFAULT_MOVE_DISPLAY = {
 		Cooldown = 35,
 	},
 }
+
+local TARGETABLE_FOLDERS = {
+	"Dummies",
+	"TestDummies",
+	"NPCs",
+	"Characters",
+	"TargetDummies",
+}
+
+local DEBUG_COMBAT_CLIENT = false
 
 local currentMoveDisplay = table.clone(DEFAULT_MOVE_DISPLAY)
 local localMoveCooldowns = {}
@@ -299,6 +310,18 @@ local function canRequestMove()
 	return true
 end
 
+local function canRequestBadTimeEarlyCancel(moveSlot)
+	local character = player.Character
+	if moveSlot ~= "Ultimate" or not character then
+		return false
+	end
+	if character:GetAttribute("CurrentMoveId") ~= "BadTime" then
+		return false
+	end
+
+	return character:GetAttribute("UsingMove") == true
+end
+
 local function canRequestBlock()
 	local character = getCharacter()
 	if not character then return false end
@@ -366,6 +389,52 @@ local function getLockTimeForSlot(moveSlot)
 	return 0
 end
 
+local function addPotentialTarget(targets, seen, model, myCharacter)
+	if not model or seen[model] or model == myCharacter or not model:IsA("Model") then
+		return
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart")
+
+	if not humanoid or not root or humanoid.Health <= 0 then
+		return
+	end
+
+	seen[model] = true
+	table.insert(targets, model)
+end
+
+local function collectTargetModelsFromFolder(targets, seen, folder, myCharacter)
+	if not folder then
+		return
+	end
+
+	for _, child in ipairs(folder:GetChildren()) do
+		addPotentialTarget(targets, seen, child, myCharacter)
+	end
+end
+
+local function getPotentialTargetCharacters()
+	local targets = {}
+	local seen = {}
+	local myCharacter = player.Character
+
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		addPotentialTarget(targets, seen, otherPlayer.Character, myCharacter)
+	end
+
+	for _, folderName in ipairs(TARGETABLE_FOLDERS) do
+		collectTargetModelsFromFolder(targets, seen, workspace:FindFirstChild(folderName), myCharacter)
+	end
+
+	for _, instance in ipairs(CollectionService:GetTagged("TargetableCharacter")) do
+		addPotentialTarget(targets, seen, instance, myCharacter)
+	end
+
+	return targets
+end
+
 local function startLocalCooldown(moveSlot)
 	local cooldown = getCooldownForSlot(moveSlot)
 	local lockTime = getLockTimeForSlot(moveSlot)
@@ -389,30 +458,25 @@ local function getMouseTargetCharacter()
 	local bestCharacter = nil
 	local bestScore = math.huge
 
-	local myCharacter = player.Character
+	for _, model in ipairs(getPotentialTargetCharacters()) do
+		local root = model:FindFirstChild("HumanoidRootPart")
 
-	for _, model in ipairs(workspace:GetDescendants()) do
-		if model:IsA("Model") and model ~= myCharacter then
-			local humanoid = model:FindFirstChildOfClass("Humanoid")
-			local root = model:FindFirstChild("HumanoidRootPart")
+		if root then
+			local toTarget = root.Position - origin
+			local projectedDistance = toTarget:Dot(direction)
 
-			if humanoid and root and humanoid.Health > 0 then
-				local toTarget = root.Position - origin
-				local projectedDistance = toTarget:Dot(direction)
+			if projectedDistance > 0 and projectedDistance <= maxDistance then
+				local closestPointOnRay = origin + direction * projectedDistance
+				local distanceFromRay = (root.Position - closestPointOnRay).Magnitude
 
-				if projectedDistance > 0 and projectedDistance <= maxDistance then
-					local closestPointOnRay = origin + direction * projectedDistance
-					local distanceFromRay = (root.Position - closestPointOnRay).Magnitude
+				local aimAssistRadius = 10
 
-					local aimAssistRadius = 10
+				if distanceFromRay <= aimAssistRadius then
+					local score = distanceFromRay + (projectedDistance * 0.01)
 
-					if distanceFromRay <= aimAssistRadius then
-						local score = distanceFromRay + (projectedDistance * 0.01)
-
-						if score < bestScore then
-							bestScore = score
-							bestCharacter = model
-						end
+					if score < bestScore then
+						bestScore = score
+						bestCharacter = model
 					end
 				end
 			end
@@ -425,7 +489,16 @@ end
 local function requestMove(moveSlot)
 	if localMoveCooldowns[moveSlot] then return end
 	if cancelEmoteIfActive() then return end
-	if not canRequestMove() then return end
+	if not canRequestMove() then
+		if canRequestBadTimeEarlyCancel(moveSlot) then
+			moveRemote:FireServer({
+				MoveSlot = moveSlot,
+				Action = "RequestBadTimeEarlyCancel",
+			})
+		end
+
+		return
+	end
 
 	local moveInfo = currentMoveDisplay[moveSlot]
 	local moveId = moveInfo and moveInfo.MoveId
@@ -553,7 +626,9 @@ local function stopBlocking()
 end
 
 ultRemote.OnClientEvent:Connect(function(payload)
-	print("[CombatClient] UltRemote payload:", payload)
+	if DEBUG_COMBAT_CLIENT then
+		print("[CombatClient] UltRemote payload:", payload)
+	end
 
 	if typeof(payload) ~= "table" then return end
 
@@ -609,7 +684,10 @@ end)
 local activeCinematicCamera = false
 local oldCameraType = nil
 local oldCameraSubject = nil
+local oldMouseBehavior = nil
+local oldMouseIconEnabled = nil
 local cameraTween = nil
+local cinematicCameraToken = 0
 
 local activeCameraShakes = {}
 local lastShakeTransform = CFrame.new()
@@ -758,9 +836,13 @@ local function beginCinematicCamera()
 	if not activeCinematicCamera then
 		oldCameraType = camera.CameraType
 		oldCameraSubject = camera.CameraSubject
+		oldMouseBehavior = UserInputService.MouseBehavior
+		oldMouseIconEnabled = UserInputService.MouseIconEnabled
 	end
 
 	activeCinematicCamera = true
+	player:SetAttribute("CinematicCameraActive", true)
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	camera.CameraType = Enum.CameraType.Scriptable
 end
 
@@ -775,6 +857,7 @@ local function setCinematicCamera(cframe)
 		cameraTween = nil
 	end
 
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	camera.CFrame = cframe
 end
 
@@ -789,6 +872,10 @@ local function tweenCinematicCamera(cframe, tweenTime)
 		cameraTween = nil
 	end
 
+	cinematicCameraToken += 1
+	local token = cinematicCameraToken
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
 	cameraTween = TweenService:Create(
 		camera,
 		TweenInfo.new(
@@ -801,12 +888,19 @@ local function tweenCinematicCamera(cframe, tweenTime)
 		}
 	)
 
+	cameraTween.Completed:Connect(function()
+		if token ~= cinematicCameraToken then return end
+		cameraTween = nil
+	end)
+
 	cameraTween:Play()
 end
 
 local function resetCinematicCamera()
 	local camera = getCamera()
 	if not camera then return end
+
+	cinematicCameraToken += 1
 
 	if cameraTween then
 		cameraTween:Cancel()
@@ -825,6 +919,19 @@ local function resetCinematicCamera()
 			camera.CameraSubject = humanoid
 		end
 	end
+
+	UserInputService.MouseBehavior = oldMouseBehavior or Enum.MouseBehavior.Default
+
+	if typeof(oldMouseIconEnabled) == "boolean" then
+		UserInputService.MouseIconEnabled = oldMouseIconEnabled
+	end
+
+	oldCameraType = nil
+	oldCameraSubject = nil
+	oldMouseBehavior = nil
+	oldMouseIconEnabled = nil
+
+	player:SetAttribute("CinematicCameraActive", false)
 end
 
 local function startCameraShake(intensity, roughness, duration)

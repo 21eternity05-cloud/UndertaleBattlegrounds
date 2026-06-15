@@ -258,6 +258,7 @@ local function forcePrimaryInvisible(projectile)
 			primary.CanCollide = false
 			primary.CanTouch = false
 			primary.CanQuery = false
+			primary.Massless = true
 		end
 	end
 end
@@ -350,6 +351,16 @@ local function tweenBoneIntoFormation(projectile, startCFrame, endCFrame, data)
 end
 
 local function setProjectileSpawnProperties(projectile)
+	if projectile:IsA("BasePart") then
+		projectile.Anchored = true
+		projectile.CanCollide = false
+		projectile.CanTouch = false
+		projectile.CanQuery = false
+		projectile.Massless = true
+		projectile:SetAttribute("IsProjectile", true)
+		projectile:SetAttribute("ProjectileOwner", "SansBoneShot")
+	end
+
 	for _, descendant in ipairs(projectile:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = true
@@ -357,18 +368,39 @@ local function setProjectileSpawnProperties(projectile)
 			descendant.CanTouch = false
 			descendant.CanQuery = false
 			descendant.Massless = true
+			descendant:SetAttribute("IsProjectile", true)
+			descendant:SetAttribute("ProjectileOwner", "SansBoneShot")
 		end
 	end
 
-	if projectile:IsA("BasePart") then
-		projectile.Anchored = true
-		projectile.CanCollide = false
-		projectile.CanTouch = false
-		projectile.CanQuery = false
-		projectile.Massless = true
+	if projectile:IsA("Model") then
+		projectile:SetAttribute("IsProjectile", true)
+		projectile:SetAttribute("ProjectileOwner", "SansBoneShot")
 	end
 
 	forcePrimaryInvisible(projectile)
+end
+
+local function buildProjectileIgnoreList(ctx, launchedBone, allBones)
+	local ignore = {}
+
+	if ctx.Character then
+		table.insert(ignore, ctx.Character)
+	end
+
+	for _, boneData in ipairs(allBones) do
+		local bone = boneData.Bone
+
+		if bone and bone.Parent then
+			table.insert(ignore, bone)
+		end
+	end
+
+	if launchedBone and launchedBone.Parent then
+		table.insert(ignore, launchedBone)
+	end
+
+	return ignore
 end
 
 function BoneShot.Execute(ctx)
@@ -415,6 +447,8 @@ function BoneShot.Execute(ctx)
 
 		local bone = boneTemplate:Clone()
 		bone.Name = "SansBoneShotProjectile"
+		bone:SetAttribute("IsProjectile", true)
+		bone:SetAttribute("ProjectileOwner", "SansBoneShot")
 
 		if bone:IsA("Model") then
 			if not ensurePrimaryPart(bone) then
@@ -496,9 +530,12 @@ function BoneShot.Execute(ctx)
 		local _, _, currentTargetRoot = ctx:GetValidTarget()
 
 		if currentTargetRoot then
+			local ignoreList = buildProjectileIgnoreList(ctx, bone, bones)
+
 			ctx.ProjectileService:LaunchProjectile({
 				OwnerCharacter = ctx.Character,
 				Projectile = bone,
+				CollisionProfile = "BoneProjectile",
 
 				TargetRoot = currentTargetRoot,
 				Speed = data.ProjectileSpeed or 165,
@@ -509,14 +546,19 @@ function BoneShot.Execute(ctx)
 				AttackData = data,
 				AttackName = ctx.MoveId or "BoneShot",
 
+				-- Bone Shot should only world-hit the actual map.
 				CanHitWorld = true,
 				DestroyOnWorldHit = true,
+
+				-- Bone Shot should only character-hit real player characters.
 				DestroyOnCharacterHit = true,
 				DestroyOnExpire = true,
 				FadeLifetime = 0.2,
 
 				HitSoundCharacter = "Sans",
 				HitSoundName = "M1",
+
+				IgnoreInstances = ignoreList,
 
 				OnLaunch = function(projectile)
 					local part = getProjectilePart(projectile)
@@ -525,17 +567,14 @@ function BoneShot.Execute(ctx)
 					end
 				end,
 
-				OnHit = function(targetCharacter2, targetHumanoid2, targetRoot2, result)
-					print("[BoneShot] Projectile result:", result)
-					playProjectileHitPolish(ctx, data, targetCharacter2, result)
+				OnHit = function(hitInfo)
+					playProjectileHitPolish(ctx, data, hitInfo.TargetCharacter, hitInfo.Result)
 				end,
 
-				OnWorldHit = function(projectile)
-					print("[BoneShot] Projectile hit world")
+				OnWorldHit = function(hitInfo)
 				end,
 
 				OnExpire = function(projectile)
-					print("[BoneShot] Projectile expired")
 				end,
 			})
 		else

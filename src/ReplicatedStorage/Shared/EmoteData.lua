@@ -53,6 +53,7 @@ return {
 		CancelOnMove = false,
 		CancelOnJump = true,
 		CancelOnDamage = true,
+		SoundName = "SpinSound",
 	},
 
 	LoudLaugh = {

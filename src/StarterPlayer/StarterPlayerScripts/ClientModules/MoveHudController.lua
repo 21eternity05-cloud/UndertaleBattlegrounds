@@ -35,6 +35,7 @@ local DEFAULT_MOVE_DISPLAY = {
 
 local ULT_BAR_TWEEN_TIME = 0.18
 local SOUL_BURST_BAR_TWEEN_TIME = 0.18
+local BAR_ALPHA_EPSILON = 0.002
 
 local SILKSCREEN_FONT = Font.new("rbxassetid://12187371840")
 local UT_BLACK = Color3.fromRGB(0, 0, 0)
@@ -114,6 +115,9 @@ function MoveHudController.new(config)
 	self.CurrentUltColor = DEFAULT_ULT_COLOR
 	self.CurrentUltReadyColor = lightenColor(DEFAULT_ULT_COLOR, 0.28)
 	self.CurrentHeartIsWhite = false
+	self.LastUltAlphaTarget = nil
+	self.LastUltFullTarget = nil
+	self.LastSoulAlphaTarget = nil
 
 	return self
 end
@@ -139,6 +143,7 @@ function MoveHudController:ApplyCharacterUIColor()
 	self.CurrentUltColor = ultColor
 	self.CurrentUltReadyColor = lightenColor(ultColor, 0.28)
 	self.CurrentHeartIsWhite = isNearWhite(heartColor)
+	self.LastUltFullTarget = nil
 
 	if self.UltimateHeartImage then
 		self.UltimateHeartImage.ImageColor3 = self.CurrentHeartColor
@@ -192,21 +197,30 @@ function MoveHudController:UpdateUltimate(state)
 	local full = state.Full == true or alpha >= 1
 
 	if self.UltimateFill then
-		if self.UltimateFillTween then
-			self.UltimateFillTween:Cancel()
-			self.UltimateFillTween = nil
+		local targetColor = full and self.CurrentUltReadyColor or self.CurrentUltColor
+		local shouldTween = self.LastUltAlphaTarget == nil
+			or math.abs(alpha - self.LastUltAlphaTarget) > BAR_ALPHA_EPSILON
+			or full ~= self.LastUltFullTarget
+
+		if shouldTween then
+			if self.UltimateFillTween then
+				self.UltimateFillTween:Cancel()
+				self.UltimateFillTween = nil
+			end
+
+			self.LastUltAlphaTarget = alpha
+			self.LastUltFullTarget = full
+			self.UltimateFillTween = self.TweenService:Create(
+				self.UltimateFill,
+				TweenInfo.new(ULT_BAR_TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Size = UDim2.fromScale(alpha, 1),
+					BackgroundColor3 = targetColor,
+				}
+			)
+
+			self.UltimateFillTween:Play()
 		end
-
-		self.UltimateFillTween = self.TweenService:Create(
-			self.UltimateFill,
-			TweenInfo.new(ULT_BAR_TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Size = UDim2.fromScale(alpha, 1),
-				BackgroundColor3 = full and self.CurrentUltReadyColor or self.CurrentUltColor,
-			}
-		)
-
-		self.UltimateFillTween:Play()
 	end
 
 	if self.UltimateStroke then
@@ -228,22 +242,27 @@ function MoveHudController:UpdateSoulBurst(state)
 	local alpha = typeof(state.Alpha) == "number" and math.clamp(state.Alpha, 0, 1) or math.clamp(current / max, 0, 1)
 
 	if self.SoulHeartFillImage then
-		if self.SoulBurstFillTween then
-			self.SoulBurstFillTween:Cancel()
-			self.SoulBurstFillTween = nil
-		end
-
 		local fillSize = SOUL_HEART_SIZE * alpha
+		local shouldTween = self.LastSoulAlphaTarget == nil
+			or math.abs(alpha - self.LastSoulAlphaTarget) > BAR_ALPHA_EPSILON
 
-		self.SoulBurstFillTween = self.TweenService:Create(
-			self.SoulHeartFillImage,
-			TweenInfo.new(SOUL_BURST_BAR_TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Size = UDim2.fromOffset(fillSize, fillSize),
-			}
-		)
+		if shouldTween then
+			if self.SoulBurstFillTween then
+				self.SoulBurstFillTween:Cancel()
+				self.SoulBurstFillTween = nil
+			end
 
-		self.SoulBurstFillTween:Play()
+			self.LastSoulAlphaTarget = alpha
+			self.SoulBurstFillTween = self.TweenService:Create(
+				self.SoulHeartFillImage,
+				TweenInfo.new(SOUL_BURST_BAR_TWEEN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Size = UDim2.fromOffset(fillSize, fillSize),
+				}
+			)
+
+			self.SoulBurstFillTween:Play()
+		end
 	end
 
 	if self.SoulBurstText then

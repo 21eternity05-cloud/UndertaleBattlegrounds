@@ -45,7 +45,6 @@ local CharacterIntroService = require(combatFolder:WaitForChild("CharacterIntroS
 	CinematicService,
 	CharacterMorphService
 )
-local LoreCinematicService = require(combatFolder:WaitForChild("LoreCinematicService")).new(Config, ProgressionService)
 local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
 local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
 local SpawnService = require(combatFolder:WaitForChild("SpawnService")).new(
@@ -265,7 +264,6 @@ CharacterMorphService:Start()
 CharacterService:Start()
 CinematicService:Start()
 AwakeningMusicService:Start()
-LoreCinematicService:Start()
 ShopLocationService:Start()
 UltService:Start()
 SoulBurstService:Start()

@@ -32,7 +32,7 @@ local BoneZone = {
 	Guardbreak = false,
 	CanBeCountered = true,
 
-	HitCancelsTarget = true,
+	HitCancelsTarget = false,
 	CancelableByHit = true,
 
 	HasIFrames = false,
@@ -88,6 +88,18 @@ local function playSansSFX(ctx, soundName, parentPart, lifetime)
 	if not parentPart or not parentPart.Parent then return end
 
 	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+end
+
+local function showDamageNumber(ctx, targetRoot, amount)
+	if not ctx then return end
+	if not ctx.DamageNumberService then return end
+	if not ctx.DamageNumberService.ShowDamage then return end
+	if not targetRoot or not targetRoot.Parent then return end
+	if typeof(amount) ~= "number" or amount <= 0 then return end
+
+	pcall(function()
+		ctx.DamageNumberService:ShowDamage(targetRoot, amount)
+	end)
 end
 
 local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
@@ -414,7 +426,7 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 	attackData.CanBeBlocked = data.CanBeBlocked ~= false
 	attackData.Unblockable = data.Unblockable == true
 	attackData.CanBeCountered = data.CanBeCountered ~= false
-	attackData.HitCancelsTarget = data.HitCancelsTarget ~= false
+	attackData.HitCancelsTarget = false
 
 	if ctx.CombatStatusService and ctx.CombatStatusService:HasIFrames(targetCharacter, attackData) then
 		return "IFrame"
@@ -461,7 +473,6 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 	local armorInfo = nil
 	if ctx.CombatStatusService then
 		armorInfo = ctx.CombatStatusService:GetArmorInfo(targetCharacter, attackData)
-		ctx.CombatStatusService:TryHitCancelTarget(targetCharacter, attackData)
 	else
 		armorInfo = {
 			Active = false,
@@ -480,6 +491,12 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 
 	if finalDamage > 0 then
 		targetHumanoid:TakeDamage(finalDamage)
+
+		showDamageNumber(ctx, targetRoot, finalDamage)
+
+		if ctx.CombatStatusService and ctx.CombatStatusService.TagCombatPair then
+			ctx.CombatStatusService:TagCombatPair(ctx.Character, targetCharacter)
+		end
 
 		if ctx.UltService and attackData.AwardsUlt ~= false then
 			ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, finalDamage)
@@ -506,7 +523,7 @@ local function applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoi
 		local direction = targetRoot.Position - knockbackSourcePosition
 		direction = Vector3.new(direction.X, 0, direction.Z)
 
-		if direction.Magnitude < 0.05 then
+		if direction.Magnitude < 0.05 and ctx.Root then
 			direction = Vector3.new(ctx.Root.CFrame.LookVector.X, 0, ctx.Root.CFrame.LookVector.Z)
 		end
 
@@ -557,7 +574,11 @@ local function doBoneZoneHitbox(ctx, hitPosition, data)
 			hitOnce[targetCharacter] = true
 
 			local result = applyBoneZoneHit(ctx, hitPosition, targetCharacter, targetHumanoid, targetRoot, data)
-			print("[BoneZone] Hit result:", result)
+
+			if data.DebugHitResults == true then
+				print("[BoneZone] Hit result:", result)
+			end
+
 			playHitPolish(ctx, data, targetCharacter, result)
 		end
 	)

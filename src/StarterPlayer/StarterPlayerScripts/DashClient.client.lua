@@ -20,10 +20,14 @@ local TURN_SPEED = 20
 local STEERING_TIME = 0.22
 
 local WALL_CHECK_DISTANCE = 2.9
+local WALL_CHECK_FRAME_INTERVAL = 2
 local POST_DASH_MAX_HORIZONTAL_SPEED = 48
 
 local canDash = true
 local isDashing = false
+local wallRaycastParams = RaycastParams.new()
+wallRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+local wallRaycastFilterCharacter = nil
 
 local function getCharacter()
 	local character = player.Character
@@ -184,6 +188,15 @@ local function createDashDust(root, dashDirection)
 	Debris:AddItem(dust, 0.15)
 end
 
+local function getWallRaycastParams(character)
+	if wallRaycastFilterCharacter ~= character then
+		wallRaycastFilterCharacter = character
+		wallRaycastParams.FilterDescendantsInstances = { character }
+	end
+
+	return wallRaycastParams
+end
+
 local function isWallAhead(character, root, direction)
 	if not character or not root then
 		return false
@@ -191,12 +204,8 @@ local function isWallAhead(character, root, direction)
 
 	local flatDirection = getFlatDirection(direction)
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character }
-
 	local origin = root.Position + Vector3.new(0, 0.4, 0)
-	local result = workspace:Raycast(origin, flatDirection * WALL_CHECK_DISTANCE, params)
+	local result = workspace:Raycast(origin, flatDirection * WALL_CHECK_DISTANCE, getWallRaycastParams(character))
 
 	if not result then
 		return false
@@ -281,10 +290,13 @@ local function dash()
 	linearVelocity.Parent = root
 
 	setDashPlaneVelocity(linearVelocity, currentDirection)
+	local lastAppliedDirection = currentDirection
+	local lastFaceDirection = nil
 	createDashDust(root, currentDirection)
 
 	local startTime = os.clock()
 	local cleanedUp = false
+	local wallCheckFrame = WALL_CHECK_FRAME_INTERVAL - 1
 
 	local function cleanupDash()
 		if cleanedUp then
@@ -364,13 +376,21 @@ local function dash()
 			end
 		end
 
-		if isWallAhead(character, root, currentDirection) then
-			connection:Disconnect()
-			cleanupDash()
-			return
+		wallCheckFrame += 1
+		if wallCheckFrame >= WALL_CHECK_FRAME_INTERVAL then
+			wallCheckFrame = 0
+
+			if isWallAhead(character, root, currentDirection) then
+				connection:Disconnect()
+				cleanupDash()
+				return
+			end
 		end
 
-		setDashPlaneVelocity(linearVelocity, currentDirection)
+		if currentDirection:Dot(lastAppliedDirection) < 0.999 then
+			setDashPlaneVelocity(linearVelocity, currentDirection)
+			lastAppliedDirection = currentDirection
+		end
 
 		local cameraCFrame = getFlatCameraCFrame()
 		local faceDirection = Vector3.new(
@@ -380,7 +400,12 @@ local function dash()
 		)
 
 		if faceDirection.Magnitude > 0.05 then
-			root.CFrame = CFrame.lookAt(root.Position, root.Position + faceDirection.Unit)
+			local unitFaceDirection = faceDirection.Unit
+
+			if not lastFaceDirection or unitFaceDirection:Dot(lastFaceDirection) < 0.995 then
+				root.CFrame = CFrame.lookAt(root.Position, root.Position + unitFaceDirection)
+				lastFaceDirection = unitFaceDirection
+			end
 		end
 	end)
 end
