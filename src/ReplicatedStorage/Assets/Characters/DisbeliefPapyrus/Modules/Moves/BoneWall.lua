@@ -63,7 +63,17 @@ local BoneWall = {
 	KnockbackUpward = 18,
 	KnockbackDuration = 0.25,
 	KnockbackMaxForce = 85000,
+
+	Debug = false,
 }
+
+local function debugPrint(ctx, ...)
+	local moveData = ctx and ctx.MoveData or BoneWall
+
+	if moveData.Debug == true then
+		print("[BoneWall]", ...)
+	end
+end
 
 local function getPapyrusBoneTemplate(ctx)
 	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
@@ -88,12 +98,14 @@ local function ensurePrimaryPart(object)
 		end
 
 		local namedPrimary = object:FindFirstChild("PrimaryPart", true)
+
 		if namedPrimary and namedPrimary:IsA("BasePart") then
 			object.PrimaryPart = namedPrimary
 			return namedPrimary
 		end
 
 		local firstPart = object:FindFirstChildWhichIsA("BasePart", true)
+
 		if firstPart then
 			object.PrimaryPart = firstPart
 			return firstPart
@@ -124,6 +136,7 @@ local function forcePrimaryPartInvisible(object)
 		end
 
 		local namedPrimary = object:FindFirstChild("PrimaryPart", true)
+
 		if namedPrimary and namedPrimary:IsA("BasePart") then
 			namedPrimary.Transparency = 1
 			namedPrimary.CanCollide = false
@@ -384,13 +397,16 @@ local function makeNoKnockbackHitData(moveData)
 	hitData.PresetKnockbackUpward = nil
 	hitData.PresetKnockbackDuration = nil
 	hitData.PresetKnockbackMaxForce = nil
+
 	hitData.DirectionalSpeed = nil
 	hitData.DirectionalDuration = nil
 	hitData.DirectionalMaxForce = nil
 	hitData.DirectionalYHoldDuration = nil
+
 	hitData.DownForwardSpeed = nil
 	hitData.DownSpeed = nil
 	hitData.DownLaunchMaxForce = nil
+
 	hitData.Knockback = 0
 	hitData.UpwardKnockback = 0
 	hitData.KnockbackDuration = 0
@@ -407,6 +423,7 @@ local function makeManualKnockbackData(moveData)
 	knockbackData.PresetKnockbackUpward = moveData.PresetKnockbackUpward or moveData.KnockbackUpward or 18
 	knockbackData.PresetKnockbackDuration = moveData.PresetKnockbackDuration or moveData.KnockbackDuration or 0.25
 	knockbackData.PresetKnockbackMaxForce = moveData.PresetKnockbackMaxForce or moveData.KnockbackMaxForce or 85000
+
 	knockbackData.Knockback = knockbackData.PresetKnockbackSpeed
 	knockbackData.UpwardKnockback = knockbackData.PresetKnockbackUpward
 	knockbackData.KnockbackDuration = knockbackData.PresetKnockbackDuration
@@ -428,23 +445,10 @@ local function applyBoneWallKnockback(ctx, targetRoot, moveData)
 	)
 end
 
-local function buildHitboxData(moveData)
+local function buildDetectionHitboxData(moveData)
 	return {
 		Radius = moveData.Radius or 5.25,
 		Offset = moveData.Offset or CFrame.new(0, -1.85, 0),
-
-		Damage = moveData.Damage or 7,
-		Stun = moveData.Stun or 0.65,
-
-		Blockable = moveData.Blockable,
-		CanBeBlocked = moveData.CanBeBlocked,
-		Unblockable = moveData.Unblockable,
-		Guardbreak = moveData.Guardbreak,
-		CanBeCountered = moveData.CanBeCountered,
-		HitCancelsTarget = moveData.HitCancelsTarget,
-		CancelableByHit = moveData.CancelableByHit,
-		HasIFrames = moveData.HasIFrames,
-		HasArmor = moveData.HasArmor,
 	}
 end
 
@@ -453,6 +457,7 @@ local function spawnBoneWallVFX(ctx, startWallCFrame)
 	local root = ctx.Root
 
 	local template = getPapyrusBoneTemplate(ctx)
+
 	if not template then
 		return nil
 	end
@@ -497,12 +502,16 @@ local function updateBoneWallVFX(vfxData, wallCFrame, riseAlpha)
 	if not vfxData then return end
 
 	local object = vfxData.Object
-	if not object or not object.Parent then return end
+
+	if not object or not object.Parent then
+		return
+	end
 
 	riseAlpha = math.clamp(riseAlpha, 0, 1)
 
 	local startLocal = vfxData.StartLocalCFrame
 	local finalLocal = vfxData.FinalLocalCFrame
+
 	local currentPosition = startLocal.Position:Lerp(finalLocal.Position, riseAlpha)
 	local currentLocalCFrame = CFrame.new(currentPosition) * finalLocal.Rotation
 
@@ -511,8 +520,6 @@ local function updateBoneWallVFX(vfxData, wallCFrame, riseAlpha)
 end
 
 function BoneWall.Execute(ctx)
-	print("[BoneWall] Execute started")
-
 	local character = ctx.Character
 	local humanoid = ctx.Humanoid
 	local root = ctx.Root
@@ -539,6 +546,8 @@ function BoneWall.Execute(ctx)
 		return
 	end
 
+	debugPrint(ctx, "Execute started")
+
 	task.wait(moveData.Startup or 0.24)
 
 	if isMoveInterrupted(ctx) then
@@ -557,7 +566,7 @@ function BoneWall.Execute(ctx)
 	end
 
 	local alreadyHit = {}
-	local hitboxData = buildHitboxData(moveData)
+	local detectionHitboxData = buildDetectionHitboxData(moveData)
 	local noKnockbackHitData = makeNoKnockbackHitData(moveData)
 
 	local riseTime = moveData.RiseTime or 0.18
@@ -574,7 +583,9 @@ function BoneWall.Execute(ctx)
 
 	local connection
 	connection = RunService.Heartbeat:Connect(function(deltaTime)
-		if finished then return end
+		if finished then
+			return
+		end
 
 		if not ctx:IsActive() or isMoveInterrupted(ctx) then
 			finished = true
@@ -591,6 +602,7 @@ function BoneWall.Execute(ctx)
 		local elapsed = os.clock() - startTime
 
 		local riseAlpha = 1
+
 		if riseTime > 0 then
 			riseAlpha = math.clamp(elapsed / riseTime, 0, 1)
 		end
@@ -633,10 +645,13 @@ function BoneWall.Execute(ctx)
 			if lastHitboxTime >= hitboxTickRate then
 				lastHitboxTime = 0
 
+				-- Detection only.
+				-- The table must still be passed because your HitboxService reads hitboxData.Offset internally.
+				-- No Damage/Stun exists in detectionHitboxData, so ApplyStandardHit is the only damage source.
 				ctx.HitboxService:PerformSphereAtCFrame(
 					character,
 					wallCFrame,
-					hitboxData,
+					detectionHitboxData,
 					function(targetCharacter, targetHumanoid, targetRoot)
 						if alreadyHit[targetCharacter] then return end
 						alreadyHit[targetCharacter] = true
@@ -664,7 +679,7 @@ function BoneWall.Execute(ctx)
 							playPapyrusSFX(ctx, "BlockBreak", targetRoot, 2)
 						end
 
-						print("[BoneWall] Result:", result)
+						debugPrint(ctx, "Result:", result)
 					end
 				)
 			end
@@ -672,7 +687,9 @@ function BoneWall.Execute(ctx)
 	end)
 
 	task.delay((moveData.MaxLockTime or 1.35) + 0.35, function()
-		if finished then return end
+		if finished then
+			return
+		end
 
 		finished = true
 

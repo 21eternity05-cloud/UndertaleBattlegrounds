@@ -1,3 +1,6 @@
+-- BrokenBlaster
+-- ReplicatedStorage > Assets > Characters > DisbeliefPapyrus > Modules > Moves > BrokenBlaster
+
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
@@ -74,7 +77,17 @@ local BrokenBlaster = {
 	UpwardKnockback = 26,
 	KnockbackDuration = 0.32,
 	KnockbackMaxForce = 100000,
+
+	Debug = false,
 }
+
+local function debugPrint(ctx, ...)
+	local moveData = ctx and ctx.MoveData or BrokenBlaster
+
+	if moveData.Debug == true then
+		print("[BrokenBlaster]", ...)
+	end
+end
 
 local function copyTable(source)
 	local copy = {}
@@ -442,7 +455,6 @@ local function makeNoKnockbackHitData(moveData, damage, stun, radius)
 	local hitData = makeHitData(moveData, damage, stun, radius)
 
 	hitData.KnockbackPreset = nil
-
 	hitData.PresetKnockbackSpeed = nil
 	hitData.PresetKnockbackUpward = nil
 	hitData.PresetKnockbackDuration = nil
@@ -489,26 +501,6 @@ local function makeRamHitboxData(moveData)
 	return {
 		Radius = moveData.RamRadius or 4.75,
 		Offset = CFrame.new(0, 0, 0),
-
-		Damage = moveData.RamDamage or 4,
-		Stun = moveData.RamStun or 0.45,
-
-		Blockable = true,
-		CanBeBlocked = true,
-		Unblockable = false,
-
-		Guardbreak = false,
-		CanBeCountered = moveData.CanBeCountered,
-		HitCancelsTarget = true,
-
-		CancelableByHit = false,
-		HasIFrames = moveData.HasIFrames,
-		HasArmor = moveData.HasArmor,
-
-		Knockback = 0,
-		UpwardKnockback = 0,
-		KnockbackDuration = 0,
-		KnockbackMaxForce = 0,
 	}
 end
 
@@ -572,21 +564,6 @@ local function buildSphereHitboxData(moveData, damage, stun, radius)
 	return {
 		Radius = radius,
 		Offset = CFrame.new(0, 0, 0),
-
-		Damage = damage,
-		Stun = stun,
-
-		Blockable = moveData.Blockable,
-		CanBeBlocked = moveData.CanBeBlocked,
-		Unblockable = moveData.Unblockable,
-
-		Guardbreak = moveData.Guardbreak,
-		CanBeCountered = moveData.CanBeCountered,
-		HitCancelsTarget = moveData.HitCancelsTarget,
-
-		CancelableByHit = moveData.CancelableByHit,
-		HasIFrames = moveData.HasIFrames,
-		HasArmor = moveData.HasArmor,
 	}
 end
 
@@ -756,11 +733,6 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction)
 		moveData.BlastRadius or 5.75
 	)
 
-	blastHitboxData.Guardbreak = moveData.BlastGuardbreak ~= false
-	blastHitboxData.Blockable = true
-	blastHitboxData.CanBeBlocked = true
-	blastHitboxData.Unblockable = false
-
 	local blastHitData = makeNoKnockbackHitData(
 		moveData,
 		moveData.BlastDamage or 12,
@@ -818,6 +790,9 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction)
 			local spherePosition = startPosition + (direction * distance)
 			local sphereCFrame = getLookCFrame(spherePosition, direction)
 
+			-- Detection only.
+			-- The table must still be passed because HitboxService reads hitboxData.Offset internally.
+			-- No Damage/Stun exists in blastHitboxData, so applyStandardHit is the only damage source.
 			ctx.HitboxService:PerformSphereAtCFrame(
 				character,
 				sphereCFrame,
@@ -852,7 +827,7 @@ local function firePointBlankBlast(ctx, blaster, startPosition, direction)
 						end
 					end
 
-					print("[BrokenBlaster] Blast result:", result)
+					debugPrint(ctx, "Blast result:", result)
 				end
 			)
 
@@ -921,8 +896,6 @@ local function confirmPointBlankBlast(ctx, blaster, direction, targetCharacter, 
 end
 
 function BrokenBlaster.Execute(ctx)
-	print("[BrokenBlaster] Execute started")
-
 	local character = ctx.Character
 	local humanoid = ctx.Humanoid
 	local root = ctx.Root
@@ -948,6 +921,8 @@ function BrokenBlaster.Execute(ctx)
 		ctx:FinishMove(0)
 		return
 	end
+
+	debugPrint(ctx, "Execute started")
 
 	task.wait(moveData.Startup or 0.28)
 
@@ -1041,6 +1016,9 @@ function BrokenBlaster.Execute(ctx)
 
 		lastHitboxTime = 0
 
+		-- Detection only.
+		-- The table must still be passed because HitboxService reads hitboxData.Offset internally.
+		-- No Damage/Stun exists in ramHitboxData, so applyStandardHit is the only damage source.
 		ctx.HitboxService:PerformSphereAtCFrame(
 			character,
 			blasterCFrame,
@@ -1065,7 +1043,7 @@ function BrokenBlaster.Execute(ctx)
 					ctx.MoveId or "BrokenBlasterRam"
 				)
 
-				print("[BrokenBlaster] Ram result:", result)
+				debugPrint(ctx, "Ram result:", result)
 
 				if result == "Hit" or result == "ArmoredHit" or result == "Blocked" or result == "Guardbreak" then
 					if result == "Blocked" then

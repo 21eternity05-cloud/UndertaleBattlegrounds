@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 
 local EnterDisbeliefPhase2 = {
@@ -41,12 +42,37 @@ local EnterDisbeliefPhase2 = {
 
 	BlasterDamage = 18,
 	BlasterStun = 1.15,
-	BlasterRadius = 7,
+
+	-- The GasterBlaster marker is the actual fire moment.
+	-- Black screens happen before this marker, so the blasters should fire instantly here.
+	BlasterChargeTime = 0.2,
+	BlasterLifetime = 2.8,
+
 	BlasterHeight = 3,
 	BlasterSideOffset = 8,
 	BlasterBackwardOffset = 4,
-	BlasterChargeTime = 0.65,
-	BlasterLifetime = 1.8,
+
+	-- Sans-style blaster tween polish.
+	FadeInOffset = CFrame.new(0, 0, 7),
+	FadeOutOffset = CFrame.new(0, 0, 7),
+	FadeInTime = 0.16,
+	FadeOutTime = 0.32,
+	JawOpenTime = 0.18,
+	JawOpenAngle = 22,
+
+	-- Code-created beam visual like Sans Gaster Blaster.
+	BeamLength = 90,
+	BeamRadius = 5.5,
+	BeamVisualTransparency = 0.06,
+	BeamVisualSizeMultiplier = 1.75,
+	BeamFadeTime = 0.18,
+	BeamExtraLength = 8,
+
+	-- Standardized MovementService preset knockback.
+	BlasterKnockbackSpeed = 105,
+	BlasterKnockbackUpward = 28,
+	BlasterKnockbackDuration = 0.32,
+	BlasterKnockbackMaxForce = 130000,
 
 	-- This needs to last through the awakening animation, not just the blaster hit.
 	AttackerCounterStun = 7.75,
@@ -56,12 +82,11 @@ local EnterDisbeliefPhase2 = {
 	PostCounterIFrameLinger = 2.3,
 
 	-- Camera: in front of Papyrus, looking at him.
-	CounterCameraDistance = 8,
-	CounterCameraHeight = 2.6,
+	CounterCameraDistance = 18,
+	CounterCameraHeight = 8,
 	CounterCameraLookHeight = 2.2,
 	CounterCameraTweenTime = 0.25,
 
-	-- Optional debug prints.
 	DebugCounter = false,
 }
 
@@ -181,9 +206,11 @@ local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
 	if not ctx or not ctx.VFXService then
 		return
 	end
+
 	if not ctx.VFXService.PlayCharacterSFXAtPart then
 		return
 	end
+
 	if not parentPart or not parentPart.Parent then
 		return
 	end
@@ -250,8 +277,6 @@ local function forcePapyrusIFrames(character)
 	character:SetAttribute("ArmorPreventsStun", true)
 	character:SetAttribute("ArmorPreventsKnockback", true)
 	character:SetAttribute("ArmorPreventsHitCancel", true)
-
-	-- Extra move-local flag. This helps debugging and can be used later by shared hit logic if needed.
 	character:SetAttribute("CounterCinematicIFrames", true)
 end
 
@@ -511,6 +536,7 @@ local function startAwakeningTheme(ctx)
 	if not ctx then
 		return
 	end
+
 	if not ctx.AwakeningMusicService then
 		return
 	end
@@ -579,9 +605,9 @@ local function getPapyrusCameraCFrame(ctx)
 		return nil
 	end
 
-	local distance = moveData.CounterCameraDistance or 7
-	local height = moveData.CounterCameraHeight or 2.8
-	local lookHeight = moveData.CounterCameraLookHeight or 2.1
+	local distance = moveData.CounterCameraDistance or 10
+	local height = moveData.CounterCameraHeight or 3.6
+	local lookHeight = moveData.CounterCameraLookHeight or 2.2
 
 	local flatLook = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
 
@@ -597,15 +623,12 @@ local function getPapyrusCameraCFrame(ctx)
 	return CFrame.lookAt(cameraPosition, lookAtPosition)
 end
 
-local function startPapyrusCamera(ctx, lockToken)
+local function startCameraForCharacter(ctx, targetCharacter, lockToken)
 	if not ctx or not ctx.CinematicService then
 		return false
 	end
 
-	local character = ctx.Character
-	local moveData = ctx.MoveData or EnterDisbeliefPhase2
-
-	if not character or not character.Parent then
+	if not targetCharacter or not targetCharacter.Parent then
 		return false
 	end
 
@@ -614,32 +637,36 @@ local function startPapyrusCamera(ctx, lockToken)
 		return false
 	end
 
-	character:SetAttribute("CinematicCameraToken", lockToken)
+	targetCharacter:SetAttribute("CinematicCameraToken", lockToken)
 
+	local moveData = ctx.MoveData or EnterDisbeliefPhase2
 	local tweenTime = moveData.CounterCameraTweenTime or 0.25
 	local service = ctx.CinematicService
 	local success = false
 
 	if service.TweenCamera then
 		success = pcall(function()
-			service:TweenCamera(character, cameraCFrame, tweenTime)
+			service:TweenCamera(targetCharacter, cameraCFrame, tweenTime)
 		end)
 	end
 
 	if not success and service.SetCamera then
 		success = pcall(function()
-			service:SetCamera(character, cameraCFrame)
+			service:SetCamera(targetCharacter, cameraCFrame)
 		end)
 	end
 
-	-- Send one hard SetCamera after the tween window. This helps if another local camera update fights the first tween.
 	if success and service.SetCamera then
 		task.delay(tweenTime + 0.05, function()
-			if character and character.Parent and character:GetAttribute("CinematicCameraToken") == lockToken then
+			if targetCharacter
+				and targetCharacter.Parent
+				and targetCharacter:GetAttribute("CinematicCameraToken") == lockToken
+			then
 				local lockedCFrame = getPapyrusCameraCFrame(ctx)
+
 				if lockedCFrame then
 					pcall(function()
-						service:SetCamera(character, lockedCFrame)
+						service:SetCamera(targetCharacter, lockedCFrame)
 					end)
 				end
 			end
@@ -649,19 +676,20 @@ local function startPapyrusCamera(ctx, lockToken)
 	return success
 end
 
-local function maintainPapyrusCamera(ctx, lockToken)
+local function maintainCameraForCharacter(ctx, targetCharacter, lockToken)
 	if not ctx or not ctx.CinematicService then
 		return
 	end
+
 	if not ctx.CinematicService.SetCamera then
 		return
 	end
 
-	local character = ctx.Character
-	if not character or not character.Parent then
+	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
-	if character:GetAttribute("CinematicCameraToken") ~= lockToken then
+
+	if targetCharacter:GetAttribute("CinematicCameraToken") ~= lockToken then
 		return
 	end
 
@@ -671,56 +699,107 @@ local function maintainPapyrusCamera(ctx, lockToken)
 	end
 
 	pcall(function()
-		ctx.CinematicService:SetCamera(character, cameraCFrame)
+		ctx.CinematicService:SetCamera(targetCharacter, cameraCFrame)
 	end)
 end
 
-local function resetPapyrusCamera(ctx, lockToken)
+local function resetCameraForCharacter(ctx, targetCharacter, lockToken)
 	if not ctx or not ctx.CinematicService then
 		return
 	end
 
-	local character = ctx.Character
-	if not character or not character.Parent then
+	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
 
-	if character:GetAttribute("CinematicCameraToken") ~= lockToken then
+	if targetCharacter:GetAttribute("CinematicCameraToken") ~= lockToken then
 		return
 	end
 
-	character:SetAttribute("CinematicCameraToken", nil)
+	targetCharacter:SetAttribute("CinematicCameraToken", nil)
 
-	local service = ctx.CinematicService
-
-	if service.ResetCamera then
+	if ctx.CinematicService.ResetCamera then
 		pcall(function()
-			service:ResetCamera(character)
+			ctx.CinematicService:ResetCamera(targetCharacter)
 		end)
 	end
 end
 
-local function findBlasterTemplate()
-	local assets = ReplicatedStorage:WaitForChild("Assets")
-	local charactersFolder = assets:WaitForChild("Characters")
+local function getSansVFXFolder(ctx)
+	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
+	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
+	local sans = characters:FindFirstChild("Sans")
 
-	local papyrus = charactersFolder:FindFirstChild("DisbeliefPapyrus")
-	if papyrus and papyrus:FindFirstChild("VFX") then
-		return papyrus.VFX:FindFirstChild("GasterBlaster")
-			or papyrus.VFX:FindFirstChild("BrokenBlaster")
-			or papyrus.VFX:FindFirstChild("Blaster")
-	end
-
-	local sans = charactersFolder:FindFirstChild("Sans")
 	if sans and sans:FindFirstChild("VFX") then
-		return sans.VFX:FindFirstChild("GasterBlaster") or sans.VFX:FindFirstChild("Blaster")
+		return sans.VFX
 	end
 
 	return nil
 end
 
-local function prepareVFXObject(object)
-	for _, descendant in ipairs(object:GetDescendants()) do
+local function getDisbeliefVFXFolder(ctx)
+	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
+	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
+	local papyrus = characters:FindFirstChild("DisbeliefPapyrus")
+
+	if papyrus and papyrus:FindFirstChild("VFX") then
+		return papyrus.VFX
+	end
+
+	return nil
+end
+
+local function getGasterBlasterTemplate(ctx)
+	local papyrusVFX = getDisbeliefVFXFolder(ctx)
+
+	if papyrusVFX then
+		local papyrusTemplate = papyrusVFX:FindFirstChild("GasterBlaster")
+			or papyrusVFX:FindFirstChild("BrokenBlaster")
+			or papyrusVFX:FindFirstChild("Blaster")
+
+		if papyrusTemplate then
+			return papyrusTemplate
+		end
+	end
+
+	local sansVFX = getSansVFXFolder(ctx)
+
+	if sansVFX then
+		return sansVFX:FindFirstChild("GasterBlaster")
+			or sansVFX:FindFirstChild("Blaster")
+	end
+
+	return nil
+end
+
+local function ensurePrimaryPart(model)
+	if not model or not model:IsA("Model") then
+		return nil
+	end
+
+	if model.PrimaryPart then
+		return model.PrimaryPart
+	end
+
+	local primary = model:FindFirstChild("PrimaryPart", true)
+
+	if primary and primary:IsA("BasePart") then
+		model.PrimaryPart = primary
+		return primary
+	end
+
+	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
+
+	if firstPart then
+		model.PrimaryPart = firstPart
+		return firstPart
+	end
+
+	return nil
+end
+
+local function setupBlasterParts(model)
+	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = true
 			descendant.CanCollide = false
@@ -730,103 +809,293 @@ local function prepareVFXObject(object)
 		end
 	end
 
-	if object:IsA("BasePart") then
-		object.Anchored = true
-		object.CanCollide = false
-		object.CanTouch = false
-		object.CanQuery = false
-		object.Massless = true
+	local primary = ensurePrimaryPart(model)
+
+	if primary then
+		primary.Transparency = 1
 	end
 end
 
-local function getPrimaryPart(object)
-	if object:IsA("BasePart") then
-		return object
+local function getVisibleParts(model)
+	local primary = ensurePrimaryPart(model)
+	local parts = {}
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") and descendant ~= primary then
+			table.insert(parts, descendant)
+		end
 	end
 
-	if object:IsA("Model") then
-		if object.PrimaryPart then
-			return object.PrimaryPart
+	return parts
+end
+
+local function forcePrimaryInvisible(model)
+	local primary = ensurePrimaryPart(model)
+
+	if primary then
+		primary.Transparency = 1
+		primary.CanCollide = false
+		primary.CanTouch = false
+		primary.CanQuery = false
+	end
+end
+
+local function capturePartTransparencies(model)
+	local transparencies = {}
+
+	for _, part in ipairs(getVisibleParts(model)) do
+		transparencies[part] = part.Transparency
+	end
+
+	return transparencies
+end
+
+local function setVisiblePartsTransparency(model, transparency)
+	for _, part in ipairs(getVisibleParts(model)) do
+		part.Transparency = transparency
+	end
+
+	forcePrimaryInvisible(model)
+end
+
+local function tweenVisibleParts(model, transparencies, tweenInfo, fadeOut)
+	for part, originalTransparency in pairs(transparencies) do
+		if part and part.Parent then
+			local goalTransparency = fadeOut and 1 or originalTransparency
+
+			TweenService:Create(
+				part,
+				tweenInfo,
+				{
+					Transparency = goalTransparency,
+				}
+			):Play()
+		end
+	end
+
+	forcePrimaryInvisible(model)
+end
+
+local function tweenModelPivot(model, startCFrame, endCFrame, tweenInfo)
+	if not model or not model.Parent then
+		return nil
+	end
+
+	local cframeValue = Instance.new("CFrameValue")
+	cframeValue.Name = "GasterBlasterTweenCFrame"
+	cframeValue.Value = startCFrame
+
+	local connection
+	connection = cframeValue:GetPropertyChangedSignal("Value"):Connect(function()
+		if model and model.Parent then
+			model:PivotTo(cframeValue.Value)
+			forcePrimaryInvisible(model)
+		end
+	end)
+
+	local tween = TweenService:Create(
+		cframeValue,
+		tweenInfo,
+		{
+			Value = endCFrame,
+		}
+	)
+
+	tween.Completed:Connect(function()
+		if connection then
+			connection:Disconnect()
 		end
 
-		local part = object:FindFirstChildWhichIsA("BasePart", true)
-		if part then
-			object.PrimaryPart = part
-			return part
+		if cframeValue then
+			cframeValue:Destroy()
 		end
+
+		if model and model.Parent then
+			model:PivotTo(endCFrame)
+			forcePrimaryInvisible(model)
+		end
+	end)
+
+	tween:Play()
+	return tween
+end
+
+local function fadeInBlaster(model, finalCFrame, data)
+	local offset = data.FadeInOffset or CFrame.new(0, 0, 7)
+	local startCFrame = finalCFrame * offset
+	local fadeInTime = data.FadeInTime or 0.16
+	local transparencies = capturePartTransparencies(model)
+
+	local tweenInfo = TweenInfo.new(
+		fadeInTime,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.Out
+	)
+
+	model:PivotTo(startCFrame)
+	setVisiblePartsTransparency(model, 1)
+	forcePrimaryInvisible(model)
+
+	tweenModelPivot(model, startCFrame, finalCFrame, tweenInfo)
+	tweenVisibleParts(model, transparencies, tweenInfo, false)
+
+	return transparencies
+end
+
+local function fadeOutBlaster(model, currentCFrame, transparencies, data)
+	if not model or not model.Parent then
+		return
+	end
+
+	local offset = data.FadeOutOffset or CFrame.new(0, 0, 7)
+	local endCFrame = currentCFrame * offset
+	local fadeOutTime = data.FadeOutTime or 0.16
+
+	local tweenInfo = TweenInfo.new(
+		fadeOutTime,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.Out
+	)
+
+	tweenModelPivot(model, currentCFrame, endCFrame, tweenInfo)
+	tweenVisibleParts(model, transparencies or capturePartTransparencies(model), tweenInfo, true)
+
+	task.delay(fadeOutTime + 0.03, function()
+		if model and model.Parent then
+			model:Destroy()
+		end
+	end)
+end
+
+local function getBeamOrigin(blaster)
+	local attachment = blaster:FindFirstChild("BeamOrgin", true)
+
+	if attachment and attachment:IsA("Attachment") then
+		return attachment
+	end
+
+	attachment = blaster:FindFirstChild("BeamOrigin", true)
+
+	if attachment and attachment:IsA("Attachment") then
+		return attachment
 	end
 
 	return nil
 end
 
-local function pivotVFXObject(object, cframe)
-	if object:IsA("Model") then
-		if getPrimaryPart(object) then
-			object:PivotTo(cframe)
-		end
-	elseif object:IsA("BasePart") then
-		object.CFrame = cframe
+local function getWorldBeamPosition(blaster)
+	local attachment = getBeamOrigin(blaster)
+
+	if attachment then
+		return attachment.WorldPosition
+	end
+
+	local primary = ensurePrimaryPart(blaster)
+
+	if primary then
+		return primary.Position
+	end
+
+	return blaster:GetPivot().Position
+end
+
+local function openJaws(blaster, data)
+	local leftJaw = blaster:FindFirstChild("Left Jaw", true)
+	local rightJaw = blaster:FindFirstChild("Right Jaw", true)
+
+	local jawOpenTime = data.JawOpenTime or 0.18
+	local jawOpenAngle = math.rad(data.JawOpenAngle or 22)
+
+	local tweenInfo = TweenInfo.new(
+		jawOpenTime,
+		Enum.EasingStyle.Back,
+		Enum.EasingDirection.Out
+	)
+
+	if leftJaw and leftJaw:IsA("BasePart") then
+		local goalCFrame = leftJaw.CFrame * CFrame.Angles(-jawOpenAngle, 0, 0)
+
+		TweenService:Create(leftJaw, tweenInfo, {
+			CFrame = goalCFrame,
+		}):Play()
+	end
+
+	if rightJaw and rightJaw:IsA("BasePart") then
+		local goalCFrame = rightJaw.CFrame * CFrame.Angles(-jawOpenAngle, 0, 0)
+
+		TweenService:Create(rightJaw, tweenInfo, {
+			CFrame = goalCFrame,
+		}):Play()
 	end
 end
 
-local function emitParticles(object, wantedNames, fallbackAll)
-	if not object then
-		return
-	end
+local function hideRightEye(blaster)
+	local rightEye = blaster:FindFirstChild("RightEye", true)
 
-	local matched = false
-	local wanted = {}
-
-	for _, name in ipairs(wantedNames or {}) do
-		wanted[name] = true
-	end
-
-	for _, descendant in ipairs(object:GetDescendants()) do
-		if descendant:IsA("ParticleEmitter") then
-			if wanted[descendant.Name] or wanted[descendant.Parent.Name] then
-				matched = true
-
-				local emitCount = descendant:GetAttribute("EmitCount")
-				if typeof(emitCount) ~= "number" then
-					emitCount = 10
-				end
-
-				descendant:Emit(emitCount)
-			end
-		elseif descendant:IsA("Beam") or descendant:IsA("Trail") then
-			if wanted[descendant.Name] or wanted[descendant.Parent.Name] then
-				matched = true
-				descendant.Enabled = true
-			end
-		end
-	end
-
-	if matched or not fallbackAll then
-		return
-	end
-
-	for _, descendant in ipairs(object:GetDescendants()) do
-		if descendant:IsA("ParticleEmitter") then
-			local emitCount = descendant:GetAttribute("EmitCount")
-			if typeof(emitCount) ~= "number" then
-				emitCount = 10
-			end
-
-			descendant:Emit(emitCount)
-		end
+	if rightEye and rightEye:IsA("BasePart") then
+		rightEye.Transparency = 1
 	end
 end
 
-local function setBeamState(object, enabled)
-	if not object then
+local function createBeamVisual(startPosition, direction, data)
+	if not direction or direction.Magnitude < 0.05 then
 		return
 	end
 
-	for _, descendant in ipairs(object:GetDescendants()) do
-		if descendant:IsA("Beam") or descendant:IsA("Trail") then
-			descendant.Enabled = enabled
-		end
-	end
+	local length = (data.BeamLength or 90) + (data.BeamExtraLength or 8)
+	local radius = data.BeamRadius or 5.5
+	local sizeMultiplier = data.BeamVisualSizeMultiplier or 1.75
+	local visualRadius = radius * sizeMultiplier
+	local fadeTime = data.BeamFadeTime or 0.18
+
+	local beam = Instance.new("Part")
+	beam.Name = "EnterDisbeliefPhase2GasterBeam"
+	beam.Anchored = true
+	beam.CanCollide = false
+	beam.CanTouch = false
+	beam.CanQuery = false
+	beam.Material = Enum.Material.Neon
+	beam.Color = Color3.fromRGB(255, 255, 255)
+	beam.Transparency = data.BeamVisualTransparency or 0.06
+	beam.Size = Vector3.new(visualRadius, visualRadius, length)
+
+	local center = startPosition + (direction.Unit * (length / 2))
+	beam.CFrame = CFrame.lookAt(center, center + direction.Unit)
+	beam.Parent = workspace
+
+	local core = Instance.new("Part")
+	core.Name = "EnterDisbeliefPhase2GasterBeamCore"
+	core.Anchored = true
+	core.CanCollide = false
+	core.CanTouch = false
+	core.CanQuery = false
+	core.Material = Enum.Material.Neon
+	core.Color = Color3.fromRGB(255, 255, 255)
+	core.Transparency = 0
+	core.Size = Vector3.new(visualRadius * 0.48, visualRadius * 0.48, length + 3)
+	core.CFrame = beam.CFrame
+	core.Parent = workspace
+
+	TweenService:Create(
+		core,
+		TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Transparency = 1,
+			Size = Vector3.new(visualRadius * 0.08, visualRadius * 0.08, length + 3),
+		}
+	):Play()
+
+	TweenService:Create(
+		beam,
+		TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Transparency = 1,
+			Size = Vector3.new(visualRadius * 0.15, visualRadius * 0.15, length),
+		}
+	):Play()
+
+	Debris:AddItem(core, fadeTime + 0.08)
+	Debris:AddItem(beam, fadeTime + 0.08)
 end
 
 local function getBlasterSidePositions(ctx, targetRoot)
@@ -891,7 +1160,8 @@ local function spawnGasterBlasters(ctx, targetRoot)
 		return {}
 	end
 
-	local template = findBlasterTemplate()
+	local template = getGasterBlasterTemplate(ctx)
+
 	if not template then
 		warn("[EnterDisbeliefPhase2] Missing GasterBlaster / BrokenBlaster VFX")
 		return {}
@@ -903,33 +1173,79 @@ local function spawnGasterBlasters(ctx, targetRoot)
 	for _, info in ipairs(positions) do
 		local blaster = template:Clone()
 		blaster.Name = "EnterDisbeliefPhase2_" .. info.Name
-		prepareVFXObject(blaster)
+
+		if not blaster:IsA("Model") then
+			warn("[EnterDisbeliefPhase2] GasterBlaster VFX should be a Model")
+			blaster:Destroy()
+			continue
+		end
+
+		setupBlasterParts(blaster)
+
+		if not ensurePrimaryPart(blaster) then
+			warn("[EnterDisbeliefPhase2] GasterBlaster missing PrimaryPart/BasePart")
+			blaster:Destroy()
+			continue
+		end
+
+		local finalCFrame = CFrame.lookAt(info.Position, targetRoot.Position + Vector3.new(0, 2, 0))
+
 		blaster.Parent = workspace
 
-		pivotVFXObject(blaster, CFrame.lookAt(info.Position, targetRoot.Position + Vector3.new(0, 2, 0)))
+		local originalTransparencies = fadeInBlaster(blaster, finalCFrame, ctx.MoveData)
 
-		setBeamState(blaster, false)
-		emitParticles(blaster, { "Charge" }, true)
+		Debris:AddItem(blaster, ctx.MoveData.BlasterLifetime or 1.8)
 
-		table.insert(spawned, blaster)
+		table.insert(spawned, {
+			Model = blaster,
+			FinalCFrame = finalCFrame,
+			OriginalTransparencies = originalTransparencies,
+		})
 	end
 
 	return spawned
 end
 
-local function fireSpawnedBlasters(ctx, blasters)
-	for _, blaster in ipairs(blasters or {}) do
+local function fireSpawnedBlasters(ctx, blasters, targetRoot)
+	if not targetRoot or not targetRoot.Parent then
+		return
+	end
+
+	for _, blasterData in ipairs(blasters or {}) do
+		local blaster = blasterData.Model
+
 		if blaster and blaster.Parent then
-			setBeamState(blaster, true)
-			emitParticles(blaster, { "Fire", "Shoot" }, true)
-			Debris:AddItem(blaster, ctx.MoveData.BlasterLifetime or 1.8)
+			openJaws(blaster, ctx.MoveData)
+			hideRightEye(blaster)
+			forcePrimaryInvisible(blaster)
+
+			local beamStart = getWorldBeamPosition(blaster)
+			local aimPosition = targetRoot.Position + Vector3.new(0, 2, 0)
+			local direction = aimPosition - beamStart
+
+			if direction.Magnitude < 0.05 then
+				direction = blaster:GetPivot().LookVector
+			end
+
+			createBeamVisual(beamStart, direction.Unit, ctx.MoveData)
+
+			task.delay(0.35, function()
+				if blaster and blaster.Parent then
+					fadeOutBlaster(
+						blaster,
+						blaster:GetPivot(),
+						blasterData.OriginalTransparencies,
+						ctx.MoveData
+					)
+				end
+			end)
 		end
 	end
 end
 
 local function makeBlasterHitData(moveData)
 	return {
-		Radius = moveData.BlasterRadius or 7,
+		Radius = moveData.BlasterRadius or moveData.BeamRadius or 7,
 		Offset = CFrame.new(),
 
 		Damage = moveData.BlasterDamage or 18,
@@ -942,25 +1258,65 @@ local function makeBlasterHitData(moveData)
 		Guardbreak = false,
 		CanBeCountered = false,
 
+		-- Knockback is manual through MovementService so it uses the standardized preset path.
 		Knockback = 0,
 		UpwardKnockback = 0,
+		KnockbackDuration = 0,
+		KnockbackMaxForce = 0,
 
 		HitCancelsTarget = false,
 		AwardsUlt = false,
 	}
 end
 
-local function applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData)
-	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then
-		return
-	end
+local function applyBlasterKnockback(ctx, targetRoot, moveData)
 	if not targetRoot or not targetRoot.Parent then
 		return
 	end
 
+	if not ctx.Root or not ctx.Root.Parent then
+		return
+	end
+
+	if not ctx.MovementService or not ctx.MovementService.ApplyPresetKnockback then
+		warn("[EnterDisbeliefPhase2] Missing MovementService:ApplyPresetKnockback for Gaster Blaster knockback")
+		return
+	end
+
+	local knockbackData = {
+		KnockbackPreset = "PresetKnockback",
+
+		PresetKnockbackSpeed = moveData.BlasterKnockbackSpeed or 105,
+		PresetKnockbackUpward = moveData.BlasterKnockbackUpward or 28,
+		PresetKnockbackDuration = moveData.BlasterKnockbackDuration or 0.32,
+		PresetKnockbackMaxForce = moveData.BlasterKnockbackMaxForce or 130000,
+
+		Knockback = moveData.BlasterKnockbackSpeed or 105,
+		UpwardKnockback = moveData.BlasterKnockbackUpward or 28,
+		KnockbackDuration = moveData.BlasterKnockbackDuration or 0.32,
+		KnockbackMaxForce = moveData.BlasterKnockbackMaxForce or 130000,
+	}
+
+	ctx.MovementService:ApplyPresetKnockback(
+		ctx.Root,
+		targetRoot,
+		knockbackData,
+		"EnterDisbeliefPhase2GasterBlaster"
+	)
+end
+
+local function applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData)
+	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then
+		return nil
+	end
+
+	if not targetRoot or not targetRoot.Parent then
+		return nil
+	end
+
 	if ctx.ApplyStandardHit and typeof(ctx.ApplyStandardHit) == "function" then
-		local success = pcall(function()
-			ctx:ApplyStandardHit(
+		local success, result = pcall(function()
+			return ctx:ApplyStandardHit(
 				targetCharacter,
 				targetHumanoid,
 				targetRoot,
@@ -970,78 +1326,35 @@ local function applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, ta
 		end)
 
 		if success then
-			return
+			return result
 		end
 	end
 
 	targetHumanoid:TakeDamage(hitData.Damage or 18)
 	softDamageStun(ctx, targetCharacter, hitData.Stun or 1.15)
+
+	return "Hit"
 end
 
-local function applyBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot)
-	if not targetCharacter or not targetHumanoid or targetHumanoid.Health <= 0 then
+local function applyGuaranteedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot)
+	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
+
+	if not targetHumanoid or targetHumanoid.Health <= 0 then
+		return
+	end
+
 	if not targetRoot or not targetRoot.Parent then
 		return
 	end
 
 	local hitData = makeBlasterHitData(ctx.MoveData)
-	local hitDone = false
+	local result = applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData)
 
-	local function tryHit(hitCharacter, hitHumanoid, hitRoot)
-		if hitDone then
-			return
-		end
-		if hitCharacter ~= targetCharacter then
-			return
-		end
-		if not hitHumanoid or hitHumanoid.Health <= 0 then
-			return
-		end
-		if not hitRoot or not hitRoot.Parent then
-			return
-		end
-
-		hitDone = true
-		applyConfirmedBlasterHit(ctx, hitCharacter, hitHumanoid, hitRoot, hitData)
+	if result == "Hit" or result == "ArmoredHit" or result == nil then
+		applyBlasterKnockback(ctx, targetRoot, ctx.MoveData)
 	end
-
-	if ctx.HitboxService and ctx.HitboxService.PerformSphereAtCFrame then
-		local success = pcall(function()
-			ctx.HitboxService:PerformSphereAtCFrame(
-				ctx.Character,
-				targetRoot.CFrame,
-				hitData.Radius or 7,
-				function(hitCharacter, hitHumanoid, hitRoot)
-					tryHit(hitCharacter, hitHumanoid, hitRoot)
-				end
-			)
-		end)
-
-		if success and hitDone then
-			return
-		end
-	end
-
-	if ctx.HitboxService and ctx.HitboxService.PerformSphereAtPosition then
-		local success = pcall(function()
-			ctx.HitboxService:PerformSphereAtPosition(
-				ctx.Character,
-				targetRoot.Position,
-				hitData.Radius or 7,
-				function(hitCharacter, hitHumanoid, hitRoot)
-					tryHit(hitCharacter, hitHumanoid, hitRoot)
-				end
-			)
-		end)
-
-		if success and hitDone then
-			return
-		end
-	end
-
-	applyConfirmedBlasterHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData)
 end
 
 local function chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
@@ -1058,10 +1371,9 @@ local function chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
 	end
 
 	local moveData = ctx.MoveData
-	local chargeTime = moveData.BlasterChargeTime or 0.65
 	local lockTime = moveData.CounterCinematicLockTime
 		or moveData.AttackerCounterStun
-		or math.max(moveData.TransformFallbackTime or 7, chargeTime + 0.75)
+		or math.max(moveData.TransformFallbackTime or 7, 0.75)
 
 	enforceCinematicLock(attackerCharacter, lockToken)
 	stunCounterAttacker(ctx, attackerCharacter, lockTime)
@@ -1070,28 +1382,29 @@ local function chargeThenFireGasterBlasters(ctx, attackerCharacter, lockToken)
 	local blasters = spawnGasterBlasters(ctx, attackerRoot)
 	playPapyrusSFX(ctx, "Ding", attackerRoot, 2)
 
+	local chargeTime = moveData.BlasterChargeTime or 0
+
 	task.delay(chargeTime, function()
 		if not attackerCharacter or not attackerCharacter.Parent then
 			return
 		end
+
 		if not attackerHumanoid or not attackerHumanoid.Parent or attackerHumanoid.Health <= 0 then
 			return
 		end
+
 		if not attackerRoot or not attackerRoot.Parent then
 			return
 		end
 
-		enforceCinematicLock(attackerCharacter, lockToken)
-		stunCounterAttacker(ctx, attackerCharacter, lockTime)
+		-- Release the attacker from velocity-zeroing cinematic lock right as the beam fires.
+		-- Otherwise the standardized knockback gets eaten by the lock heartbeat.
+		attackerCharacter:SetAttribute("CounterBlasterKnockbackReleased", true)
 
-		fireSpawnedBlasters(ctx, blasters)
+		fireSpawnedBlasters(ctx, blasters, attackerRoot)
 		playPapyrusSFX(ctx, "M1", attackerRoot, 2)
 
-		applyBlasterHit(ctx, attackerCharacter, attackerHumanoid, attackerRoot)
-
-		task.defer(function()
-			enforceCinematicLock(attackerCharacter, lockToken)
-		end)
+		applyGuaranteedBlasterHit(ctx, attackerCharacter, attackerHumanoid, attackerRoot)
 	end)
 end
 
@@ -1131,6 +1444,7 @@ function EnterDisbeliefPhase2.Execute(context)
 
 	local counterSucceeded = false
 	local cameraStarted = false
+	local cameraTargets = {}
 	local lastCameraMaintain = 0
 
 	local finished = false
@@ -1145,7 +1459,9 @@ function EnterDisbeliefPhase2.Execute(context)
 		end
 
 		if attackerCharacter and attackerCharacter.Parent then
-			enforceCinematicLock(attackerCharacter, lockToken)
+			if attackerCharacter:GetAttribute("CounterBlasterKnockbackReleased") ~= true then
+				enforceCinematicLock(attackerCharacter, lockToken)
+			end
 		end
 	end)
 
@@ -1161,16 +1477,19 @@ function EnterDisbeliefPhase2.Execute(context)
 		if cameraStarted then
 			local now = os.clock()
 
-			-- Do not spam every frame, but keep the camera locked if another camera script fights it.
 			if now - lastCameraMaintain >= 0.35 then
 				lastCameraMaintain = now
-				maintainPapyrusCamera(ctx, lockToken)
+
+				for _, cameraTarget in ipairs(cameraTargets) do
+					maintainCameraForCharacter(ctx, cameraTarget, lockToken)
+				end
 			end
 		end
 	end)
 
 	local counterTrack =
 		playCharacterAnimation(ctx, moveData.CounterAnimationName or "EnterDisbeliefPhase2Counter", false)
+
 	playPapyrusSFX(ctx, "Summon", root, 2)
 
 	task.wait(moveData.StartupTime or 0.05)
@@ -1179,9 +1498,11 @@ function EnterDisbeliefPhase2.Execute(context)
 		if lockConnection then
 			lockConnection:Disconnect()
 		end
+
 		if protectionConnection then
 			protectionConnection:Disconnect()
 		end
+
 		if counterTrack and counterTrack.IsPlaying then
 			counterTrack:Stop(0.05)
 		end
@@ -1231,9 +1552,11 @@ function EnterDisbeliefPhase2.Execute(context)
 	local function restoreIFramesWithLinger()
 		if not papyrusIFrameState then
 			disconnectProtectionAfterRestore()
+
 			if character and character.Parent then
 				character:SetAttribute("CounterCinematicIFrames", false)
 			end
+
 			return
 		end
 
@@ -1263,6 +1586,7 @@ function EnterDisbeliefPhase2.Execute(context)
 		if finished then
 			return
 		end
+
 		finished = true
 
 		debugPrint(ctx, "Finish called. CounterSucceeded:", counterSucceeded)
@@ -1281,14 +1605,20 @@ function EnterDisbeliefPhase2.Execute(context)
 			end
 
 			if cameraStarted then
-				resetPapyrusCamera(ctx, lockToken)
+				for _, cameraTarget in ipairs(cameraTargets) do
+					resetCameraForCharacter(ctx, cameraTarget, lockToken)
+				end
+
 				cameraStarted = false
+			end
+
+			if attackerCharacter and attackerCharacter.Parent then
+				attackerCharacter:SetAttribute("CounterBlasterKnockbackReleased", nil)
 			end
 
 			restoreCinematicLock(attackerOldState, lockToken)
 			restoreCinematicLock(casterOldState, lockToken)
 
-			-- Keep Papyrus protected after the animation ends, then restore.
 			restoreIFramesWithLinger()
 
 			finishContext(ctx)
@@ -1299,17 +1629,39 @@ function EnterDisbeliefPhase2.Execute(context)
 		if papyrusIFramesActive then
 			return
 		end
+
 		papyrusIFramesActive = true
 		papyrusIFrameState = savePapyrusIFrameState(character)
 		protectionActive = true
 		forcePapyrusIFrames(character)
+
 		debugPrint(ctx, "Transform iframes started")
+	end
+
+	local function addCameraTarget(targetCharacter)
+		if not targetCharacter or not targetCharacter.Parent then
+			return
+		end
+
+		for _, existing in ipairs(cameraTargets) do
+			if existing == targetCharacter then
+				return
+			end
+		end
+
+		local started = startCameraForCharacter(ctx, targetCharacter, lockToken)
+
+		if started then
+			table.insert(cameraTargets, targetCharacter)
+			cameraStarted = true
+		end
 	end
 
 	local function triggerUltimate()
 		if finished or triggered then
 			return
 		end
+
 		if character:GetAttribute("CounterToken") ~= counterToken then
 			return
 		end
@@ -1319,15 +1671,18 @@ function EnterDisbeliefPhase2.Execute(context)
 
 		debugPrint(ctx, "Counter triggered")
 
-		-- Successful counter confirmed:
-		-- Papyrus now gets protected. This protection is re-applied every Heartbeat until after linger.
 		beginTransformIFramesOnce()
 
-		cameraStarted = startPapyrusCamera(ctx, lockToken)
-		lastCameraMaintain = os.clock()
-		debugPrint(ctx, "Camera started:", cameraStarted)
-
 		attackerCharacter = getStoredAttacker(character)
+
+		addCameraTarget(character)
+
+		if attackerCharacter then
+			addCameraTarget(attackerCharacter)
+		end
+
+		lastCameraMaintain = os.clock()
+		debugPrint(ctx, "Camera targets:", #cameraTargets)
 
 		if attackerCharacter then
 			attackerOldState = beginCinematicLock(attackerCharacter, lockToken)
@@ -1367,6 +1722,7 @@ function EnterDisbeliefPhase2.Execute(context)
 			if phase2AttributesSet then
 				return
 			end
+
 			phase2AttributesSet = true
 
 			enterPhase2Attributes(ctx)
@@ -1378,6 +1734,7 @@ function EnterDisbeliefPhase2.Execute(context)
 			if weaponChanged then
 				return
 			end
+
 			weaponChanged = true
 
 			setPhase2AttributesOnce()
@@ -1389,6 +1746,7 @@ function EnterDisbeliefPhase2.Execute(context)
 			if blasterFired then
 				return
 			end
+
 			blasterFired = true
 
 			if attackerCharacter then
@@ -1403,6 +1761,11 @@ function EnterDisbeliefPhase2.Execute(context)
 			if blackScreenStarted and not blackScreenEnded then
 				blackScreenEnded = true
 				fireScreenEffect(character, "BlackScreenEnd")
+
+				if attackerCharacter then
+					fireScreenEffect(attackerCharacter, "BlackScreenEnd")
+				end
+
 				debugPrint(ctx, "Forced BlackScreenEnd")
 			end
 		end
@@ -1412,7 +1775,13 @@ function EnterDisbeliefPhase2.Execute(context)
 
 			transformTrack:GetMarkerReachedSignal(moveData.BlackScreenMarkerName or "BlackScreen"):Connect(function()
 				blackScreenStarted = true
+
 				fireScreenEffect(character, "BlackScreen")
+
+				if attackerCharacter then
+					fireScreenEffect(attackerCharacter, "BlackScreen")
+				end
+
 				debugPrint(ctx, "BlackScreen marker")
 			end)
 
@@ -1432,7 +1801,13 @@ function EnterDisbeliefPhase2.Execute(context)
 				:GetMarkerReachedSignal(moveData.BlackScreenEndMarkerName or "BlackScreenEnd")
 				:Connect(function()
 					blackScreenEnded = true
+
 					fireScreenEffect(character, "BlackScreenEnd")
+
+					if attackerCharacter then
+						fireScreenEffect(attackerCharacter, "BlackScreenEnd")
+					end
+
 					setPhase2AttributesOnce()
 
 					-- Important:
@@ -1454,10 +1829,8 @@ function EnterDisbeliefPhase2.Execute(context)
 				finish(0)
 			end)
 
-			-- IMPORTANT:
 			-- Do not Stop/Play this track here.
 			-- playCharacterAnimation already started the animation.
-			-- Stopping here can fire transformTrack.Stopped instantly and end camera/iframes too early.
 		else
 			debugPrint(ctx, "Missing transform track, using fallback")
 

@@ -12,10 +12,11 @@ local SHIFT_LOCK_CAMERA_OFFSET = Vector3.new(1.75, 0, 0)
 local SHIFT_LOCK_CURSOR_ICON = "rbxassetid://240064847"
 
 local PAUSE_PLAYER_ATTRIBUTES = {
-	"CinematicCameraActive",
 	"MouseFreeMode",
 	"CustomShiftLockPaused",
 	"MenuOpen",
+	"SuppressShiftLock",
+	"SuppressShiftLockDuringCinematic",
 }
 
 local PAUSE_CHARACTER_ATTRIBUTES = {
@@ -24,9 +25,14 @@ local PAUSE_CHARACTER_ATTRIBUTES = {
 	"Grabbed",
 	"Grabbing",
 	"Emoting",
-	"MovementLocked",
-	"ActionLocked",
 	"HardLocked",
+	"SuppressShiftLock",
+	"SuppressShiftLockDuringCinematic",
+}
+
+local POLICY_ATTRIBUTES = {
+	"AllowShiftLockDuringCinematic",
+	"CinematicCameraActive",
 }
 
 local shiftLockEnabled = false
@@ -84,16 +90,33 @@ local function isPaused()
 	end
 
 	local character = player.Character
-	if hasAnyAttribute(character, PAUSE_CHARACTER_ATTRIBUTES) then
+	local allowDuringCinematic = player:GetAttribute("AllowShiftLockDuringCinematic") == true
+		or (character and character:GetAttribute("AllowShiftLockDuringCinematic") == true)
+
+	if hasAnyAttribute(character, PAUSE_CHARACTER_ATTRIBUTES) and not allowDuringCinematic then
+		return true
+	end
+
+	local cinematicCameraActive = player:GetAttribute("CinematicCameraActive") == true
+		or (character and character:GetAttribute("CinematicCameraActive") == true)
+
+	if cinematicCameraActive and not allowDuringCinematic then
 		return true
 	end
 
 	local camera = workspace.CurrentCamera
-	if camera and camera.CameraType == Enum.CameraType.Scriptable then
+	if camera and camera.CameraType == Enum.CameraType.Scriptable and not allowDuringCinematic then
 		return true
 	end
 
 	return false
+end
+
+local function isScriptableCameraAllowed()
+	local character = player.Character
+
+	return player:GetAttribute("AllowShiftLockDuringCinematic") == true
+		or (character and character:GetAttribute("AllowShiftLockDuringCinematic") == true)
 end
 
 local refreshShiftLock
@@ -198,12 +221,20 @@ local function watchCharacter(character)
 		for _, attributeName in ipairs(PAUSE_CHARACTER_ATTRIBUTES) do
 			table.insert(characterAttributeConnections, character:GetAttributeChangedSignal(attributeName):Connect(refreshShiftLock))
 		end
+
+		for _, attributeName in ipairs(POLICY_ATTRIBUTES) do
+			table.insert(characterAttributeConnections, character:GetAttributeChangedSignal(attributeName):Connect(refreshShiftLock))
+		end
 	end
 
 	refreshShiftLock()
 end
 
 for _, attributeName in ipairs(PAUSE_PLAYER_ATTRIBUTES) do
+	player:GetAttributeChangedSignal(attributeName):Connect(refreshShiftLock)
+end
+
+for _, attributeName in ipairs(POLICY_ATTRIBUTES) do
 	player:GetAttributeChangedSignal(attributeName):Connect(refreshShiftLock)
 end
 
@@ -253,7 +284,7 @@ RunService:BindToRenderStep("CustomShiftLock", Enum.RenderPriority.Camera.Value 
 		return
 	end
 
-	if camera.CameraType == Enum.CameraType.Scriptable then
+	if camera.CameraType == Enum.CameraType.Scriptable and not isScriptableCameraAllowed() then
 		refreshShiftLock()
 		return
 	end
@@ -261,6 +292,10 @@ RunService:BindToRenderStep("CustomShiftLock", Enum.RenderPriority.Camera.Value 
 	humanoid.AutoRotate = false
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	applyShiftLockCursor()
+
+	if camera.CameraType == Enum.CameraType.Scriptable then
+		return
+	end
 
 	-- Recreate default Roblox shift-lock shoulder offset.
 	-- This runs after the normal camera update, so it layers the offset on top.

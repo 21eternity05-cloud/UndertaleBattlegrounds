@@ -71,6 +71,9 @@ local KillingIntent = {
 	HitVictimShakeDuration = 0.24,
 
 	HitImpactFrameDuration = 0.075,
+
+	-- Counter-focus camera is combat polish, not a full cutscene takeover.
+	CameraPolicy = "ShiftLockAllowed",
 }
 
 local COUNTER_ANIMATION = "KillingIntentCounter"
@@ -490,10 +493,14 @@ function KillingIntent.Execute(context)
 		local cameraPosition = targetRoot.Position - (flatDirection * cameraDistance) + Vector3.new(0, cameraHeight, 0)
 		local lookPosition = root.Position + Vector3.new(0, lookHeight, 0)
 		local cameraCFrame = CFrame.lookAt(cameraPosition, lookPosition)
+		local cameraPolicy = {
+			CameraPolicy = moveData.CameraPolicy or "ShiftLockAllowed",
+			AllowShiftLock = true,
+		}
 
 		if context.CinematicService.TweenCamera then
 			pcall(function()
-				context.CinematicService:TweenCamera(targetCharacter, cameraCFrame, tweenTime)
+				context.CinematicService:TweenCamera(targetCharacter, cameraCFrame, tweenTime, cameraPolicy)
 			end)
 
 			return
@@ -501,7 +508,7 @@ function KillingIntent.Execute(context)
 
 		if context.CinematicService.SetCamera then
 			pcall(function()
-				context.CinematicService:SetCamera(targetCharacter, cameraCFrame)
+				context.CinematicService:SetCamera(targetCharacter, cameraCFrame, cameraPolicy)
 			end)
 		end
 	end

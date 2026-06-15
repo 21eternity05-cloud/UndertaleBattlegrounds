@@ -688,6 +688,7 @@ local oldMouseBehavior = nil
 local oldMouseIconEnabled = nil
 local cameraTween = nil
 local cinematicCameraToken = 0
+local activeCinematicAllowsShiftLock = false
 
 local activeCameraShakes = {}
 local lastShakeTransform = CFrame.new()
@@ -829,9 +830,23 @@ local function resetFOV(tweenTime)
 	tweenToSustainedFOV(tweenTime or 0.16)
 end
 
-local function beginCinematicCamera()
+local function shouldAllowShiftLockForCamera(payload)
+	if typeof(payload) ~= "table" then
+		return false
+	end
+
+	return payload.AllowShiftLock == true
+		or payload.AllowShiftLockDuringCinematic == true
+		or payload.SuppressShiftLock == false
+		or payload.SuppressShiftLockDuringCinematic == false
+		or payload.CameraPolicy == "ShiftLockAllowed"
+		or payload.CameraControlMode == "ShiftLockAllowed"
+end
+
+local function beginCinematicCamera(payload)
 	local camera = getCamera()
 	if not camera then return end
+	local allowShiftLock = shouldAllowShiftLockForCamera(payload)
 
 	if not activeCinematicCamera then
 		oldCameraType = camera.CameraType
@@ -841,31 +856,41 @@ local function beginCinematicCamera()
 	end
 
 	activeCinematicCamera = true
+	activeCinematicAllowsShiftLock = allowShiftLock
 	player:SetAttribute("CinematicCameraActive", true)
-	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	player:SetAttribute("AllowShiftLockDuringCinematic", allowShiftLock)
+	player:SetAttribute("SuppressShiftLockDuringCinematic", not allowShiftLock)
+
+	if not allowShiftLock then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	end
+
 	camera.CameraType = Enum.CameraType.Scriptable
 end
 
-local function setCinematicCamera(cframe)
+local function setCinematicCamera(cframe, payload)
 	local camera = getCamera()
 	if not camera then return end
 
-	beginCinematicCamera()
+	beginCinematicCamera(payload)
 
 	if cameraTween then
 		cameraTween:Cancel()
 		cameraTween = nil
 	end
 
-	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	if not activeCinematicAllowsShiftLock then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	end
+
 	camera.CFrame = cframe
 end
 
-local function tweenCinematicCamera(cframe, tweenTime)
+local function tweenCinematicCamera(cframe, tweenTime, payload)
 	local camera = getCamera()
 	if not camera then return end
 
-	beginCinematicCamera()
+	beginCinematicCamera(payload)
 
 	if cameraTween then
 		cameraTween:Cancel()
@@ -874,7 +899,10 @@ local function tweenCinematicCamera(cframe, tweenTime)
 
 	cinematicCameraToken += 1
 	local token = cinematicCameraToken
-	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+	if not activeCinematicAllowsShiftLock then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	end
 
 	cameraTween = TweenService:Create(
 		camera,
@@ -930,8 +958,11 @@ local function resetCinematicCamera()
 	oldCameraSubject = nil
 	oldMouseBehavior = nil
 	oldMouseIconEnabled = nil
+	activeCinematicAllowsShiftLock = false
 
 	player:SetAttribute("CinematicCameraActive", false)
+	player:SetAttribute("AllowShiftLockDuringCinematic", false)
+	player:SetAttribute("SuppressShiftLockDuringCinematic", false)
 end
 
 local function startCameraShake(intensity, roughness, duration)
@@ -1169,10 +1200,10 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 	if typeof(payload) ~= "table" then return end
 
 	if payload.Action == "SetCamera" and typeof(payload.CFrame) == "CFrame" then
-		setCinematicCamera(payload.CFrame)
+		setCinematicCamera(payload.CFrame, payload)
 
 	elseif payload.Action == "TweenCamera" and typeof(payload.CFrame) == "CFrame" then
-		tweenCinematicCamera(payload.CFrame, payload.Time or 0.25)
+		tweenCinematicCamera(payload.CFrame, payload.Time or 0.25, payload)
 
 	elseif payload.Action == "ResetCamera" then
 		resetCinematicCamera()

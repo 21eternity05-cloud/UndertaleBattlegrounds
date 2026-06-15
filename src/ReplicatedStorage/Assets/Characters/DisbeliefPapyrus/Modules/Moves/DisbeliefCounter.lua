@@ -63,7 +63,12 @@ local DisbeliefCounter = {
 	KnockbackDuration = 0.34,
 	KnockbackMaxForce = 100000,
 
-	CounterUltBonusDamageValue = 15,
+	CounterUltBonusDamageValue = 35,
+
+	-- Counter stance locks combat inputs but should not suppress custom shift lock.
+	CameraPolicy = "ShiftLockAllowed",
+
+	Debug = false,
 }
 
 local COUNTER_ANIMATION_NAMES = {
@@ -71,6 +76,14 @@ local COUNTER_ANIMATION_NAMES = {
 	"PapyrusCounter",
 	"Counter",
 }
+
+local function debugPrint(ctx, ...)
+	local moveData = ctx and ctx.MoveData or DisbeliefCounter
+
+	if moveData.Debug == true then
+		print("[DisbeliefCounter]", ...)
+	end
+end
 
 local function copyTable(source)
 	local copy = {}
@@ -119,7 +132,10 @@ local function getStoredAttacker(character)
 end
 
 local function safeSetCounterInvincible(character, enabled)
-	if not character or not character.Parent then return end
+	if not character or not character.Parent then
+		return
+	end
+
 	character:SetAttribute("Countering", enabled == true)
 end
 
@@ -290,7 +306,9 @@ local function ensurePrimaryPart(object)
 end
 
 local function forcePrimaryPartInvisible(object)
-	if not object then return end
+	if not object then
+		return
+	end
 
 	if object:IsA("Model") then
 		local primary = ensurePrimaryPart(object)
@@ -322,7 +340,10 @@ end
 
 local function pivotObject(object, cframe)
 	if object:IsA("Model") then
-		if not ensurePrimaryPart(object) then return end
+		if not ensurePrimaryPart(object) then
+			return
+		end
+
 		object:PivotTo(cframe)
 	elseif object:IsA("BasePart") then
 		object.CFrame = cframe
@@ -405,9 +426,17 @@ local function fadeAndDestroyObject(object, fadeTime)
 end
 
 local function playPapyrusSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
+	if not ctx.VFXService then
+		return
+	end
+
+	if not ctx.VFXService.PlayCharacterSFXAtPart then
+		return
+	end
+
+	if not parentPart or not parentPart.Parent then
+		return
+	end
 
 	local played = ctx.VFXService:PlayCharacterSFXAtPart(
 		"DisbeliefPapyrus",
@@ -448,7 +477,9 @@ local function playFirstAnimation(ctx, character, animationNames, fadeTime, spee
 end
 
 local function zeroVelocity(root)
-	if not root or not root.Parent then return end
+	if not root or not root.Parent then
+		return
+	end
 
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
@@ -477,7 +508,6 @@ local function startActionLock(character, humanoid)
 	character:SetAttribute("BlockLocked", true)
 	character:SetAttribute("ActionLocked", true)
 
-	-- Stops walking without anchoring. AutoRotate stays true so he can turn.
 	humanoid.WalkSpeed = 0
 	humanoid.AutoRotate = true
 	humanoid.Jump = false
@@ -508,7 +538,9 @@ local function restoreActionLock(character, humanoid, oldState)
 end
 
 local function stunCounterAttacker(ctx, targetCharacter, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
+	if not targetCharacter or not targetCharacter.Parent then
+		return
+	end
 
 	duration = duration or 0.55
 
@@ -537,8 +569,13 @@ local function stunCounterAttacker(ctx, targetCharacter, duration)
 			end
 
 			task.delay(duration, function()
-				if not targetCharacter or not targetCharacter.Parent then return end
-				if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then return end
+				if not targetCharacter or not targetCharacter.Parent then
+					return
+				end
+
+				if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
+					return
+				end
 
 				targetCharacter:SetAttribute("Stunned", false)
 				targetCharacter:SetAttribute("DashLocked", false)
@@ -633,14 +670,21 @@ local function makeWallData(ctx)
 end
 
 local function updateAttachedWall(ctx, wallData, riseAlpha)
-	if not wallData then return end
+	if not wallData then
+		return
+	end
 
 	local root = ctx.Root
 	local moveData = ctx.MoveData
 	local wall = wallData.Object
 
-	if not root or not root.Parent then return end
-	if not wall or not wall.Parent then return end
+	if not root or not root.Parent then
+		return
+	end
+
+	if not wall or not wall.Parent then
+		return
+	end
 
 	local direction = getFacingDirection(root)
 	local basePosition = root.Position + (direction * (moveData.WallDistance or 3.75))
@@ -719,23 +763,8 @@ end
 
 local function buildWallHitboxData(moveData)
 	return {
-		Radius = moveData.Radius or 5.75,
+		Radius = moveData.Radius or 10,
 		Offset = moveData.Offset or CFrame.new(0, -1.4, 0),
-
-		Damage = moveData.Damage or 9,
-		Stun = moveData.Stun or 0.75,
-
-		Blockable = moveData.Blockable,
-		CanBeBlocked = moveData.CanBeBlocked,
-		Unblockable = moveData.Unblockable,
-
-		Guardbreak = moveData.Guardbreak,
-		CanBeCountered = moveData.CanBeCountered,
-		HitCancelsTarget = moveData.HitCancelsTarget,
-
-		CancelableByHit = moveData.CancelableByHit,
-		HasIFrames = moveData.HasIFrames,
-		HasArmor = moveData.HasArmor,
 	}
 end
 
@@ -776,21 +805,6 @@ local function applyWallKnockback(ctx, wallDirection, targetRoot, moveData)
 		makeManualKnockbackData(moveData),
 		"DisbeliefCounterWall"
 	)
-end
-
-local function awardNormalDamageUlt(ctx, targetCharacter, targetRoot, damage)
-	if typeof(damage) ~= "number" or damage <= 0 then
-		return
-	end
-
-	if ctx.ReportDamageEvent then
-		ctx:ReportDamageEvent(targetCharacter, damage, targetRoot)
-		return
-	end
-
-	if ctx.UltService and ctx.UltService.AwardDamageEvent then
-		ctx.UltService:AwardDamageEvent(ctx.Character, targetCharacter, damage)
-	end
 end
 
 local function awardCounterBonusUlt(ctx, targetCharacter)
@@ -838,7 +852,6 @@ local function launchWallAndHit(ctx, wallData)
 	local hitboxTickRate = moveData.HitboxTickRate or 0.035
 	local fadeTime = moveData.FadeTime or 0.2
 
-	-- One hit total for the launched bone wall.
 	local boneAlreadyHit = false
 	local hasAwardedBonusUlt = false
 
@@ -848,7 +861,9 @@ local function launchWallAndHit(ctx, wallData)
 
 	local connection
 	connection = RunService.Heartbeat:Connect(function(deltaTime)
-		if finished then return end
+		if finished then
+			return
+		end
 
 		if not ctx:IsActive() then
 			finished = true
@@ -887,6 +902,9 @@ local function launchWallAndHit(ctx, wallData)
 
 			local wallHitboxCFrame = wallData.BaseCFrame * wallData.FinalLocalCFrame
 
+			-- Detection only.
+			-- The table must still be passed because HitboxService reads hitboxData.Offset internally.
+			-- No Damage/Stun exists in hitboxData, so ApplyStandardHit is the only damage source.
 			ctx.HitboxService:PerformSphereAtCFrame(
 				character,
 				wallHitboxCFrame,
@@ -915,9 +933,6 @@ local function launchWallAndHit(ctx, wallData)
 					if result == "Hit" or result == "ArmoredHit" then
 						applyWallKnockback(ctx, wallData.Direction, targetRoot, moveData)
 
-						local damage = moveData.Damage or 9
-						awardNormalDamageUlt(ctx, targetCharacter, targetRoot, damage)
-
 						if not hasAwardedBonusUlt then
 							hasAwardedBonusUlt = true
 							awardCounterBonusUlt(ctx, targetCharacter)
@@ -930,14 +945,16 @@ local function launchWallAndHit(ctx, wallData)
 						playPapyrusSFX(ctx, "BlockBreak", targetRoot, 2)
 					end
 
-					print("[DisbeliefCounter] Wall result:", result)
+					debugPrint(ctx, "Wall result:", result)
 				end
 			)
 		end
 	end)
 
 	task.delay(projectileLifetime + fadeTime + 0.25, function()
-		if finished then return end
+		if finished then
+			return
+		end
 
 		finished = true
 
@@ -950,8 +967,6 @@ local function launchWallAndHit(ctx, wallData)
 end
 
 function DisbeliefCounter.Execute(ctx)
-	print("[DisbeliefCounter] Execute started")
-
 	local character = ctx.Character
 	local humanoid = ctx.Humanoid
 	local root = ctx.Root
@@ -977,6 +992,8 @@ function DisbeliefCounter.Execute(ctx)
 		ctx:FinishMove(0)
 		return
 	end
+
+	debugPrint(ctx, "Execute started")
 
 	local oldActionState = startActionLock(character, humanoid)
 	local track = playFirstAnimation(ctx, character, COUNTER_ANIMATION_NAMES, 0.04, 1, true)
@@ -1062,7 +1079,10 @@ function DisbeliefCounter.Execute(ctx)
 	end
 
 	local function finish(delayTime)
-		if finished then return end
+		if finished then
+			return
+		end
+
 		finished = true
 
 		disconnect()
@@ -1096,7 +1116,7 @@ function DisbeliefCounter.Execute(ctx)
 
 		local attackerCharacter = getStoredAttacker(character)
 
-		print("[DisbeliefCounter] Counter triggered by:", attackerCharacter and attackerCharacter.Name or "unknown")
+		debugPrint(ctx, "Counter triggered by:", attackerCharacter and attackerCharacter.Name or "unknown")
 
 		removeCounterFrameGlow(character)
 
@@ -1104,7 +1124,6 @@ function DisbeliefCounter.Execute(ctx)
 		character:SetAttribute("Countering", false)
 		character:SetAttribute("CounterTriggered", true)
 
-		-- Keep action lock during the launch.
 		character:SetAttribute("DashLocked", true)
 		character:SetAttribute("MovementLocked", true)
 		character:SetAttribute("M1Locked", true)
@@ -1117,10 +1136,8 @@ function DisbeliefCounter.Execute(ctx)
 
 		if attackerCharacter then
 			stunCounterAttacker(ctx, attackerCharacter, moveData.AttackerTriggerStun or 0.55)
-			awardCounterBonusUlt(ctx, attackerCharacter)
 		end
 
-		-- Lock in current direction at trigger.
 		wallData.Direction = getFacingDirection(root)
 		wallData.BasePosition = root.Position + (wallData.Direction * (moveData.WallDistance or 3.75))
 		wallData.FirePosition = wallData.BasePosition
@@ -1165,7 +1182,7 @@ function DisbeliefCounter.Execute(ctx)
 	end
 
 	if not finished and not triggered then
-		print("[DisbeliefCounter] Whiffed")
+		debugPrint(ctx, "Whiffed")
 
 		removeCounterFrameGlow(character)
 		fadeAndDestroyObject(wallData.Object, moveData.FadeTime or 0.2)

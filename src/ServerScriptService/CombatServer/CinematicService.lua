@@ -67,19 +67,51 @@ function CinematicService:FireCamera(character, payload)
 	self:GetRemote():FireClient(player, payload)
 end
 
-function CinematicService:SetCamera(character, cframe)
-	self:FireCamera(character, {
-		Action = "SetCamera",
-		CFrame = cframe,
-	})
+local function applyCameraPolicy(payload, options)
+	if typeof(options) ~= "table" then
+		return payload
+	end
+
+	-- CameraPolicy = "ShiftLockAllowed" is for counter/combat-focus cameras that
+	-- should not release custom shift lock. Omit it for true cutscene takeovers.
+	payload.CameraPolicy = options.CameraPolicy or options.CameraControlMode
+	payload.CameraControlMode = options.CameraControlMode or options.CameraPolicy
+	payload.AllowShiftLock = options.AllowShiftLock == true
+		or options.AllowShiftLockDuringCinematic == true
+		or options.SuppressShiftLock == false
+		or options.SuppressShiftLockDuringCinematic == false
+		or options.CameraPolicy == "ShiftLockAllowed"
+		or options.CameraControlMode == "ShiftLockAllowed"
+
+	if options.SuppressShiftLock ~= nil then
+		payload.SuppressShiftLock = options.SuppressShiftLock == true
+	end
+
+	if options.SuppressShiftLockDuringCinematic ~= nil then
+		payload.SuppressShiftLockDuringCinematic = options.SuppressShiftLockDuringCinematic == true
+	end
+
+	return payload
 end
 
-function CinematicService:TweenCamera(character, cframe, tweenTime)
-	self:FireCamera(character, {
+function CinematicService:SetCamera(character, cframe, options)
+	self:FireCamera(character, applyCameraPolicy({
+		Action = "SetCamera",
+		CFrame = cframe,
+	}, options))
+end
+
+function CinematicService:TweenCamera(character, cframe, tweenTime, options)
+	if typeof(tweenTime) == "table" and options == nil then
+		options = tweenTime
+		tweenTime = options.Time
+	end
+
+	self:FireCamera(character, applyCameraPolicy({
 		Action = "TweenCamera",
 		CFrame = cframe,
 		Time = tweenTime or 0.25,
-	})
+	}, options))
 end
 
 function CinematicService:ResetCamera(character)
