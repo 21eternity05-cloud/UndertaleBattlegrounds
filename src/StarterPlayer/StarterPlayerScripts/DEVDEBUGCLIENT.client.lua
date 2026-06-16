@@ -67,6 +67,12 @@ local selectedTab = "Combat"
 local tabButtons = {}
 local content = nil
 local statusLabel = nil
+local renderData = nil
+local dataManagerState = {
+	SelectedUserId = player.UserId,
+	Data = nil,
+	TextBoxes = {},
+}
 
 local function getMenuSoundsFolder()
 	local assets = ReplicatedStorage:FindFirstChild("Assets")
@@ -355,21 +361,147 @@ local function makeParagraph(text)
 	return label
 end
 
-local function makeGrid()
+local function makeGrid(parent, columns)
 	local grid = Instance.new("Frame")
 	grid.Name = "Grid"
 	grid.BackgroundTransparency = 1
 	grid.Size = UDim2.new(1, 0, 0, 1)
 	grid.AutomaticSize = Enum.AutomaticSize.Y
-	grid.Parent = content
+	grid.Parent = parent or content
 
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.new(0.5, -6, 0, 40)
+	layout.CellSize = UDim2.new(1 / (columns or 2), -6, 0, 40)
 	layout.CellPadding = UDim2.fromOffset(12, 10)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
 
 	return grid
+end
+
+local function makeTextBox(name, placeholder, defaultText)
+	local box = Instance.new("TextBox")
+	box.Name = name
+	box.BackgroundColor3 = UT_BLACK
+	box.BorderSizePixel = 0
+	box.ClearTextOnFocus = false
+	box.PlaceholderText = placeholder or ""
+	box.PlaceholderColor3 = UT_GRAY
+	box.Text = defaultText or ""
+	box.Size = UDim2.new(1, 0, 0, 36)
+	box.Parent = content
+	applyTextStyle(box, 12)
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	addStroke(box, UT_GRAY, 2)
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 8)
+	padding.PaddingRight = UDim.new(0, 8)
+	padding.Parent = box
+
+	dataManagerState.TextBoxes[name] = box
+	return box
+end
+
+local function getBoxText(name)
+	local box = dataManagerState.TextBoxes[name]
+	return box and box.Text or ""
+end
+
+local function countKeys(map)
+	local total = 0
+	if typeof(map) ~= "table" then
+		return total
+	end
+
+	for _, value in pairs(map) do
+		if value == true or typeof(value) == "string" then
+			total += 1
+		end
+	end
+
+	return total
+end
+
+local function sortedTruthyKeys(map)
+	local keys = {}
+	if typeof(map) ~= "table" then
+		return keys
+	end
+
+	for key, value in pairs(map) do
+		if value == true then
+			table.insert(keys, tostring(key))
+		end
+	end
+	table.sort(keys)
+	return keys
+end
+
+local function shortList(list, limit)
+	limit = limit or 16
+	if typeof(list) ~= "table" or #list == 0 then
+		return "None"
+	end
+
+	local shown = {}
+	for index = 1, math.min(#list, limit) do
+		table.insert(shown, tostring(list[index]))
+	end
+	if #list > limit then
+		table.insert(shown, "+" .. tostring(#list - limit) .. " more")
+	end
+	return table.concat(shown, ", ")
+end
+
+local function loadDataManagerSnapshot(targetUserId)
+	local payload = nil
+	if targetUserId then
+		payload = {
+			TargetUserId = targetUserId,
+		}
+	end
+
+	local result = invoke("GetDataManagerSnapshot", payload)
+	if result.Data then
+		dataManagerState.Data = result.Data
+		if result.Data.TargetData and result.Data.TargetData.Target then
+			dataManagerState.SelectedUserId = result.Data.TargetData.Target.UserId
+		elseif not dataManagerState.SelectedUserId and result.Data.OnlinePlayers and result.Data.OnlinePlayers[1] then
+			dataManagerState.SelectedUserId = result.Data.OnlinePlayers[1].UserId
+		end
+	end
+
+	setStatus(result.Message, result.Success)
+	return result
+end
+
+local function applyDataAction(actionName, extraPayload)
+	local payload = extraPayload or {}
+	payload.Action = actionName
+	payload.TargetUserId = dataManagerState.SelectedUserId
+
+	local result = invoke("ApplyDataManagerAction", payload)
+	if result.Data then
+		dataManagerState.Data = result.Data
+	end
+
+	setStatus(result.Message, result.Success)
+	if renderData then
+		renderData()
+	end
+end
+
+local function makeActionButton(grid, actionName, label, payloadBuilder, color)
+	local button = makeButton(grid, actionName, label, {
+		Color = color or Color3.fromRGB(36, 36, 42),
+		TextSize = 11,
+	})
+
+	button.MouseButton1Click:Connect(function()
+		applyDataAction(actionName, payloadBuilder and payloadBuilder() or {})
+	end)
+
+	return button
 end
 
 local function renderCombat()
@@ -424,16 +556,224 @@ local function renderCombat()
 	end)
 end
 
-local function renderData()
+renderData = function()
 	clearContent()
+	dataManagerState.TextBoxes = {}
 	makeSectionTitle("Data Manager")
-	makeParagraph("Data Manager tools will go here.\n\nFuture: Dust, kills, unlock/relock characters, skins, titles, emotes, lore.")
+
+	if status.CanUseDataManager ~= true then
+		makeParagraph("Owner-only tools are locked for this account.")
+		return
+	end
+
+	if not dataManagerState.Data then
+		loadDataManagerSnapshot(dataManagerState.SelectedUserId)
+	end
+
+	local data = dataManagerState.Data or {}
+	local onlinePlayers = data.OnlinePlayers or {}
+	local definitions = data.Definitions or {}
+	local targetData = data.TargetData
+
+	local refreshButton = makeButton(content, "RefreshDataManager", "Refresh Online Players", {
+		Color = Color3.fromRGB(36, 36, 42),
+		Size = UDim2.new(1, 0, 0, 36),
+	})
+	refreshButton.MouseButton1Click:Connect(function()
+		loadDataManagerSnapshot(dataManagerState.SelectedUserId)
+		renderData()
+	end)
+
+	makeSectionTitle("Online Target")
+	if #onlinePlayers == 0 then
+		makeParagraph("No online players found.")
+		return
+	end
+
+	local playerGrid = makeGrid(content, 2)
+	for _, targetInfo in ipairs(onlinePlayers) do
+		local selected = targetInfo.UserId == dataManagerState.SelectedUserId
+		local button = makeButton(playerGrid, "Target_" .. tostring(targetInfo.UserId), targetInfo.Label or targetInfo.Name, {
+			Color = selected and UT_WHITE or UT_BLACK,
+			TextSize = 10,
+		})
+		button.TextColor3 = selected and UT_BLACK or UT_WHITE
+		button.MouseButton1Click:Connect(function()
+			dataManagerState.SelectedUserId = targetInfo.UserId
+			loadDataManagerSnapshot(targetInfo.UserId)
+			renderData()
+		end)
+	end
+
+	if dataManagerState.SelectedUserId and not targetData then
+		loadDataManagerSnapshot(dataManagerState.SelectedUserId)
+		data = dataManagerState.Data or {}
+		definitions = data.Definitions or definitions
+		targetData = data.TargetData
+	end
+
+	if not targetData or not targetData.Raw then
+		makeParagraph("Pick an online target with a loaded profile.")
+		return
+	end
+
+	local raw = targetData.Raw
+	local profile = targetData.Profile or {}
+	local equippedEmotes = raw.EquippedEmotes or {}
+	local emoteLines = {}
+	for slot = 1, 8 do
+		if equippedEmotes[slot] then
+			table.insert(emoteLines, tostring(slot) .. ":" .. tostring(equippedEmotes[slot]))
+		end
+	end
+
+	makeSectionTitle("Snapshot")
+	makeParagraph(string.format(
+		"%s\nDust: %s | Kills: %s\nCharacter: %s | Title: %s\nOwned: %d chars, %d titles, %d emotes | Lore read: %d\nEmotes: %s",
+		targetData.Target and targetData.Target.Label or "Target",
+		tostring(raw.Dust or profile.Dust or 0),
+		tostring(raw.Kills or profile.Kills or 0),
+		tostring(targetData.EquippedCharacter or profile.Equipped or "Unknown"),
+		tostring(raw.EquippedTitle or "None"),
+		countKeys(raw.OwnedCharacters),
+		countKeys(raw.OwnedTitles),
+		countKeys(raw.OwnedEmotes),
+		countKeys(raw.Lore),
+		#emoteLines > 0 and table.concat(emoteLines, ", ") or "None"
+	))
+
+	makeSectionTitle("Player Values")
+	makeTextBox("Amount", "Amount", "0")
+	local valueGrid = makeGrid(content, 2)
+	makeActionButton(valueGrid, "SetDust", "Set Dust", function()
+		return { Amount = getBoxText("Amount") }
+	end, UT_BLUE)
+	makeActionButton(valueGrid, "AddDust", "Add Dust", function()
+		return { Amount = getBoxText("Amount") }
+	end, UT_GREEN)
+	makeActionButton(valueGrid, "SetKills", "Set Kills", function()
+		return { Amount = getBoxText("Amount") }
+	end, UT_BLUE)
+	makeActionButton(valueGrid, "AddKills", "Add Kills", function()
+		return { Amount = getBoxText("Amount") }
+	end, UT_GREEN)
+
+	makeSectionTitle("Characters")
+	makeParagraph("Valid: " .. shortList(definitions.Characters, 18))
+	makeTextBox("CharacterName", "Character ID", shortList(sortedTruthyKeys(raw.OwnedCharacters), 1) ~= "None" and shortList(sortedTruthyKeys(raw.OwnedCharacters), 1) or "")
+	local characterGrid = makeGrid(content, 2)
+	makeActionButton(characterGrid, "UnlockCharacter", "Unlock", function()
+		return { CharacterName = getBoxText("CharacterName") }
+	end)
+	makeActionButton(characterGrid, "RelockCharacter", "Relock", function()
+		return { CharacterName = getBoxText("CharacterName") }
+	end, UT_RED)
+	makeActionButton(characterGrid, "EquipCharacter", "Equip", function()
+		return { CharacterName = getBoxText("CharacterName") }
+	end, UT_BLUE)
+	makeActionButton(characterGrid, "UnlockAllCharacters", "Unlock All", nil, UT_GREEN)
+	makeActionButton(characterGrid, "RelockAllNonDefaultCharacters", "Relock Paid", nil, UT_RED)
+
+	makeSectionTitle("Skins")
+	makeTextBox("SkinCharacterName", "Character ID", tostring(targetData.EquippedCharacter or ""))
+	makeTextBox("SkinName", "Skin ID", "Default")
+	local skinsForCharacter = definitions.Skins and definitions.Skins[getBoxText("SkinCharacterName")]
+	makeParagraph("Skins for typed character show after refresh. Known current: " .. shortList(skinsForCharacter, 18))
+	local skinGrid = makeGrid(content, 2)
+	makeActionButton(skinGrid, "UnlockSkin", "Unlock Skin", function()
+		return { CharacterName = getBoxText("SkinCharacterName"), SkinName = getBoxText("SkinName") }
+	end)
+	makeActionButton(skinGrid, "RelockSkin", "Relock Skin", function()
+		return { CharacterName = getBoxText("SkinCharacterName"), SkinName = getBoxText("SkinName") }
+	end, UT_RED)
+	makeActionButton(skinGrid, "EquipSkin", "Equip Skin", function()
+		return { CharacterName = getBoxText("SkinCharacterName"), SkinName = getBoxText("SkinName") }
+	end, UT_BLUE)
+	makeActionButton(skinGrid, "UnlockAllSkinsForCharacter", "Unlock Char Skins", function()
+		return { CharacterName = getBoxText("SkinCharacterName") }
+	end, UT_GREEN)
+	makeActionButton(skinGrid, "UnlockAllSkinsGlobal", "Unlock All Skins", nil, UT_GREEN)
+	makeActionButton(skinGrid, "RelockAllSkins", "Relock All Skins", nil, UT_RED)
+
+	makeSectionTitle("Titles")
+	makeParagraph("Valid: " .. shortList(definitions.Titles, 18))
+	makeTextBox("TitleId", "Title ID", tostring(raw.EquippedTitle or "None"))
+	local titleGrid = makeGrid(content, 2)
+	makeActionButton(titleGrid, "UnlockTitle", "Unlock Title", function()
+		return { TitleId = getBoxText("TitleId") }
+	end)
+	makeActionButton(titleGrid, "RelockTitle", "Relock Title", function()
+		return { TitleId = getBoxText("TitleId") }
+	end, UT_RED)
+	makeActionButton(titleGrid, "EquipTitle", "Equip Title", function()
+		return { TitleId = getBoxText("TitleId") }
+	end, UT_BLUE)
+	makeActionButton(titleGrid, "UnlockAllTitles", "Unlock All Titles", nil, UT_GREEN)
+
+	makeSectionTitle("Emotes")
+	makeParagraph("Valid: " .. shortList(definitions.Emotes, 18))
+	makeTextBox("EmoteId", "Emote ID", "")
+	makeTextBox("EmoteSlot", "Slot 1-8", "1")
+	local emoteGrid = makeGrid(content, 2)
+	makeActionButton(emoteGrid, "UnlockEmote", "Unlock Emote", function()
+		return { EmoteId = getBoxText("EmoteId") }
+	end)
+	makeActionButton(emoteGrid, "RelockEmote", "Relock Emote", function()
+		return { EmoteId = getBoxText("EmoteId") }
+	end, UT_RED)
+	makeActionButton(emoteGrid, "EquipEmoteSlot", "Equip Slot", function()
+		return { EmoteId = getBoxText("EmoteId"), Slot = getBoxText("EmoteSlot") }
+	end, UT_BLUE)
+	makeActionButton(emoteGrid, "UnlockAllEmotes", "Unlock All Emotes", nil, UT_GREEN)
+
+	makeSectionTitle("Lore")
+	makeParagraph("Valid: " .. shortList(definitions.Lore, 18))
+	makeTextBox("LoreId", "Lore Fragment ID", "")
+	local loreGrid = makeGrid(content, 2)
+	makeActionButton(loreGrid, "UnlockLore", "Unlock Lore", function()
+		return { LoreId = getBoxText("LoreId") }
+	end)
+	makeActionButton(loreGrid, "LockLore", "Lock Lore", function()
+		return { LoreId = getBoxText("LoreId") }
+	end, UT_RED)
+	makeActionButton(loreGrid, "UnlockAllLore", "Unlock All Lore", nil, UT_GREEN)
+	makeActionButton(loreGrid, "ResetLore", "Reset Lore", nil, UT_RED)
 end
 
 local function renderAbuse()
 	clearContent()
-	makeSectionTitle("ABUSE")
-	makeParagraph("ABUSE tools will go here later. Future: nuke button after safe tools work.")
+	makeSectionTitle("OWNER ABUSE")
+
+	if status.CanUseAbuseTools ~= true then
+		makeParagraph("Owner-only abuse tools are locked for this account.")
+		return
+	end
+
+	makeParagraph("This will nuke the server and kick everyone.")
+
+	local nukeButton = makeButton(content, "NukeServer", "NUKE SERVER", {
+		Color = Color3.fromRGB(115, 0, 0),
+		Size = UDim2.new(1, 0, 0, 64),
+		TextSize = 18,
+		StrokeThickness = 4,
+	})
+
+	nukeButton.MouseButton1Click:Connect(function()
+		nukeButton.AutoButtonColor = false
+		nukeButton.Text = "NUKE LAUNCHED"
+		nukeButton.BackgroundColor3 = Color3.fromRGB(55, 0, 0)
+
+		local result = invoke("AbuseAction", {
+			Action = "NukeServer",
+		})
+
+		setStatus(result.Message, result.Success)
+		if result.Success ~= true then
+			nukeButton.AutoButtonColor = true
+			nukeButton.Text = "NUKE SERVER"
+			nukeButton.BackgroundColor3 = Color3.fromRGB(115, 0, 0)
+		end
+	end)
 end
 
 local function showTab(tabName)
@@ -442,10 +782,15 @@ local function showTab(tabName)
 		return
 	end
 
+	if tabName == "Abuse" and status.CanUseAbuseTools ~= true then
+		setStatus("ABUSE is owner-only.", false)
+	end
+
 	selectedTab = tabName
 
 	for name, button in pairs(tabButtons) do
 		local disabled = name == "Data" and status.CanUseDataManager ~= true
+			or name == "Abuse" and status.CanUseAbuseTools ~= true
 		button.BackgroundColor3 = name == selectedTab and UT_WHITE or UT_BLACK
 		button.TextColor3 = name == selectedTab and UT_BLACK or (disabled and UT_GRAY or UT_WHITE)
 	end
@@ -475,7 +820,7 @@ end
 
 makeTab("Combat", "Combat Debug", false)
 makeTab("Data", status.CanUseDataManager and "Data Manager" or "Data Manager\nOwner only", status.CanUseDataManager ~= true)
-makeTab("Abuse", "ABUSE", false)
+makeTab("Abuse", status.CanUseAbuseTools and "ABUSE" or "ABUSE\nOwner only", false)
 
 local dragging = false
 local dragStart = nil

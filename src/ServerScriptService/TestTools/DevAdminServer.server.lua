@@ -31,6 +31,18 @@ remote.OnServerInvoke = function(player, action, payload)
 		return DevAdminService:HandleCombatDebugAction(player, payload)
 	end
 
+	if action == "GetDataManagerSnapshot" then
+		return DevAdminService:GetDataManagerSnapshot(player, payload)
+	end
+
+	if action == "ApplyDataManagerAction" then
+		return DevAdminService:ApplyDataManagerAction(player, payload)
+	end
+
+	if action == "AbuseAction" then
+		return DevAdminService:HandleAbuseAction(player, payload)
+	end
+
 	if action == "SpawnDummy" then
 		return DevAdminService:SpawnDummy(player, payload)
 	end
@@ -50,6 +62,7 @@ remote.OnServerInvoke = function(player, action, payload)
 		Role = "None",
 		CanUseCombatDebug = false,
 		CanUseDataManager = false,
+		CanUseAbuseTools = false,
 		Error = "UnknownAction",
 	}
 end

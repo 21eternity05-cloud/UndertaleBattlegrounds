@@ -171,6 +171,7 @@ DebugService.SoulBurstService = SoulBurstService
 
 _G.UTBGDevServices = {
 	BlockService = BlockService,
+	CharacterService = CharacterService,
 	CharacterMorphService = CharacterMorphService,
 	CombatStatusService = CombatStatusService,
 	Config = Config,
@@ -178,6 +179,7 @@ _G.UTBGDevServices = {
 	DebugService = DebugService,
 	HitboxService = HitboxService,
 	MovementService = MovementService,
+	ProgressionService = ProgressionService,
 	StateService = StateService,
 	UltService = UltService,
 	SoulBurstService = SoulBurstService,
