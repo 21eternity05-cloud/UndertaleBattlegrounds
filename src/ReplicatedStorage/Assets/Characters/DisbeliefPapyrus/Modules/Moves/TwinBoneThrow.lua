@@ -1,9 +1,10 @@
 -- TwinBoneThrow
--- Safe working version.
+-- ReplicatedStorage > Assets > Characters > DisbeliefPapyrus > Modules > Moves > TwinBoneThrow
 -- Awakened Papyrus Move 3.
--- Throws two bone spear projectiles forward.
+-- Triple Judgement-style version:
+-- LeftBone shot -> RightBone shot -> final center judgment bone.
+-- All shots go straight forward and use reliable line hitboxes.
 
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,44 +14,55 @@ local TwinBoneThrow = {
 	AnimationName = "TwinBoneThrow",
 
 	Cooldown = 12,
-	Duration = 1.1,
-	LockTime = 0.75,
-	MaxLockTime = 1.4,
+	Duration = 1.45,
+	LockTime = 1.05,
+	MaxLockTime = 1.65,
 
-	Startup = 0.18,
-	Endlag = 0.2,
+	Startup = 0.16,
+	Endlag = 0.22,
 	WhiffEndlag = 0.2,
 
-	ProjectileSpeed = 165,
-	ProjectileLifetime = 1.1,
-	ProjectileFadeTime = 0.12,
+	-- Triple sequence timing.
+	FirstShotDelay = 0,
+	SecondShotDelay = 0.24,
+	ThirdShotDelay = 0.24,
 
-	ThrowDelayBetweenBones = 0.08,
+	-- Shot layout.
+	Range = 28,
+	Step = 4,
+	Radius = 4.4,
 
 	SpawnForwardOffset = 3,
 	SpawnHeightOffset = 1.7,
-	SpawnSideOffset = 1.7,
+	SpawnSideOffset = 1.65,
 
-	Damage = 5,
-	Stun = 0.35,
-	Radius = 4,
-	Offset = CFrame.new(),
+	-- Damage.
+	Damage = 4,
+	Stun = 0.28,
 
+	FinalDamage = 7,
+	FinalStun = 0.45,
+	FinalRadius = 5.2,
+
+	-- Knockback.
 	KnockbackPreset = "PresetKnockback",
-	PresetKnockbackSpeed = 48,
+	PresetKnockbackSpeed = 42,
 	PresetKnockbackUpward = 5,
-	PresetKnockbackDuration = 0.16,
+	PresetKnockbackDuration = 0.14,
 	PresetKnockbackMaxForce = 85000,
 
-	Knockback = 48,
-	UpwardKnockback = 5,
-	KnockbackDuration = 0.16,
-	KnockbackMaxForce = 85000,
+	FinalKnockbackPreset = "PresetKnockback",
+	FinalPresetKnockbackSpeed = 78,
+	FinalPresetKnockbackUpward = 12,
+	FinalPresetKnockbackDuration = 0.22,
+	FinalPresetKnockbackMaxForce = 100000,
 
 	Blockable = true,
 	CanBeBlocked = true,
 	Unblockable = false,
 	Guardbreak = false,
+
+	FinalGuardbreak = false,
 
 	CanBeCountered = true,
 	HitCancelsTarget = false,
@@ -243,7 +255,7 @@ local function pivotObject(object, cframe)
 	end
 end
 
-local function prepProjectileVFX(object)
+local function prepVFXObject(object)
 	if not object then
 		return
 	end
@@ -265,9 +277,11 @@ local function prepProjectileVFX(object)
 			descendant.Enabled = true
 
 			local emitCount = descendant:GetAttribute("EmitCount")
-			if typeof(emitCount) == "number" then
-				descendant:Emit(emitCount)
+			if typeof(emitCount) ~= "number" then
+				emitCount = 1
 			end
+
+			descendant:Emit(emitCount)
 		elseif descendant:IsA("Trail") then
 			descendant.Enabled = true
 		elseif descendant:IsA("Beam") then
@@ -305,53 +319,68 @@ local function fadeAndDestroy(object, fadeTime)
 		end
 	end
 
-	Debris:AddItem(object, fadeTime + 0.08)
+	Debris:AddItem(object, fadeTime + 0.1)
 end
 
-local function makeHitData(moveData)
-	local hitData = copyTable(moveData)
+local function getShotTemplate(ctx, preferredName)
+	local preferred = getPapyrusVFX(ctx, preferredName)
 
-	hitData.AttackType = "Move"
-	hitData.Damage = moveData.Damage or 5
-	hitData.Stun = moveData.Stun or 0.35
-	hitData.Radius = moveData.Radius or 4
-	hitData.Offset = CFrame.new()
+	if preferred then
+		return preferred
+	end
 
-	hitData.Blockable = true
-	hitData.CanBeBlocked = true
-	hitData.Unblockable = false
-	hitData.Guardbreak = false
+	local spikeBone = getPapyrusVFX(ctx, "SpikeBone")
 
-	hitData.CanBeCountered = true
-	hitData.HitCancelsTarget = false
-	hitData.CancelableByHit = true
+	if spikeBone then
+		return spikeBone
+	end
 
-	hitData.KnockbackPreset = moveData.KnockbackPreset
-	hitData.PresetKnockbackSpeed = moveData.PresetKnockbackSpeed
-	hitData.PresetKnockbackUpward = moveData.PresetKnockbackUpward
-	hitData.PresetKnockbackDuration = moveData.PresetKnockbackDuration
-	hitData.PresetKnockbackMaxForce = moveData.PresetKnockbackMaxForce
-
-	hitData.Knockback = moveData.Knockback or 48
-	hitData.UpwardKnockback = moveData.UpwardKnockback or 5
-	hitData.KnockbackDuration = moveData.KnockbackDuration or 0.16
-	hitData.KnockbackMaxForce = moveData.KnockbackMaxForce or 85000
-
-	return hitData
+	warn("[TwinBoneThrow] Missing VFX. Need DisbeliefPapyrus > VFX > " .. preferredName .. " or SpikeBone")
+	return nil
 end
 
-local function makeHitboxData(moveData)
+local function spawnShotVFX(ctx, preferredName, cframe, lifetime)
+	local template = getShotTemplate(ctx, preferredName)
+
+	if not template then
+		return nil
+	end
+
+	local object = template:Clone()
+	object.Name = "TwinBoneThrow_" .. preferredName
+
+	if object:IsA("Model") and not ensurePrimaryPart(object) then
+		warn("[TwinBoneThrow] VFX has no BasePart or PrimaryPart:", preferredName)
+		object:Destroy()
+		return nil
+	end
+
+	prepVFXObject(object)
+
+	object.Parent = workspace
+	pivotObject(object, cframe)
+
+	task.delay(lifetime or 0.22, function()
+		fadeAndDestroy(object, 0.12)
+	end)
+
+	Debris:AddItem(object, (lifetime or 0.22) + 0.35)
+
+	return object
+end
+
+local function makeHitboxData(moveData, isFinal)
 	return {
-		Radius = moveData.Radius or 4,
+		Radius = isFinal and (moveData.FinalRadius or 5.2) or (moveData.Radius or 4.4),
 		Offset = CFrame.new(),
 
-		Damage = moveData.Damage or 5,
-		Stun = moveData.Stun or 0.35,
+		Damage = isFinal and (moveData.FinalDamage or 7) or (moveData.Damage or 4),
+		Stun = isFinal and (moveData.FinalStun or 0.45) or (moveData.Stun or 0.28),
 
 		Blockable = true,
 		CanBeBlocked = true,
 		Unblockable = false,
-		Guardbreak = false,
+		Guardbreak = isFinal and moveData.FinalGuardbreak == true or false,
 
 		CanBeCountered = true,
 		HitCancelsTarget = false,
@@ -359,18 +388,53 @@ local function makeHitboxData(moveData)
 
 		HasIFrames = false,
 		HasArmor = false,
-
-		KnockbackPreset = moveData.KnockbackPreset,
-		PresetKnockbackSpeed = moveData.PresetKnockbackSpeed,
-		PresetKnockbackUpward = moveData.PresetKnockbackUpward,
-		PresetKnockbackDuration = moveData.PresetKnockbackDuration,
-		PresetKnockbackMaxForce = moveData.PresetKnockbackMaxForce,
-
-		Knockback = moveData.Knockback or 48,
-		UpwardKnockback = moveData.UpwardKnockback or 5,
-		KnockbackDuration = moveData.KnockbackDuration or 0.16,
-		KnockbackMaxForce = moveData.KnockbackMaxForce or 85000,
 	}
+end
+
+local function makeHitData(moveData, isFinal)
+	local data = copyTable(moveData)
+
+	data.AttackType = "Move"
+
+	data.Damage = isFinal and (moveData.FinalDamage or 7) or (moveData.Damage or 4)
+	data.Stun = isFinal and (moveData.FinalStun or 0.45) or (moveData.Stun or 0.28)
+	data.Radius = isFinal and (moveData.FinalRadius or 5.2) or (moveData.Radius or 4.4)
+	data.Offset = CFrame.new()
+
+	data.Blockable = true
+	data.CanBeBlocked = true
+	data.Unblockable = false
+	data.Guardbreak = isFinal and moveData.FinalGuardbreak == true or false
+
+	data.CanBeCountered = true
+	data.HitCancelsTarget = false
+	data.CancelableByHit = true
+
+	if isFinal then
+		data.KnockbackPreset = moveData.FinalKnockbackPreset or "PresetKnockback"
+		data.PresetKnockbackSpeed = moveData.FinalPresetKnockbackSpeed or 78
+		data.PresetKnockbackUpward = moveData.FinalPresetKnockbackUpward or 12
+		data.PresetKnockbackDuration = moveData.FinalPresetKnockbackDuration or 0.22
+		data.PresetKnockbackMaxForce = moveData.FinalPresetKnockbackMaxForce or 100000
+
+		data.Knockback = data.PresetKnockbackSpeed
+		data.UpwardKnockback = data.PresetKnockbackUpward
+		data.KnockbackDuration = data.PresetKnockbackDuration
+		data.KnockbackMaxForce = data.PresetKnockbackMaxForce
+	else
+		data.KnockbackPreset = moveData.KnockbackPreset or "PresetKnockback"
+		data.PresetKnockbackSpeed = moveData.PresetKnockbackSpeed or 42
+		data.PresetKnockbackUpward = moveData.PresetKnockbackUpward or 5
+		data.PresetKnockbackDuration = moveData.PresetKnockbackDuration or 0.14
+		data.PresetKnockbackMaxForce = moveData.PresetKnockbackMaxForce or 85000
+
+		data.Knockback = data.PresetKnockbackSpeed
+		data.UpwardKnockback = data.PresetKnockbackUpward
+		data.KnockbackDuration = data.PresetKnockbackDuration
+		data.KnockbackMaxForce = data.PresetKnockbackMaxForce
+	end
+
+	return data
 end
 
 local function applyStandardHit(ctx, targetCharacter, targetHumanoid, targetRoot, hitData, moveId)
@@ -413,120 +477,47 @@ local function isMoveInterrupted(ctx)
 	return false
 end
 
-local function getProjectileTemplate(ctx, preferredName)
-	local preferred = getPapyrusVFX(ctx, preferredName)
-
-	if preferred then
-		return preferred
-	end
-
-	local spikeBone = getPapyrusVFX(ctx, "SpikeBone")
-
-	if spikeBone then
-		return spikeBone
-	end
-
-	warn("[TwinBoneThrow] Missing VFX. Need DisbeliefPapyrus > VFX > SpikeBone or " .. preferredName)
-	return nil
-end
-
-local function spawnThrownBone(ctx, preferredName, cframe)
-	local template = getProjectileTemplate(ctx, preferredName)
-
-	if not template then
-		return nil
-	end
-
-	local projectile = template:Clone()
-	projectile.Name = "TwinBoneThrow_" .. preferredName
-
-	if projectile:IsA("Model") and not ensurePrimaryPart(projectile) then
-		warn("[TwinBoneThrow] Projectile has no BasePart or PrimaryPart:", preferredName)
-		projectile:Destroy()
-		return nil
-	end
-
-	prepProjectileVFX(projectile)
-
-	projectile.Parent = workspace
-	pivotObject(projectile, cframe)
-
-	return projectile
-end
-
-local function launchBone(ctx, boneName, spawnPosition, direction, projectileIndex)
+local function performJudgementShot(ctx, shotInfo)
+	local character = ctx.Character
+	local root = ctx.Root
 	local moveData = ctx.MoveData
-	local hitboxData = makeHitboxData(moveData)
-	local hitData = makeHitData(moveData)
 
-	if not direction or direction.Magnitude < 0.05 then
-		direction = getRootDirection(ctx.Root)
-	end
+	local direction = getRootDirection(root)
+	local right = getRightVector(direction)
 
-	direction = direction.Unit
+	local sideOffset = shotInfo.Side * (moveData.SpawnSideOffset or 1.65)
 
-	local projectile = spawnThrownBone(
-		ctx,
-		boneName,
-		getLookCFrame(spawnPosition, direction)
-	)
+	local startPosition =
+		root.Position
+		+ (direction * (moveData.SpawnForwardOffset or 3))
+		+ (right * sideOffset)
+		+ Vector3.new(0, moveData.SpawnHeightOffset or 1.7, 0)
 
-	if not projectile then
-		return
-	end
+	local shotCFrame = getLookCFrame(startPosition, direction)
 
-	local alive = true
-	local hitSomething = false
-	local position = spawnPosition
-	local startTime = os.clock()
-	local speed = moveData.ProjectileSpeed or 165
-	local lifetime = moveData.ProjectileLifetime or 1.1
+	spawnShotVFX(ctx, shotInfo.VFXName, shotCFrame, shotInfo.IsFinal and 0.32 or 0.22)
+	playPapyrusSFX(ctx, shotInfo.SFXName or "BoneThrow", root, 2)
 
-	local connection
-	connection = RunService.Heartbeat:Connect(function(deltaTime)
-		if not alive then
-			if connection then
-				connection:Disconnect()
-			end
-			return
-		end
+	local hitboxData = makeHitboxData(moveData, shotInfo.IsFinal)
+	local hitData = makeHitData(moveData, shotInfo.IsFinal)
+	local alreadyHit = {}
 
-		if not ctx:IsActive() then
-			alive = false
-			fadeAndDestroy(projectile, moveData.ProjectileFadeTime or 0.12)
+	local distance = 0
 
-			if connection then
-				connection:Disconnect()
-			end
-			return
-		end
-
-		if os.clock() - startTime >= lifetime then
-			alive = false
-			fadeAndDestroy(projectile, moveData.ProjectileFadeTime or 0.12)
-
-			if connection then
-				connection:Disconnect()
-			end
-			return
-		end
-
-		position += direction * speed * deltaTime
-
-		local projectileCFrame = getLookCFrame(position, direction)
-		pivotObject(projectile, projectileCFrame)
+	while distance <= (moveData.Range or 28) do
+		local position = startPosition + (direction * distance)
+		local cframe = getLookCFrame(position, direction)
 
 		ctx.HitboxService:PerformSphereAtCFrame(
-			ctx.Character,
-			projectileCFrame,
+			character,
+			cframe,
 			hitboxData,
 			function(targetCharacter, targetHumanoid, targetRoot)
-				if hitSomething then
+				if alreadyHit[targetCharacter] then
 					return
 				end
 
-				hitSomething = true
-				alive = false
+				alreadyHit[targetCharacter] = true
 
 				local result = applyStandardHit(
 					ctx,
@@ -534,7 +525,7 @@ local function launchBone(ctx, boneName, spawnPosition, direction, projectileInd
 					targetHumanoid,
 					targetRoot,
 					hitData,
-					(ctx.MoveId or "TwinBoneThrow") .. "_" .. tostring(projectileIndex)
+					(ctx.MoveId or "TwinBoneThrow") .. "_" .. tostring(shotInfo.Index)
 				)
 
 				if result == "Hit" or result == "ArmoredHit" then
@@ -545,18 +536,12 @@ local function launchBone(ctx, boneName, spawnPosition, direction, projectileInd
 					playPapyrusSFX(ctx, "BlockBreak", targetRoot, 2)
 				end
 
-				print("[TwinBoneThrow] Bone", projectileIndex, "result:", result)
-
-				fadeAndDestroy(projectile, moveData.ProjectileFadeTime or 0.12)
-
-				if connection then
-					connection:Disconnect()
-				end
+				print("[TwinBoneThrow] Judgement shot", shotInfo.Index, "result:", result)
 			end
 		)
-	end)
 
-	Debris:AddItem(projectile, lifetime + 0.5)
+		distance += moveData.Step or 4
+	end
 end
 
 function TwinBoneThrow.Execute(ctx)
@@ -588,56 +573,57 @@ function TwinBoneThrow.Execute(ctx)
 		return
 	end
 
-	task.wait(moveData.Startup or 0.18)
+	task.wait(moveData.Startup or 0.16)
 
 	if isMoveInterrupted(ctx) then
 		ctx:FinishMove(0)
 		return
 	end
 
-	local forward = getRootDirection(root)
-	local right = getRightVector(forward)
-
-	playPapyrusSFX(ctx, "BoneThrow", root, 2)
-
-	local throws = {
+	local shots = {
 		{
-			Name = "LeftBone",
+			Index = 1,
+			VFXName = "LeftBone",
 			Side = -1,
+			IsFinal = false,
+			SFXName = "BoneThrow",
+			Delay = moveData.FirstShotDelay or 0,
 		},
 		{
-			Name = "RightBone",
+			Index = 2,
+			VFXName = "RightBone",
 			Side = 1,
+			IsFinal = false,
+			SFXName = "BoneThrow",
+			Delay = moveData.SecondShotDelay or 0.24,
+		},
+		{
+			Index = 3,
+			VFXName = "SpikeBone",
+			Side = 0,
+			IsFinal = true,
+			SFXName = "BoneReturn",
+			Delay = moveData.ThirdShotDelay or 0.24,
 		},
 	}
 
-	for index, info in ipairs(throws) do
+	for _, shotInfo in ipairs(shots) do
 		if isMoveInterrupted(ctx) then
-			break
+			ctx:FinishMove(0)
+			return
 		end
 
-		local sideOffset = info.Side * (moveData.SpawnSideOffset or 1.7)
+		task.wait(shotInfo.Delay or 0)
 
-		local spawnPosition =
-			root.Position
-			+ (forward * (moveData.SpawnForwardOffset or 3))
-			+ (right * sideOffset)
-			+ Vector3.new(0, moveData.SpawnHeightOffset or 1.7, 0)
+		if isMoveInterrupted(ctx) then
+			ctx:FinishMove(0)
+			return
+		end
 
-		-- Slight inward angle, but still mostly forward.
-		local inward = -right * info.Side * 0.18
-		local direction = (forward + inward).Unit
-
-		launchBone(ctx, info.Name, spawnPosition, direction, index)
-
-		task.wait(moveData.ThrowDelayBetweenBones or 0.08)
+		performJudgementShot(ctx, shotInfo)
 	end
 
-	task.delay(0.25, function()
-		playPapyrusSFX(ctx, "BoneReturn", root, 2)
-	end)
-
-	ctx:FinishMove(moveData.Endlag or 0.2)
+	ctx:FinishMove(moveData.Endlag or 0.22)
 end
 
 return TwinBoneThrow

@@ -900,10 +900,10 @@ function DevAdminService:ApplyDataManagerAction(admin, payload)
 end
 
 local NUKE_ASCENT_HEIGHT = 420
-local NUKE_FORWARD_DISTANCE = 70
+local NUKE_FORWARD_DISTANCE = 5
 local NUKE_BLAST_RADIUS = 620
 local NUKE_BLAST_DURATION = 10
-local NUKE_MAX_NEONIZED_PARTS = 8000
+local NUKE_MAX_NEONIZED_PARTS = 10000
 local NUKE_PART_FORCE = 1000
 
 function DevAdminService:GetCinematicRemote()
@@ -1735,8 +1735,20 @@ function DevAdminService:GetModelRoot(model)
 		or model.PrimaryPart
 end
 
-function DevAdminService:ApplyDummyAttributes(dummy, features, sourceCharacterName, sourceSkinName)
-	dummy:SetAttribute("DebugDummy", true)
+function DevAdminService:GetDummyFeatures(dummyType)
+	if typeof(dummyType) ~= "string" then
+		return nil
+	end
+
+	return DUMMY_TYPES[dummyType]
+end
+
+function DevAdminService:ApplyDummyAttributes(dummy, features, sourceCharacterName, sourceSkinName, options)
+	options = options or {}
+
+	local isDebugDummy = options.DebugDummy ~= false
+
+	dummy:SetAttribute("DebugDummy", isDebugDummy)
 	dummy:SetAttribute("CharacterName", sourceCharacterName)
 	dummy:SetAttribute("SourceCharacterName", sourceCharacterName)
 	dummy:SetAttribute("SkinName", sourceSkinName or "Default")
@@ -1770,41 +1782,30 @@ function DevAdminService:ApplyDummyAttributes(dummy, features, sourceCharacterNa
 		dummy:SetAttribute("BlockHeld", true)
 	end
 
-	CollectionService:AddTag(dummy, "DebugDummy")
+	if isDebugDummy then
+		CollectionService:AddTag(dummy, "DebugDummy")
+	else
+		CollectionService:RemoveTag(dummy, "DebugDummy")
+	end
+
 	CollectionService:AddTag(dummy, "TargetableCharacter")
 end
 
-function DevAdminService:SpawnDummy(player, payload)
-	if not self:CanUseCombatDebug(player) then
-		return self:Result(false, "Not allowed.")
-	end
+function DevAdminService:SpawnConfiguredDummy(dummyType, spawnCFrame, options)
+	options = options or {}
 
-	if typeof(payload) ~= "table" then
-		return self:Result(false, "Invalid payload.")
-	end
-
-	local dummyType = payload.DummyType
-	if typeof(dummyType) ~= "string" then
-		return self:Result(false, "Missing dummy type.")
-	end
-
-	local features = DUMMY_TYPES[dummyType]
+	local features = self:GetDummyFeatures(dummyType)
 	if not features then
-		return self:Result(false, "Unknown dummy type.")
+		return nil, "Unknown dummy type."
 	end
 
 	if not self:ValidateDummyFeatures(features) then
-		return self:Result(false, "Invalid dummy tag overlap.")
-	end
-
-	local _, _, developerRoot = self:GetPlayerCharacter(player)
-	if not developerRoot then
-		return self:Result(false, "No live developer character.")
+		return nil, "Invalid dummy tag overlap."
 	end
 
 	local models = self:GetValidCharacterModels()
 	if #models == 0 then
-		return self:Result(false, "No valid CharacterModel assets found under ReplicatedStorage/Assets/Characters.")
+		return nil, "No valid CharacterModel assets found under ReplicatedStorage/Assets/Characters."
 	end
 
 	local picked = models[math.random(1, #models)]
@@ -1818,26 +1819,33 @@ function DevAdminService:SpawnDummy(player, payload)
 
 	if not humanoid or not root then
 		dummy:Destroy()
-		return self:Result(false, "Selected CharacterModel is missing Humanoid/root.")
+		return nil, "Selected CharacterModel is missing Humanoid/root."
 	end
 
-	dummy.Name = self:GetDummyName(features)
-	self:ApplyDummyAttributes(dummy, features, picked.CharacterName, picked.SkinName)
+	dummy.Name = options.Name or self:GetDummyName(features)
+	self:ApplyDummyAttributes(dummy, features, picked.CharacterName, picked.SkinName, {
+		DebugDummy = options.DebugDummy,
+	})
 
-	local folder = self:GetDebugDummiesFolder()
+	if typeof(options.Attributes) == "table" then
+		for attributeName, value in pairs(options.Attributes) do
+			dummy:SetAttribute(attributeName, value)
+		end
+	end
+
+	if typeof(options.Tags) == "table" then
+		for _, tagName in ipairs(options.Tags) do
+			CollectionService:AddTag(dummy, tagName)
+		end
+	end
+
+	local folder = options.Parent or self:GetDebugDummiesFolder()
 	dummy.Parent = folder
 
-	local forward = developerRoot.CFrame.LookVector
-	local flatForward = Vector3.new(forward.X, 0, forward.Z)
-	if flatForward.Magnitude < 0.05 then
-		flatForward = Vector3.new(0, 0, -1)
-	else
-		flatForward = flatForward.Unit
-	end
+	dummy:PivotTo(spawnCFrame or CFrame.new())
 
-	local spawnPosition = developerRoot.Position + flatForward * math.random(8, 12)
-	local cframe = CFrame.lookAt(spawnPosition, developerRoot.Position)
-	dummy:PivotTo(cframe)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
 
 	local services = self:GetDevServices()
 	if services.WeaponService and services.WeaponService.EquipWeapon then
@@ -1862,21 +1870,80 @@ function DevAdminService:SpawnDummy(player, payload)
 		SkinName = picked.SkinName,
 	})
 	if not started then
-		warn("[DevAdminService] Debug dummy behavior failed:", behaviorMessage)
+		warn("[DevAdminService] Dummy behavior failed:", behaviorMessage)
 	end
+
+	return {
+		Dummy = dummy,
+		Features = features,
+		CharacterName = picked.CharacterName,
+		SkinName = picked.SkinName or "Default",
+		BehaviorStarted = started == true,
+		BehaviorMessage = behaviorMessage,
+	}, nil
+end
+
+function DevAdminService:SpawnDummy(player, payload)
+	if not self:CanUseCombatDebug(player) then
+		return self:Result(false, "Not allowed.")
+	end
+
+	if typeof(payload) ~= "table" then
+		return self:Result(false, "Invalid payload.")
+	end
+
+	local dummyType = payload.DummyType
+	if typeof(dummyType) ~= "string" then
+		return self:Result(false, "Missing dummy type.")
+	end
+
+	local features = self:GetDummyFeatures(dummyType)
+	if not features then
+		return self:Result(false, "Unknown dummy type.")
+	end
+
+	if not self:ValidateDummyFeatures(features) then
+		return self:Result(false, "Invalid dummy tag overlap.")
+	end
+
+	local _, _, developerRoot = self:GetPlayerCharacter(player)
+	if not developerRoot then
+		return self:Result(false, "No live developer character.")
+	end
+
+	local forward = developerRoot.CFrame.LookVector
+	local flatForward = Vector3.new(forward.X, 0, forward.Z)
+	if flatForward.Magnitude < 0.05 then
+		flatForward = Vector3.new(0, 0, -1)
+	else
+		flatForward = flatForward.Unit
+	end
+
+	local spawnPosition = developerRoot.Position + flatForward * math.random(8, 12)
+	local cframe = CFrame.lookAt(spawnPosition, developerRoot.Position)
+
+	local spawned, spawnError = self:SpawnConfiguredDummy(dummyType, cframe, {
+		Parent = self:GetDebugDummiesFolder(),
+		DebugDummy = true,
+	})
+	if not spawned then
+		return self:Result(false, spawnError or "Failed to spawn dummy.")
+	end
+
+	local dummy = spawned.Dummy
 
 	local message = string.format(
 		"Spawned %s as %s / %s.",
 		dummy.Name,
-		picked.CharacterName,
-		picked.SkinName or "Default"
+		spawned.CharacterName,
+		spawned.SkinName or "Default"
 	)
 
-	self:LogAction(player, "SpawnDummy", dummy.Name .. " " .. picked.CharacterName .. "/" .. tostring(picked.SkinName or "Default"))
+	self:LogAction(player, "SpawnDummy", dummy.Name .. " " .. spawned.CharacterName .. "/" .. tostring(spawned.SkinName or "Default"))
 	return self:Result(true, message, {
 		DummyName = dummy.Name,
-		SourceCharacterName = picked.CharacterName,
-		SourceSkinName = picked.SkinName or "Default",
+		SourceCharacterName = spawned.CharacterName,
+		SourceSkinName = spawned.SkinName or "Default",
 	})
 end
 

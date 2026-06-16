@@ -259,6 +259,9 @@ function SpawnService:HandleCharacterSpawn(player, character)
 	if not player or not character then
 		return
 	end
+	if character:GetAttribute("SpawnServiceHandledByCharacterService") == true then
+		return
+	end
 
 	character:WaitForChild("Humanoid", 5)
 	character:WaitForChild("HumanoidRootPart", 5)

@@ -207,6 +207,18 @@ function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
 		return false
 	end
 
+	if character:GetAttribute("SpawnSetupActive") then
+		return false
+	end
+	if character:GetAttribute("CharacterSwitchDebounce") then
+		return false
+	end
+	if character:GetAttribute("Morphing") then
+		return false
+	end
+	if character:GetAttribute("IntroLocked") then
+		return false
+	end
 	if character:GetAttribute("UsingMove") then
 		return false
 	end

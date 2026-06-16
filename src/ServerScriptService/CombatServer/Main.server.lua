@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local combatFolder = script.Parent
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
+local worldFolder = script.Parent.Parent:WaitForChild("World")
 
 local Config = require(combatFolder:WaitForChild("CombatConfig"))
 
@@ -53,6 +54,7 @@ local SpawnService = require(combatFolder:WaitForChild("SpawnService")).new(
 	CombatStatusService
 )
 local EmoteService = require(servicesFolder:WaitForChild("EmoteService")).new(Config, StateService)
+local ArenaRespawnDummyService = require(worldFolder:WaitForChild("ArenaRespawnDummyService")).new(Config)
 
 local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
 	Config,
@@ -138,6 +140,7 @@ CombatStatusService.KillCreditService = KillCreditService
 CharacterService.CombatStatusService = CombatStatusService
 CharacterService.SpawnService = SpawnService
 CharacterService.CharacterIntroService = CharacterIntroService
+CharacterService.StateService = StateService
 BlockService.SpawnService = SpawnService
 
 M1Service.UltService = UltService
@@ -287,5 +290,6 @@ UltService:Start()
 SoulBurstService:Start()
 SpawnService:Start()
 DebugService:Start()
+ArenaRespawnDummyService:Start()
 
 print("[CombatServer] Ready")

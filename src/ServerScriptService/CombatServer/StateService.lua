@@ -25,6 +25,10 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("Guardbroken", false)
 	character:SetAttribute("Emoting", false)
 	character:SetAttribute("CurrentEmote", nil)
+	character:SetAttribute("SpawnSetupActive", false)
+	character:SetAttribute("CharacterSwitchDebounce", false)
+	character:SetAttribute("Morphing", false)
+	character:SetAttribute("IntroLocked", false)
 
 	character:SetAttribute("AirComboReady", false)
 	character:SetAttribute("UsedUptiltInCombo", false)
@@ -108,6 +112,10 @@ function StateService:GetCharacterInfo(player)
 end
 
 function StateService:CanAttack(character)
+	if character:GetAttribute("SpawnSetupActive") then return false end
+	if character:GetAttribute("CharacterSwitchDebounce") then return false end
+	if character:GetAttribute("Morphing") then return false end
+	if character:GetAttribute("IntroLocked") then return false end
 	if character:GetAttribute("Emoting") then return false end
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
@@ -119,6 +127,10 @@ function StateService:CanAttack(character)
 end
 
 function StateService:CanUseMove(character)
+	if character:GetAttribute("SpawnSetupActive") then return false end
+	if character:GetAttribute("CharacterSwitchDebounce") then return false end
+	if character:GetAttribute("Morphing") then return false end
+	if character:GetAttribute("IntroLocked") then return false end
 	if character:GetAttribute("Emoting") then return false end
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end

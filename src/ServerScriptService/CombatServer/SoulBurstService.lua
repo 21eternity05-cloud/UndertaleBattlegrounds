@@ -249,6 +249,10 @@ function SoulBurstService:CanSoulBurstCharacter(character)
 	if not root then return false, "NoRoot" end
 	if self:GetSoulBurst(character) < self:GetCost() then return false, "NotReady" end
 	if os.clock() < (character:GetAttribute("SoulBurstCooldownUntil") or 0) then return false, "Cooldown" end
+	if character:GetAttribute("SpawnSetupActive") == true then return false, "SpawnSetup" end
+	if character:GetAttribute("CharacterSwitchDebounce") == true then return false, "CharacterSwitchDebounce" end
+	if character:GetAttribute("Morphing") == true then return false, "Morphing" end
+	if character:GetAttribute("IntroLocked") == true then return false, "IntroLocked" end
 	if character:GetAttribute("SoulBursting") == true then return false, "AlreadyBursting" end
 	if character:GetAttribute("Emoting") == true then return false, "Emoting" end
 	if character:GetAttribute("Stunned") ~= true then return false, "NotStunned" end
@@ -314,6 +318,10 @@ function SoulBurstService:CanSoulBurst(player, character)
 	if os.clock() < (character:GetAttribute("SoulBurstCooldownUntil") or 0) then
 		return false, "Cooldown"
 	end
+	if character:GetAttribute("SpawnSetupActive") == true then return false, "SpawnSetup" end
+	if character:GetAttribute("CharacterSwitchDebounce") == true then return false, "CharacterSwitchDebounce" end
+	if character:GetAttribute("Morphing") == true then return false, "Morphing" end
+	if character:GetAttribute("IntroLocked") == true then return false, "IntroLocked" end
 	if character:GetAttribute("SoulBursting") == true then return false, "AlreadyBursting" end
 	if character:GetAttribute("Emoting") == true then return false, "Emoting" end
 	if character:GetAttribute("Stunned") ~= true then return false, "NotStunned" end
@@ -505,33 +513,6 @@ function SoulBurstService:ActivateSoulBurstForCharacter(character)
 	self:ApplyBurstHitbox(character, root)
 
 	return true
-end
-
-function SoulBurstService:SetupDebugButton()
-	local button = workspace:FindFirstChild("SOULBURST_BUTTON")
-
-	if not button or not button:IsA("BasePart") then
-		return
-	end
-
-	local debounce = {}
-
-	button.Touched:Connect(function(hit)
-		local character = hit and hit:FindFirstAncestorOfClass("Model")
-		local player = character and Players:GetPlayerFromCharacter(character)
-
-		if not player then return end
-		if debounce[player] then return end
-
-		debounce[player] = true
-		self:SetSoulBurst(player, self:GetMax(), "DebugButton")
-
-		task.delay(0.75, function()
-			debounce[player] = nil
-		end)
-	end)
-
-	print("[SoulBurstService] Debug SOULBURST_BUTTON connected")
 end
 
 function SoulBurstService:Start()

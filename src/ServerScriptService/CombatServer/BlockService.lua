@@ -67,6 +67,10 @@ function BlockService:CanBlockNow(character)
 
 	local allowBlockWhileDamageLocked = character:GetAttribute("AllowBlockWhileDamageLocked") == true
 
+	if character:GetAttribute("SpawnSetupActive") then return false end
+	if character:GetAttribute("CharacterSwitchDebounce") then return false end
+	if character:GetAttribute("Morphing") then return false end
+	if character:GetAttribute("IntroLocked") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Emoting") then return false end
 	if character:GetAttribute("Stunned") then return false end

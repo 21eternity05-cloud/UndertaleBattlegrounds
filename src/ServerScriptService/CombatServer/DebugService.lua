@@ -10,10 +10,10 @@ function DebugService.new(config)
 	self.Config = config
 	self.Enabled = false
 	self.CooldownsEnabled = false
-	self.TouchDebounce = {}
 	self.SoulBurstService = nil
 	self.CombatStateDebugConnection = nil
 	self.CombatStateDebugAccumulator = 0
+	self.CombatStateDebugWasEnabled = false
 
 	return self
 end
@@ -41,11 +41,6 @@ function DebugService:SetEnabled(enabled)
 	if not self.Enabled then
 		self:ClearAllCombatStateBillboards()
 	end
-
-	print("[DebugService] Debug enabled:", self.Enabled)
-	print("[DebugService] DebugHitboxes:", self.Config.DebugHitboxes)
-	print("[DebugService] DebugKnockback:", self.Config.DebugKnockback)
-	print("[DebugService] DebugDamageNumbers:", self.Config.DebugDamageNumbers)
 end
 
 function DebugService:SetCooldownDebugEnabled(enabled)
@@ -53,8 +48,6 @@ function DebugService:SetCooldownDebugEnabled(enabled)
 
 	workspace:SetAttribute("DebugCooldownsEnabled", self.CooldownsEnabled)
 	workspace:SetAttribute("DebugCooldownOverride", self.CooldownsEnabled and 1 or nil)
-
-	print("[DebugService] Debug cooldowns enabled:", self.CooldownsEnabled)
 end
 
 function DebugService:ToggleCooldowns()
@@ -222,34 +215,42 @@ function DebugService:GetCombatDebugCharacters()
 	local characters = {}
 	local seen = {}
 
-	for _, player in ipairs(Players:GetPlayers()) do
-		local character = player.Character
-
-		if character and not seen[character] then
-			seen[character] = true
-			table.insert(characters, character)
-		end
-	end
-
-	for _, descendant in ipairs(workspace:GetDescendants()) do
-		if descendant:IsA("Humanoid") then
-			local character = descendant.Parent
-
-			if character and character:IsA("Model") and not seen[character] then
+	local function addCharacter(character)
+		if character and character:IsA("Model") and not seen[character] then
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if humanoid then
 				seen[character] = true
 				table.insert(characters, character)
 			end
 		end
 	end
 
+	local function addFolderCharacters(folderName)
+		local folder = workspace:FindFirstChild(folderName)
+		if not folder then
+			return
+		end
+
+		for _, descendant in ipairs(folder:GetDescendants()) do
+			if descendant:IsA("Humanoid") then
+				addCharacter(descendant.Parent)
+			end
+		end
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		addCharacter(player.Character)
+	end
+
+	addFolderCharacters("DebugDummies")
+	addFolderCharacters("TestDummies")
+
 	return characters
 end
 
 function DebugService:ClearAllCombatStateBillboards()
-	for _, descendant in ipairs(workspace:GetDescendants()) do
-		if descendant.Name == "CombatStateDebugBillboard" and descendant:IsA("BillboardGui") then
-			descendant:Destroy()
-		end
+	for _, character in ipairs(self:GetCombatDebugCharacters()) do
+		self:ClearCombatStateBillboard(character)
 	end
 end
 
@@ -261,85 +262,26 @@ function DebugService:StartCombatStateDebugLoop()
 	self.CombatStateDebugConnection = RunService.Heartbeat:Connect(function(deltaTime)
 		self.CombatStateDebugAccumulator += deltaTime
 
-		if self.CombatStateDebugAccumulator < 0.1 then
+		if self.CombatStateDebugAccumulator < 0.25 then
 			return
 		end
 
 		self.CombatStateDebugAccumulator = 0
 
 		if not self:IsEnabled() then
-			self:ClearAllCombatStateBillboards()
+			if self.CombatStateDebugWasEnabled then
+				self:ClearAllCombatStateBillboards()
+				self.CombatStateDebugWasEnabled = false
+			end
 			return
 		end
+
+		self.CombatStateDebugWasEnabled = true
 
 		for _, character in ipairs(self:GetCombatDebugCharacters()) do
 			self:UpdateCombatStateBillboard(character)
 		end
 	end)
-end
-
-function DebugService:IsDebugButton(instance)
-	if not instance then
-		return false
-	end
-
-	if instance.Name == "DEBUG_BUTTON" then
-		return true
-	end
-
-	if instance:GetAttribute("DebugButton") == true then
-		return true
-	end
-
-	return false
-end
-
-function DebugService:IsCooldownButton(instance)
-	if not instance then
-		return false
-	end
-
-	if instance.Name == "COOLDOWN_BUTTON" then
-		return true
-	end
-
-	if instance:GetAttribute("CooldownButton") == true then
-		return true
-	end
-
-	return false
-end
-
-function DebugService:IsSoulBurstButton(instance)
-	if not instance then
-		return false
-	end
-
-	if instance.Name == "SOULBURST_BUTTON" then
-		return true
-	end
-
-	if instance:GetAttribute("SoulBurstButton") == true then
-		return true
-	end
-
-	return false
-end
-
-function DebugService:IsHealButton(instance)
-	if not instance then
-		return false
-	end
-
-	if instance.Name == "HEAL_BUTTON" then
-		return true
-	end
-
-	if instance:GetAttribute("HealButton") == true then
-		return true
-	end
-
-	return false
 end
 
 function DebugService:HealCharacter(character)
@@ -357,199 +299,31 @@ function DebugService:HealCharacter(character)
 end
 
 function DebugService:HealAllPlayersAndDummies()
-	for _, player in ipairs(Players:GetPlayers()) do
-		self:HealCharacter(player.Character)
-	end
+	local function healFolder(folderName)
+		local folder = workspace:FindFirstChild(folderName)
+		if not folder then
+			return
+		end
 
-	local dummyFolder = workspace:FindFirstChild("TestDummies")
-	if dummyFolder then
-		for _, descendant in ipairs(dummyFolder:GetDescendants()) do
+		for _, descendant in ipairs(folder:GetDescendants()) do
 			if descendant:IsA("Humanoid") then
 				self:HealCharacter(descendant.Parent)
 			end
 		end
 	end
 
-	for _, dummyName in ipairs({
-		"RespawnDummy",
-		"ComboDummy",
-		"AirComboDummy",
-		"BlockDummy",
-		"SOULBURSTDummy",
-	}) do
-		self:HealCharacter(workspace:FindFirstChild(dummyName))
-	end
-end
-
-function DebugService:GetPlayerFromHit(hit)
-	if not hit then
-		return nil
+	for _, player in ipairs(Players:GetPlayers()) do
+		self:HealCharacter(player.Character)
 	end
 
-	local character = hit:FindFirstAncestorOfClass("Model")
-
-	if not character then
-		return nil
-	end
-
-	return Players:GetPlayerFromCharacter(character)
-end
-
-function DebugService:CanTouch(player)
-	if not player then
-		return false
-	end
-
-	local now = os.clock()
-	local lastTouch = self.TouchDebounce[player] or 0
-
-	if now - lastTouch < 1.5 then
-		return false
-	end
-
-	self.TouchDebounce[player] = now
-
-	return true
-end
-
-function DebugService:HookDebugButton(button)
-	if not button or not button:IsA("BasePart") then
-		return
-	end
-
-	button.Touched:Connect(function(hit)
-		local player = self:GetPlayerFromHit(hit)
-
-		if not player then
-			return
-		end
-
-		if not self:CanTouch(player) then
-			return
-		end
-
-		self:Toggle()
-	end)
-
-	print("[DebugService] Hooked debug button:", button:GetFullName())
-end
-
-function DebugService:HookCooldownButton(button)
-	if not button or not button:IsA("BasePart") then
-		return
-	end
-
-	button.Touched:Connect(function(hit)
-		local player = self:GetPlayerFromHit(hit)
-
-		if not player then
-			return
-		end
-
-		if not self:CanTouch(player) then
-			return
-		end
-
-		self:ToggleCooldowns()
-	end)
-
-	print("[DebugService] Hooked cooldown button:", button:GetFullName())
-end
-
-function DebugService:HookSoulBurstButton(button)
-	if not button or not button:IsA("BasePart") then
-		return
-	end
-
-	button.Touched:Connect(function(hit)
-		local player = self:GetPlayerFromHit(hit)
-
-		if not player then
-			return
-		end
-
-		if not self:CanTouch(player) then
-			return
-		end
-
-		if self.SoulBurstService then
-			self.SoulBurstService:SetSoulBurst(player, self.SoulBurstService:GetMax(), "DebugService")
-		else
-			workspace:SetAttribute("DebugSoulBurstFill", true)
-			warn("[DebugService] SoulBurstService is not wired; set DebugSoulBurstFill attribute")
-		end
-	end)
-
-	print("[DebugService] Hooked soul burst button:", button:GetFullName())
-end
-
-function DebugService:HookHealButton(button)
-	if not button or not button:IsA("BasePart") then
-		return
-	end
-
-	button.Touched:Connect(function(hit)
-		local player = self:GetPlayerFromHit(hit)
-
-		if not player then
-			return
-		end
-
-		if not self:CanTouch(player) then
-			return
-		end
-
-		self:HealAllPlayersAndDummies()
-	end)
-
-	print("[DebugService] Hooked heal button:", button:GetFullName())
+	healFolder("DebugDummies")
+	healFolder("TestDummies")
 end
 
 function DebugService:Start()
 	self:SetEnabled(false)
 	self:SetCooldownDebugEnabled(false)
 	workspace:SetAttribute("DebugSoulBurstFill", false)
-
-	local button = workspace:FindFirstChild("DEBUG_BUTTON")
-
-	if button and button:IsA("BasePart") then
-		self:HookDebugButton(button)
-	else
-		warn("[DebugService] Missing workspace.DEBUG_BUTTON")
-	end
-
-	local cooldownButton = workspace:FindFirstChild("COOLDOWN_BUTTON")
-
-	if cooldownButton and cooldownButton:IsA("BasePart") then
-		self:HookCooldownButton(cooldownButton)
-	else
-		warn("[DebugService] Missing workspace.COOLDOWN_BUTTON")
-	end
-
-	local soulBurstButton = workspace:FindFirstChild("SOULBURST_BUTTON")
-
-	if soulBurstButton and soulBurstButton:IsA("BasePart") then
-		self:HookSoulBurstButton(soulBurstButton)
-	end
-
-	local healButton = workspace:FindFirstChild("HEAL_BUTTON")
-
-	if healButton and healButton:IsA("BasePart") then
-		self:HookHealButton(healButton)
-	end
-
-	workspace.DescendantAdded:Connect(function(descendant)
-		if self:IsDebugButton(descendant) and descendant:IsA("BasePart") then
-			self:HookDebugButton(descendant)
-		elseif self:IsCooldownButton(descendant) and descendant:IsA("BasePart") then
-			self:HookCooldownButton(descendant)
-		elseif self:IsSoulBurstButton(descendant) and descendant:IsA("BasePart") then
-			self:HookSoulBurstButton(descendant)
-		elseif self:IsHealButton(descendant) and descendant:IsA("BasePart") then
-			self:HookHealButton(descendant)
-		end
-	end)
-
 	self:StartCombatStateDebugLoop()
 end
 

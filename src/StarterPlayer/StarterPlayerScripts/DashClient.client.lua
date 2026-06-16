@@ -58,6 +58,22 @@ local function isDashLocked(character)
 		return true
 	end
 
+	if character:GetAttribute("SpawnSetupActive") then
+		return true
+	end
+
+	if character:GetAttribute("CharacterSwitchDebounce") then
+		return true
+	end
+
+	if character:GetAttribute("Morphing") then
+		return true
+	end
+
+	if character:GetAttribute("IntroLocked") then
+		return true
+	end
+
 	if character:GetAttribute("Emoting") then
 		return true
 	end
