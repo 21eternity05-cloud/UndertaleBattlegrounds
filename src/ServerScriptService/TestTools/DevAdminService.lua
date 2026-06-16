@@ -902,9 +902,9 @@ end
 local NUKE_ASCENT_HEIGHT = 420
 local NUKE_FORWARD_DISTANCE = 70
 local NUKE_BLAST_RADIUS = 620
-local NUKE_BLAST_DURATION = 9.5
-local NUKE_MAX_NEONIZED_PARTS = 1200
-local NUKE_PART_FORCE = 165
+local NUKE_BLAST_DURATION = 10
+local NUKE_MAX_NEONIZED_PARTS = 8000
+local NUKE_PART_FORCE = 1000
 
 function DevAdminService:GetCinematicRemote()
 	local remotes = ReplicatedStorage:FindFirstChild("Remotes")

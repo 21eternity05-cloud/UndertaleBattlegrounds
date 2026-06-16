@@ -21,7 +21,7 @@ function DisbeliefPapyrusMoves.new(config)
 		Phase2 = {
 			Move1 = "BrokenBoneRush",
 			Move2 = "YoureBlueNow",
-			Move3 = "BoneStorm",
+			Move3 = "TwinBoneThrow",
 			Move4 = "BlueTrap",
 			Ultimate = "DisbeliefFinale",
 		},
@@ -38,7 +38,7 @@ function DisbeliefPapyrusMoves.new(config)
 
 		BrokenBoneRush = require(MovesFolder:WaitForChild("BrokenBoneRush")),
 		YoureBlueNow = require(MovesFolder:WaitForChild("YoureBlueNow")),
-		BoneStorm = require(MovesFolder:WaitForChild("BoneStorm")),
+		TwinBoneThrow = require(MovesFolder:WaitForChild("TwinBoneThrow")),
 		BlueTrap = require(MovesFolder:WaitForChild("BlueTrap")),
 		DisbeliefFinale = require(MovesFolder:WaitForChild("DisbeliefFinale")),
 	}
