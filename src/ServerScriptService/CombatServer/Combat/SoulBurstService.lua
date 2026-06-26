@@ -63,7 +63,6 @@ function SoulBurstService:IsNPCSoulBurstCharacter(character)
 
 	return character:GetAttribute("CanSoulBurst") == true
 		or character:GetAttribute("SoulBurstDummy") == true
-		or character.Name == "SOULBURSTDummy"
 end
 
 function SoulBurstService:InitializeCharacter(player, character)
@@ -72,11 +71,15 @@ function SoulBurstService:InitializeCharacter(player, character)
 	end
 
 	if player and self.PlayerSoulBurst[player] == nil then
-		self.PlayerSoulBurst[player] = 0
+		self.PlayerSoulBurst[player] = self:GetMax()
+	elseif player then
+		self.PlayerSoulBurst[player] = self:GetMax()
 	end
 
 	if character and character.Parent then
-		character:SetAttribute("SoulBurst", player and self:GetSoulBurst(player) or 0)
+		local value = player and self:GetSoulBurst(player) or 0
+		character:SetAttribute("SoulBurst", value)
+		character:SetAttribute("Soul", value)
 		character:SetAttribute("SoulBursting", false)
 		character:SetAttribute("SoulBurstCooldownUntil", character:GetAttribute("SoulBurstCooldownUntil") or 0)
 		character:SetAttribute("SoulBurstIFrameId", character:GetAttribute("SoulBurstIFrameId") or 0)
@@ -163,6 +166,7 @@ function SoulBurstService:SetSoulBurst(playerOrCharacter, amount, reason)
 
 		local value = math.clamp(amount or 0, 0, self:GetMax())
 		character:SetAttribute("SoulBurst", value)
+		character:SetAttribute("Soul", value)
 
 		if reason then
 			print("[SoulBurstService]", character.Name, "soul burst set to", value, "reason:", reason)
@@ -176,8 +180,10 @@ function SoulBurstService:SetSoulBurst(playerOrCharacter, amount, reason)
 
 	if character and character.Parent then
 		character:SetAttribute("SoulBurst", value)
+		character:SetAttribute("Soul", value)
 	elseif player.Character then
 		player.Character:SetAttribute("SoulBurst", value)
+		player.Character:SetAttribute("Soul", value)
 	end
 
 	self:SendUpdate(player)

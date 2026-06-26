@@ -83,14 +83,13 @@ local HITBOX_ACTIVE_TIME = 0.16
 local HITBOX_TICK_RATE = 0.04
 local ENDLAG_TIME = 0.35
 
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local CharaMoveUtil = require(MoveHelpers:WaitForChild("CharaMoveUtil"))
+local SlashHelper = require(MoveHelpers:WaitForChild("SlashHelper"))
+local CharaImpactHelper = require(MoveHelpers:WaitForChild("CharaImpactHelper"))
+
 local function copyTable(source)
-	local copy = {}
-
-	for key, value in pairs(source or {}) do
-		copy[key] = value
-	end
-
-	return copy
+	return SlashHelper.CloneAttackData(source)
 end
 
 local function makeNoKnockbackHitData(moveData)
@@ -180,46 +179,19 @@ function RedSlash.Execute(context)
 	end
 
 	local function playCharaSFX(soundName, part, lifetime)
-		if context.VFXService and context.VFXService.PlayCharacterSFXAtPart then
-			context.VFXService:PlayCharacterSFXAtPart("Chara", soundName, part or root, lifetime or 2)
-		end
+		CharaMoveUtil.PlaySFX(context, soundName, part or root, lifetime or 2)
 	end
 
 	local function playMoveVFX(vfxName, targetCharacter, targetRoot)
-		if context.VFXService and context.VFXService.PlayCharacterMoveVFX then
-			context.VFXService:PlayCharacterMoveVFX(character, vfxName, targetCharacter, targetRoot)
-		end
+		CharaMoveUtil.PlayMoveVFX(context, vfxName, targetCharacter, targetRoot)
 	end
 
 	local function shakeCharacter(targetCharacter, magnitude, roughness, duration)
-		if not targetCharacter or not targetCharacter.Parent then return end
-		if not context.CinematicService then return end
-		if not context.CinematicService.ShakeOnce then return end
-
-		pcall(function()
-			context.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
-		end)
+		CharaImpactHelper.ShakeCharacter(context, targetCharacter, magnitude, roughness, duration)
 	end
 
 	local function playImpactFrame(targetCharacter, duration)
-		if not targetCharacter or not targetCharacter.Parent then return end
-		if not context.CinematicService then return end
-		if not context.CinematicService.ImpactFrame then return end
-
-		local success = pcall(function()
-			context.CinematicService:ImpactFrame(targetCharacter, duration)
-		end)
-
-		if success then
-			return
-		end
-
-		-- Fallback in case your ImpactFrame uses a config table.
-		pcall(function()
-			context.CinematicService:ImpactFrame(targetCharacter, {
-				Duration = duration,
-			})
-		end)
+		CharaImpactHelper.ImpactFrame(context, targetCharacter, duration)
 	end
 
 	local function playHitPolish(result, targetCharacter)

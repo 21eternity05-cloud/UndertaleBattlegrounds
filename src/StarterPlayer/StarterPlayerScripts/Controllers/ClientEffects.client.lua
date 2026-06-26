@@ -5,7 +5,7 @@ local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local cinematicRemote = remotes:WaitForChild("CinematicRemote")
 
-local modules = script.Parent:WaitForChild("ClientModules")
+local modules = script.Parent.Parent:WaitForChild("ClientModules")
 local CameraShake = require(modules:WaitForChild("CameraShake"))
 local ImpactFrame = require(modules:WaitForChild("ImpactFrame"))
 

@@ -58,37 +58,18 @@ local BoneShot = {
 	HitAttackerShakeDuration = 0.07,
 }
 
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local SansMoveUtil = require(MoveHelpers:WaitForChild("SansMoveUtil"))
+local BoneHelper = require(MoveHelpers:WaitForChild("BoneHelper"))
+local BlasterHelper = require(MoveHelpers:WaitForChild("BlasterHelper"))
+local SansImpactHelper = require(MoveHelpers:WaitForChild("SansImpactHelper"))
+
 local function getBoneTemplate(ctx)
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
-	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
-	local sans = characters:WaitForChild("Sans")
-	local vfx = sans:WaitForChild("VFX")
-
-	return vfx:WaitForChild("M1Bone")
+	return SansMoveUtil.GetSansVFXFolder(ctx):WaitForChild("M1Bone")
 end
 
 local function ensurePrimaryPart(model)
-	if not model:IsA("Model") then return nil end
-
-	if model.PrimaryPart then
-		return model.PrimaryPart
-	end
-
-	local primary = model:FindFirstChild("PrimaryPart", true)
-	if primary and primary:IsA("BasePart") then
-		model.PrimaryPart = primary
-		return primary
-	end
-
-	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
-	if firstPart then
-		model.PrimaryPart = firstPart
-		return firstPart
-	end
-
-	return nil
+	return BoneHelper.EnsurePrimaryPart(model)
 end
 
 local function getProjectilePart(projectile)
@@ -104,40 +85,19 @@ local function getProjectilePart(projectile)
 end
 
 local function pivotObject(object, cframe)
-	if object:IsA("Model") then
-		if not ensurePrimaryPart(object) then return end
-		object:PivotTo(cframe)
-	elseif object:IsA("BasePart") then
-		object.CFrame = cframe
-	end
+	BoneHelper.PivotObject(object, cframe)
 end
 
 local function makeLookCFrame(position, lookAtPosition)
-	local direction = lookAtPosition - position
-
-	if direction.Magnitude < 0.1 then
-		direction = Vector3.new(0, 0, -1)
-	end
-
-	return CFrame.lookAt(position, position + direction.Unit)
+	return BoneHelper.MakeLookCFrame(position, lookAtPosition)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
-
-	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+	SansMoveUtil.PlaySFX(ctx, soundName, parentPart, lifetime or 2)
 end
 
 local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ShakeOnce then return end
-
-	pcall(function()
-		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
-	end)
+	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
 local function playProjectileHitPolish(ctx, data, targetCharacter, result)
@@ -233,31 +193,15 @@ local function weldModelToPrimary(model)
 end
 
 local function getVisualParts(projectile)
-	local parts = {}
-
-	if projectile:IsA("BasePart") then
-		table.insert(parts, projectile)
-		return parts
-	end
-
-	for _, descendant in ipairs(projectile:GetDescendants()) do
-		if descendant:IsA("BasePart") and descendant.Name ~= "PrimaryPart" then
-			table.insert(parts, descendant)
-		end
-	end
-
-	return parts
+	return BlasterHelper.GetVisibleParts(projectile)
 end
 
 local function forcePrimaryInvisible(projectile)
 	if projectile:IsA("Model") then
-		local primary = ensurePrimaryPart(projectile)
+		BlasterHelper.ForcePrimaryInvisible(projectile)
+		local primary = projectile.PrimaryPart
 
 		if primary then
-			primary.Transparency = 1
-			primary.CanCollide = false
-			primary.CanTouch = false
-			primary.CanQuery = false
 			primary.Massless = true
 		end
 	end
@@ -351,32 +295,7 @@ local function tweenBoneIntoFormation(projectile, startCFrame, endCFrame, data)
 end
 
 local function setProjectileSpawnProperties(projectile)
-	if projectile:IsA("BasePart") then
-		projectile.Anchored = true
-		projectile.CanCollide = false
-		projectile.CanTouch = false
-		projectile.CanQuery = false
-		projectile.Massless = true
-		projectile:SetAttribute("IsProjectile", true)
-		projectile:SetAttribute("ProjectileOwner", "SansBoneShot")
-	end
-
-	for _, descendant in ipairs(projectile:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			descendant.Anchored = true
-			descendant.CanCollide = false
-			descendant.CanTouch = false
-			descendant.CanQuery = false
-			descendant.Massless = true
-			descendant:SetAttribute("IsProjectile", true)
-			descendant:SetAttribute("ProjectileOwner", "SansBoneShot")
-		end
-	end
-
-	if projectile:IsA("Model") then
-		projectile:SetAttribute("IsProjectile", true)
-		projectile:SetAttribute("ProjectileOwner", "SansBoneShot")
-	end
+	BoneHelper.SetProjectileSpawnProperties(projectile, "SansBoneShot")
 
 	forcePrimaryInvisible(projectile)
 end

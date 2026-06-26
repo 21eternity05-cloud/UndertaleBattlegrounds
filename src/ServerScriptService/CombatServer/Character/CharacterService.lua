@@ -18,6 +18,8 @@ function CharacterService.new(config, weaponService, progressionService, charact
 	self.CharacterIntroService = nil
 	self.SpawnService = nil
 	self.StateService = nil
+	self.SoulBurstService = nil
+	self.UltService = nil
 
 	return self
 end
@@ -219,6 +221,29 @@ function CharacterService:ApplyCharacterAttributes(player, character, characterN
 	end
 end
 
+function CharacterService:ResetRuntimeMeters(player, character, reason)
+	if not player then
+		return
+	end
+
+	character = character or player.Character
+
+	if self.SoulBurstService and self.SoulBurstService.SetSoulBurst then
+		self.SoulBurstService:SetSoulBurst(player, self.Config.SoulBurstMax or self.SoulBurstService:GetMax(), reason or "CharacterSetup")
+	elseif character and character.Parent then
+		local maxSoul = self.Config.SoulBurstMax or 100
+		character:SetAttribute("SoulBurst", maxSoul)
+		character:SetAttribute("Soul", maxSoul)
+	end
+
+	if self.UltService and self.UltService.SetUlt then
+		self.UltService:SetUlt(player, 0, reason or "CharacterSetup")
+	else
+		player:SetAttribute("Ult", 0)
+		player:SetAttribute("Ultimate", 0)
+	end
+end
+
 function CharacterService:GetCurrentOptions(player, characterName)
 	local skinName = player:GetAttribute("EquippedSkin_" .. characterName)
 
@@ -293,6 +318,8 @@ function CharacterService:SetSetupLock(character, enabled)
 	if enabled == true then
 		character:SetAttribute("Attacking", false)
 		character:SetAttribute("BlockHeld", false)
+		character:SetAttribute("BlockBufferedUntil", 0)
+		character:SetAttribute("BlockBufferToken", (character:GetAttribute("BlockBufferToken") or 0) + 1)
 		character:SetAttribute("Blocking", false)
 	end
 end
@@ -536,6 +563,7 @@ function CharacterService:SetCharacter(player, characterName, options)
 			RunService.Heartbeat:Wait()
 			self:WaitForAppearanceStable(player, character, 0.1)
 			self:ApplyCharacterVisualPipeline(player, character, characterName, options)
+			self:ResetRuntimeMeters(player, character, "CharacterSwitch")
 			self:ZeroCharacterVelocity(character)
 			RunService.Heartbeat:Wait()
 			self:PlayCharacterIntroAndWait(player, character, characterName)
@@ -568,6 +596,8 @@ function CharacterService:RunSpawnSetup(player, character)
 	if self.StateService and self.StateService.SetupCharacter then
 		self.StateService:SetupCharacter(character)
 	end
+
+	self:ResetRuntimeMeters(player, character, "Spawn")
 
 	self:BeginCharacterSetupLock(character)
 

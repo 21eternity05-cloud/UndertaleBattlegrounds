@@ -161,6 +161,15 @@ function BlockService:HookBlockWakeSignals(player, character)
 		end))
 	end
 
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		table.insert(connections, humanoid.Died:Connect(function()
+			character:SetAttribute("BlockHeld", false)
+			character:SetAttribute("Blocking", false)
+			self:StopBlockRetry(character)
+		end))
+	end
+
 	table.insert(connections, character.AncestryChanged:Connect(function(_, parent)
 		if parent then return end
 
@@ -215,6 +224,8 @@ function BlockService:StartBlockRetry(player, character)
 				return
 			end
 			if character:GetAttribute("BlockBufferToken") ~= retryToken then
+				self.BlockRetryTokens[character] = nil
+				self.BlockRetryPlayers[character] = nil
 				return
 			end
 			if character:GetAttribute("BlockHeld") ~= true then

@@ -2,7 +2,7 @@ local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
-local DevAdminService = require(ServerScriptService:WaitForChild("TestTools"):WaitForChild("DevAdminService"))
+local DummyFactory = require(ServerScriptService:WaitForChild("TestTools"):WaitForChild("DummyFactory"))
 
 local ArenaRespawnDummyService = {}
 ArenaRespawnDummyService.__index = ArenaRespawnDummyService
@@ -31,7 +31,7 @@ local MARKER_PATHS = {
 function ArenaRespawnDummyService.new(config)
 	return setmetatable({
 		Config = config,
-		Factory = DevAdminService.new(),
+		Factory = DummyFactory.new(),
 		Folder = nil,
 		Connections = {},
 		Respawning = {},

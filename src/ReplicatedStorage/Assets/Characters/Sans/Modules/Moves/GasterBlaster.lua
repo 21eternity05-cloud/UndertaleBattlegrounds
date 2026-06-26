@@ -1,6 +1,5 @@
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GasterBlaster = {
 	DisplayName = "Gaster Blaster",
@@ -108,12 +107,13 @@ local GasterBlaster = {
 	FinalBeamImpactFrameDuration = 0.055,
 }
 
-local function getSansVFXFolder(ctx)
-	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
-	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
-	local sans = characters:WaitForChild("Sans")
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local SansMoveUtil = require(MoveHelpers:WaitForChild("SansMoveUtil"))
+local BlasterHelper = require(MoveHelpers:WaitForChild("BlasterHelper"))
+local SansImpactHelper = require(MoveHelpers:WaitForChild("SansImpactHelper"))
 
-	return sans:WaitForChild("VFX")
+local function getSansVFXFolder(ctx)
+	return SansMoveUtil.GetSansVFXFolder(ctx)
 end
 
 local function getGasterBlasterTemplate(ctx)
@@ -122,41 +122,15 @@ local function getGasterBlasterTemplate(ctx)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
-
-	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 3)
+	SansMoveUtil.PlaySFX(ctx, soundName, parentPart, lifetime)
 end
 
 local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ShakeOnce then return end
-
-	pcall(function()
-		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
-	end)
+	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
 local function impactFrame(ctx, targetCharacter, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ImpactFrame then return end
-
-	local success = pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
-	end)
-
-	if success then
-		return
-	end
-
-	pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, {
-			Duration = duration,
-		})
-	end)
+	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
 end
 
 local function playChargePolish(ctx, data)
@@ -219,87 +193,36 @@ local function playFinalBeamPolish(ctx, data, beamStart)
 	)
 
 	if ctx.CinematicService and ctx.CinematicService.ShakeRadius then
-		pcall(function()
-			ctx.CinematicService:ShakeRadius(
-				beamStart,
-				data.FinalBeamRadiusShakeRange or GasterBlaster.FinalBeamRadiusShakeRange or 65,
-				data.FinalBeamRadiusShakeMagnitude or GasterBlaster.FinalBeamRadiusShakeMagnitude or 1.15,
-				data.FinalBeamRadiusShakeRoughness or GasterBlaster.FinalBeamRadiusShakeRoughness or 11,
-				data.FinalBeamRadiusShakeDuration or GasterBlaster.FinalBeamRadiusShakeDuration or 0.22,
-				{
-					ExcludeCharacters = {
-						ctx.Character,
-					},
-				}
-			)
-		end)
+		SansImpactHelper.ShakeRadius(
+			ctx,
+			beamStart,
+			data.FinalBeamRadiusShakeRange or GasterBlaster.FinalBeamRadiusShakeRange or 65,
+			data.FinalBeamRadiusShakeMagnitude or GasterBlaster.FinalBeamRadiusShakeMagnitude or 1.15,
+			data.FinalBeamRadiusShakeRoughness or GasterBlaster.FinalBeamRadiusShakeRoughness or 11,
+			data.FinalBeamRadiusShakeDuration or GasterBlaster.FinalBeamRadiusShakeDuration or 0.22,
+			{
+				ExcludeCharacters = {
+					ctx.Character,
+				},
+			}
+		)
 	end
 end
 
 local function ensurePrimaryPart(model)
-	if not model or not model:IsA("Model") then return nil end
-
-	if model.PrimaryPart then
-		return model.PrimaryPart
-	end
-
-	local primary = model:FindFirstChild("PrimaryPart", true)
-
-	if primary and primary:IsA("BasePart") then
-		model.PrimaryPart = primary
-		return primary
-	end
-
-	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
-
-	if firstPart then
-		model.PrimaryPart = firstPart
-		return firstPart
-	end
-
-	return nil
+	return BlasterHelper.EnsurePrimaryPart(model)
 end
 
 local function setupBlasterParts(model)
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			descendant.Anchored = true
-			descendant.CanCollide = false
-			descendant.CanTouch = false
-			descendant.CanQuery = false
-			descendant.Massless = true
-		end
-	end
-
-	local primary = ensurePrimaryPart(model)
-
-	if primary then
-		primary.Transparency = 1
-	end
+	BlasterHelper.SetupWorldModel(model)
 end
 
 local function getVisibleParts(model)
-	local primary = ensurePrimaryPart(model)
-	local parts = {}
-
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("BasePart") and descendant ~= primary then
-			table.insert(parts, descendant)
-		end
-	end
-
-	return parts
+	return BlasterHelper.GetVisibleParts(model, true)
 end
 
 local function forcePrimaryInvisible(model)
-	local primary = ensurePrimaryPart(model)
-
-	if primary then
-		primary.Transparency = 1
-		primary.CanCollide = false
-		primary.CanTouch = false
-		primary.CanQuery = false
-	end
+	BlasterHelper.ForcePrimaryInvisible(model)
 end
 
 local function capturePartTransparencies(model)

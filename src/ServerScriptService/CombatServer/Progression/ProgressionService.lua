@@ -730,13 +730,24 @@ function ProgressionService:IsRespawnDummy(character)
 		return false
 	end
 
-	if character:GetAttribute("RespawnDummy") == true then
+	if character:GetAttribute("RespawnDummy") == true
+		or character:GetAttribute("ArenaRespawnDummy") == true
+		or character:GetAttribute("ArenaDummy") == true
+		or character:GetAttribute("DebugDummy") == true
+		or character:GetAttribute("TestDummy") == true
+		or character:GetAttribute("ComboDummy") == true
+		or character:GetAttribute("AirComboDummy") == true
+		or character:GetAttribute("BlockDummy") == true
+		or character:GetAttribute("SoulBurstDummy") == true
+		or character:GetAttribute("TRUEDummy") == true
+		or character:GetAttribute("TrueDummy") == true
+	then
 		return true
 	end
 
 	local loweredName = string.lower(character.Name)
 
-	return string.find(loweredName, "respawn") ~= nil
+	return string.find(loweredName, "dummy") ~= nil
 end
 
 function ProgressionService:GetKillRewardForTarget(targetCharacter)

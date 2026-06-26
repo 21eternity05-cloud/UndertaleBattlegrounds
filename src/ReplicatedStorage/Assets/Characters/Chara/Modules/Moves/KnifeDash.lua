@@ -1,3 +1,6 @@
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local CharaMoveUtil = require(MoveHelpers:WaitForChild("CharaMoveUtil"))
+
 local KnifeDash = {
 	DisplayName = "Knife Dash",
 	AnimationName = "KnifeDash",
@@ -57,23 +60,17 @@ function KnifeDash.Execute(ctx)
 	local dashFOVActive = false
 
 	local function playCharaSFX(soundName, parentPart, lifetime)
-		if ctx.VFXService and ctx.VFXService.PlayCharacterSFXAtPart then
-			ctx.VFXService:PlayCharacterSFXAtPart("Chara", soundName, parentPart or root, lifetime or 2)
-		end
+		CharaMoveUtil.PlaySFX(ctx, soundName, parentPart or root, lifetime or 2)
 	end
 
 	local function playCharaM1HitSFX(targetRoot)
 		if not targetRoot then return end
 
-		if ctx.VFXService and ctx.VFXService.PlayCharacterSFXAtPart then
-			ctx.VFXService:PlayCharacterSFXAtPart("Chara", "M1", targetRoot, 2)
-		end
+		CharaMoveUtil.PlaySFX(ctx, "M1", targetRoot, 2)
 	end
 
 	local function playCharaMoveVFX(vfxName, targetCharacter, targetRoot)
-		if ctx.VFXService and ctx.VFXService.PlayCharacterMoveVFX then
-			ctx.VFXService:PlayCharacterMoveVFX(character, vfxName, targetCharacter, targetRoot)
-		end
+		CharaMoveUtil.PlayMoveVFX(ctx, vfxName, targetCharacter, targetRoot)
 	end
 
 	local function setDashFOVActive(isActive)
@@ -376,10 +373,7 @@ function KnifeDash.Execute(ctx)
 			currentHitboxDirection = dashDirection
 		end
 
-		local hitboxData = {
-			Radius = moveData.Hitbox.Radius,
-			Offset = getDynamicOffset(),
-		}
+		local hitboxData = CharaMoveUtil.BuildSphereHitbox(moveData.Hitbox.Radius, getDynamicOffset())
 
 		local didConnect = false
 

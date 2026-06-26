@@ -3,6 +3,8 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 
+-- TODO: Redesign with Undertale-style black panels, thick white borders, square corners, and pixel typography.
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 

@@ -6,6 +6,12 @@ local Players = game:GetService("Players")
 local BLOCK_MODE_NORMAL = "Normal"
 local BLOCK_MODE_ALL_ROUND = "AllRound"
 
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local SansMoveUtil = require(MoveHelpers:WaitForChild("SansMoveUtil"))
+local BoneHelper = require(MoveHelpers:WaitForChild("BoneHelper"))
+local BlasterHelper = require(MoveHelpers:WaitForChild("BlasterHelper"))
+local SansImpactHelper = require(MoveHelpers:WaitForChild("SansImpactHelper"))
+
 local BadTime = {
 	DisplayName = "Bad Time",
 	AnimationName = "BadTime",
@@ -160,16 +166,11 @@ local BadTime = {
 }
 
 local function getSansVFXFolder(ctx)
-	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
-	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
-	local sans = characters:WaitForChild("Sans")
-
-	return sans:WaitForChild("VFX")
+	return SansMoveUtil.GetSansVFXFolder(ctx)
 end
 
 local function getVFXTemplate(ctx, name)
-	local folder = getSansVFXFolder(ctx)
-	local template = folder:FindFirstChild(name)
+	local template = SansMoveUtil.GetVFXTemplate(ctx, name)
 
 	if not template then
 		warn("[BadTime] Missing Sans VFX:", name)
@@ -223,58 +224,19 @@ local function shouldSkipToBadTimeFinale(ctx)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then
-		return
-	end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then
-		return
-	end
-	if not parentPart or not parentPart.Parent then
-		return
-	end
-
-	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 3)
+	SansMoveUtil.PlaySFX(ctx, soundName, parentPart, lifetime)
 end
 
 local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
-	if not ctx.VFXService then
-		return
-	end
-	if not ctx.VFXService.PlayCharacterMoveVFX then
-		return
-	end
-
-	ctx.VFXService:PlayCharacterMoveVFX(ctx.Character, moveName, targetCharacter, targetRoot)
+	SansMoveUtil.PlayMoveVFX(ctx, moveName, targetCharacter, targetRoot)
 end
 
 local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ShakeOnce then return end
-
-	pcall(function()
-		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
-	end)
+	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
 local function impactFrame(ctx, targetCharacter, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ImpactFrame then return end
-
-	local success = pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
-	end)
-
-	if success then
-		return
-	end
-
-	pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, {
-			Duration = duration,
-		})
-	end)
+	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
 end
 
 local function playSequenceDamagePolish(ctx, targetCharacter, blockMode)
@@ -530,44 +492,11 @@ local function setupWorldObject(object)
 end
 
 local function ensurePrimaryPart(model)
-	if not model or not model:IsA("Model") then
-		return nil
-	end
-
-	if model.PrimaryPart then
-		return model.PrimaryPart
-	end
-
-	local primary = model:FindFirstChild("PrimaryPart", true)
-
-	if primary and primary:IsA("BasePart") then
-		model.PrimaryPart = primary
-		return primary
-	end
-
-	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
-
-	if firstPart then
-		model.PrimaryPart = firstPart
-		return firstPart
-	end
-
-	return nil
+	return BlasterHelper.EnsurePrimaryPart(model)
 end
 
 local function forcePrimaryInvisible(model)
-	if not model or not model:IsA("Model") then
-		return
-	end
-
-	local primary = ensurePrimaryPart(model)
-
-	if primary then
-		primary.Transparency = 1
-		primary.CanCollide = false
-		primary.CanTouch = false
-		primary.CanQuery = false
-	end
+	BlasterHelper.ForcePrimaryInvisible(model)
 end
 
 local function pivotObject(object, cframe)
@@ -575,49 +504,15 @@ local function pivotObject(object, cframe)
 		return
 	end
 
-	if object:IsA("Model") then
-		ensurePrimaryPart(object)
-		object:PivotTo(cframe)
-	elseif object:IsA("BasePart") then
-		object.CFrame = cframe
-	end
+	BoneHelper.PivotObject(object, cframe)
 end
 
 local function getVisualParts(object)
-	local parts = {}
-
-	if object:IsA("BasePart") then
-		table.insert(parts, object)
-		return parts
-	end
-
-	for _, descendant in ipairs(object:GetDescendants()) do
-		if descendant:IsA("BasePart") and descendant.Name ~= "PrimaryPart" then
-			table.insert(parts, descendant)
-		end
-	end
-
-	return parts
+	return BlasterHelper.GetVisibleParts(object)
 end
 
 local function fadeOutObject(object, fadeTime)
-	if not object or not object.Parent then
-		return
-	end
-
-	fadeTime = fadeTime or 0.15
-
-	for _, part in ipairs(getVisualParts(object)) do
-		TweenService:Create(part, TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 1,
-		}):Play()
-	end
-
-	if object:IsA("Model") then
-		forcePrimaryInvisible(object)
-	end
-
-	Debris:AddItem(object, fadeTime + 0.08)
+	BlasterHelper.FadeOutObject(object, fadeTime)
 end
 
 local function emitAttachmentToPart(template, part, lifetime, name, keepEnabled)

@@ -46,6 +46,40 @@ function M1Service:GetCharacterName(character)
 	return self.Config.DefaultCharacterName or "Chara"
 end
 
+function M1Service:GetM1HitDelay(comboOrData)
+	if self.Config.GetM1HitDelay then
+		return self.Config.GetM1HitDelay(comboOrData)
+	end
+
+	local data = typeof(comboOrData) == "table" and comboOrData or self.M1Data[comboOrData]
+	return (data and data.HitDelay) or 0.08
+end
+
+function M1Service:GetM1Cooldown(comboOrData)
+	if self.Config.GetM1Cooldown then
+		return self.Config.GetM1Cooldown(comboOrData)
+	end
+
+	local data = typeof(comboOrData) == "table" and comboOrData or self.M1Data[comboOrData]
+	return (data and data.Cooldown) or 0.3
+end
+
+function M1Service:GetM1NextInputDelay(comboOrData)
+	if self.Config.GetM1NextInputDelay then
+		return self.Config.GetM1NextInputDelay(comboOrData)
+	end
+
+	return self:GetM1Cooldown(comboOrData)
+end
+
+function M1Service:GetM1FinalLock()
+	if self.Config.GetM1FinalLock then
+		return self.Config.GetM1FinalLock()
+	end
+
+	return self:GetM1Cooldown(self.FinalM1)
+end
+
 function M1Service:BuildAttackData(baseData, extraData)
 	local data = {}
 
@@ -763,7 +797,7 @@ function M1Service:DoUptilt(player)
 
 	print(player.Name .. " used UPTILT", hasSuccessfulM1 and "COMBO" or "RAW")
 
-	task.delay(rawData.HitDelay, function()
+	task.delay(self:GetM1HitDelay(rawData), function()
 		if not character.Parent then
 			return
 		end
@@ -861,7 +895,7 @@ function M1Service:DoUptilt(player)
 		end
 	end)
 
-	task.delay(rawData.Cooldown, function()
+	task.delay(self:GetM1NextInputDelay(rawData), function()
 		if character and character.Parent then
 			self:EndM1Action(character, m1Token)
 		end
@@ -906,7 +940,7 @@ function M1Service:DoDownslam(player)
 
 	print(player.Name .. " used AIR M5 DOWNSLAM")
 
-	task.delay(rawData.HitDelay, function()
+	task.delay(self:GetM1HitDelay(rawData), function()
 		if not character.Parent then
 			return
 		end
@@ -998,7 +1032,7 @@ function M1Service:DoDownslam(player)
 		)
 	end)
 
-	task.delay(rawData.Cooldown, function()
+	task.delay(self:GetM1NextInputDelay(rawData), function()
 		if character and character.Parent then
 			if character:GetAttribute("M1Token") == m1Token then
 				self:EndM1Action(character, m1Token)
@@ -1045,7 +1079,7 @@ function M1Service:DoNormalM1(player)
 
 	print(player.Name .. " used M" .. combo)
 
-	task.delay(rawData.HitDelay, function()
+	task.delay(self:GetM1HitDelay(rawData), function()
 		if not character.Parent then
 			return
 		end
@@ -1182,7 +1216,7 @@ function M1Service:DoNormalM1(player)
 		end
 	end)
 
-	task.delay(rawData.Cooldown, function()
+	task.delay(self:GetM1NextInputDelay(rawData), function()
 		if character and character.Parent then
 			if character:GetAttribute("M1Token") == m1Token then
 				self:EndM1Action(character, m1Token)

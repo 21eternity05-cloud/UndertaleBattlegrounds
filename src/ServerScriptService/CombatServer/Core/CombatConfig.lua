@@ -58,7 +58,7 @@ CombatConfig.UltCounterGain = 10
 CombatConfig.UltComboEnderGain = 5
 CombatConfig.UltKillGain = 15
 
--- Keep true while testing on TestDummies.
+-- Keep true while testing on debug/arena dummies.
 -- Turn false later for real PvP balance.
 CombatConfig.AllowDummyUltGain = true
 
@@ -138,8 +138,8 @@ CombatConfig.M1Data = {
 	[1] = {
 		Damage = 2,
 		Stun = 0.6,
-		Cooldown = 0.30,
-		HitDelay = 0.08,
+		Cooldown = 0.42,
+		HitDelay = 0.18,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.4),
@@ -154,8 +154,8 @@ CombatConfig.M1Data = {
 	[2] = {
 		Damage = 2,
 		Stun = 0.6,
-		Cooldown = 0.30,
-		HitDelay = 0.08,
+		Cooldown = 0.42,
+		HitDelay = 0.18,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.4),
@@ -170,8 +170,8 @@ CombatConfig.M1Data = {
 	[3] = {
 		Damage = 2,
 		Stun = 0.6,
-		Cooldown = 0.32,
-		HitDelay = 0.08,
+		Cooldown = 0.44,
+		HitDelay = 0.19,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.5),
@@ -186,8 +186,8 @@ CombatConfig.M1Data = {
 	[4] = {
 		Damage = 2,
 		Stun = 0.6,
-		Cooldown = 0.32,
-		HitDelay = 0.08,
+		Cooldown = 0.44,
+		HitDelay = 0.19,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.5),
@@ -202,8 +202,8 @@ CombatConfig.M1Data = {
 	[5] = {
 		Damage = 8,
 		Stun = 0.5,
-		Cooldown = 0.56,
-		HitDelay = 0.12,
+		Cooldown = 0.72,
+		HitDelay = 0.20,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.6),
@@ -230,9 +230,9 @@ CombatConfig.M1Data = {
 	Uptilt = {
 		Damage = 1,
 		Stun = 0.7,
-		Cooldown = 0.42,
+		Cooldown = 0.55,
 		MoveCooldown = 0.8,
-		HitDelay = 0.1,
+		HitDelay = 0.20,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, 1.5, -6.4),
@@ -257,8 +257,8 @@ CombatConfig.M1Data = {
 
 	Downslam = {
 		Damage = 2,
-		Cooldown = 0.62,
-		HitDelay = 0.12,
+		Cooldown = 0.70,
+		HitDelay = 0.20,
 
 		Radius = 7.5,
 		Offset = CFrame.new(0, -1.1, -6.5),
@@ -279,5 +279,23 @@ CombatConfig.M1Data = {
 		SplatPartSize = Vector3.new(8, 0.25, 8),
 	},
 }
+
+function CombatConfig.GetM1HitDelay(comboOrData)
+	local data = typeof(comboOrData) == "table" and comboOrData or CombatConfig.M1Data[comboOrData]
+	return (data and data.HitDelay) or 0.08
+end
+
+function CombatConfig.GetM1Cooldown(comboOrData)
+	local data = typeof(comboOrData) == "table" and comboOrData or CombatConfig.M1Data[comboOrData]
+	return (data and data.Cooldown) or CombatConfig.TestDummyAttackInterval or 0.36
+end
+
+function CombatConfig.GetM1NextInputDelay(comboOrData)
+	return CombatConfig.GetM1Cooldown(comboOrData)
+end
+
+function CombatConfig.GetM1FinalLock()
+	return CombatConfig.GetM1Cooldown(CombatConfig.FinalM1 or 5)
+end
 
 return CombatConfig

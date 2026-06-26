@@ -1,6 +1,5 @@
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BoneZone = {
 	DisplayName = "Bone Zone",
@@ -71,11 +70,12 @@ local BoneZone = {
 	HitImpactFrameDuration = 0.045,
 }
 
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local SansMoveUtil = require(MoveHelpers:WaitForChild("SansMoveUtil"))
+local SansImpactHelper = require(MoveHelpers:WaitForChild("SansImpactHelper"))
+
 local function getSansVFXFolder(ctx)
-	local assets = ReplicatedStorage:WaitForChild(ctx.Config.AssetsFolderName or "Assets")
-	local characters = assets:WaitForChild(ctx.Config.CharactersFolderName or "Characters")
-	local sans = characters:WaitForChild("Sans")
-	return sans:WaitForChild("VFX")
+	return SansMoveUtil.GetSansVFXFolder(ctx)
 end
 
 local function getBoneZoneTemplate(ctx)
@@ -83,11 +83,7 @@ local function getBoneZoneTemplate(ctx)
 end
 
 local function playSansSFX(ctx, soundName, parentPart, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not parentPart or not parentPart.Parent then return end
-
-	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, parentPart, lifetime or 2)
+	SansMoveUtil.PlaySFX(ctx, soundName, parentPart, lifetime or 2)
 end
 
 local function showDamageNumber(ctx, targetRoot, amount)
@@ -103,33 +99,11 @@ local function showDamageNumber(ctx, targetRoot, amount)
 end
 
 local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ShakeOnce then return end
-
-	pcall(function()
-		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
-	end)
+	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
 local function impactFrame(ctx, targetCharacter, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ImpactFrame then return end
-
-	local success = pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
-	end)
-
-	if success then
-		return
-	end
-
-	pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, {
-			Duration = duration,
-		})
-	end)
+	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
 end
 
 local function playEruptionPolish(ctx, hitPosition, data)
@@ -146,20 +120,19 @@ local function playEruptionPolish(ctx, hitPosition, data)
 	)
 
 	if ctx.CinematicService.ShakeRadius then
-		pcall(function()
-			ctx.CinematicService:ShakeRadius(
-				hitPosition,
-				data.EruptionRadiusShakeRange or BoneZone.EruptionRadiusShakeRange or 45,
-				data.EruptionRadiusShakeMagnitude or BoneZone.EruptionRadiusShakeMagnitude or 0.9,
-				data.EruptionRadiusShakeRoughness or BoneZone.EruptionRadiusShakeRoughness or 9,
-				data.EruptionRadiusShakeDuration or BoneZone.EruptionRadiusShakeDuration or 0.16,
-				{
-					ExcludeCharacters = {
-						ctx.Character,
-					},
-				}
-			)
-		end)
+		SansImpactHelper.ShakeRadius(
+			ctx,
+			hitPosition,
+			data.EruptionRadiusShakeRange or BoneZone.EruptionRadiusShakeRange or 45,
+			data.EruptionRadiusShakeMagnitude or BoneZone.EruptionRadiusShakeMagnitude or 0.9,
+			data.EruptionRadiusShakeRoughness or BoneZone.EruptionRadiusShakeRoughness or 9,
+			data.EruptionRadiusShakeDuration or BoneZone.EruptionRadiusShakeDuration or 0.16,
+			{
+				ExcludeCharacters = {
+					ctx.Character,
+				},
+			}
+		)
 	end
 end
 

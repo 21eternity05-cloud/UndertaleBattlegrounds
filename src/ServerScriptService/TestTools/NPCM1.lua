@@ -11,13 +11,14 @@ local DEFAULT_JUMPPOWER = 50
 local DEFAULT_JUMPHEIGHT = 7.2
 
 local FALLBACK_FINAL_M1 = 5
+local DEFAULT_DUMMY_ACTION_TIMEOUT = 1.1
 
 local FALLBACK_M1_DATA = {
 	[1] = {
 		Damage = 2,
 		Stun = 0.65,
-		Cooldown = 0.3,
-		HitDelay = 0.08,
+		Cooldown = 0.42,
+		HitDelay = 0.18,
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.4),
 		Knockback = 0,
@@ -28,8 +29,8 @@ local FALLBACK_M1_DATA = {
 	[2] = {
 		Damage = 2,
 		Stun = 0.7,
-		Cooldown = 0.3,
-		HitDelay = 0.08,
+		Cooldown = 0.42,
+		HitDelay = 0.18,
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.4),
 		Knockback = 0,
@@ -40,8 +41,8 @@ local FALLBACK_M1_DATA = {
 	[3] = {
 		Damage = 2,
 		Stun = 0.75,
-		Cooldown = 0.32,
-		HitDelay = 0.08,
+		Cooldown = 0.44,
+		HitDelay = 0.19,
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.5),
 		Knockback = 0,
@@ -52,8 +53,8 @@ local FALLBACK_M1_DATA = {
 	[4] = {
 		Damage = 2,
 		Stun = 0.8,
-		Cooldown = 0.32,
-		HitDelay = 0.08,
+		Cooldown = 0.44,
+		HitDelay = 0.19,
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.5),
 		Knockback = 0,
@@ -64,8 +65,8 @@ local FALLBACK_M1_DATA = {
 	[5] = {
 		Damage = 3,
 		Stun = 0.95,
-		Cooldown = 0.65,
-		HitDelay = 0.1,
+		Cooldown = 0.72,
+		HitDelay = 0.22,
 		Radius = 7.5,
 		Offset = CFrame.new(0, 0, -6.6),
 		Knockback = 110,
@@ -78,8 +79,8 @@ local FALLBACK_M1_DATA = {
 local FALLBACK_UPTILT_DATA = {
 	Damage = 2,
 	Stun = 1.2,
-	Cooldown = 0.45,
-	HitDelay = 0.09,
+	Cooldown = 0.55,
+	HitDelay = 0.20,
 	Radius = 7.5,
 	Offset = CFrame.new(0, 1.5, -6.4),
 
@@ -95,8 +96,8 @@ local FALLBACK_UPTILT_DATA = {
 local FALLBACK_DOWNSLAM_DATA = {
 	Damage = 3,
 	Stun = 1.0,
-	Cooldown = 0.75,
-	HitDelay = 0.08,
+	Cooldown = 0.70,
+	HitDelay = 0.20,
 	Radius = 7.5,
 	Offset = CFrame.new(0, -1.1, -6.5),
 
@@ -134,12 +135,14 @@ function NPCM1.new(config, services)
 	self.MovementService = services.MovementService
 	self.BlockService = services.BlockService
 	self.StateService = services.StateService
+	self.AnimationService = services.AnimationService or (self.StateService and self.StateService.AnimationService)
 	self.VFXService = services.VFXService
 	self.CounterService = services.CounterService
 	self.CombatStatusService = services.CombatStatusService
 
 	local combatServer = ServerScriptService:FindFirstChild("CombatServer")
-	local movementServiceModule = combatServer and combatServer:FindFirstChild("MovementService")
+	local combatSystemsFolder = combatServer and combatServer:FindFirstChild("Combat")
+	local movementServiceModule = combatSystemsFolder and combatSystemsFolder:FindFirstChild("MovementService")
 
 	if not self.MovementService and movementServiceModule then
 		local success, movementService = pcall(function()
@@ -417,6 +420,63 @@ function NPCM1:GetDownslamData()
 	return copyData(FALLBACK_DOWNSLAM_DATA)
 end
 
+function NPCM1:GetAttackDelay(attackData, attackKind)
+	if self.Config.GetM1Cooldown and attackKind == "M1" then
+		local configDelay = self.Config.GetM1Cooldown(attackData)
+		if typeof(configDelay) == "number" and configDelay > 0 then
+			return configDelay
+		end
+	end
+
+	local delay = attackData and (attackData.Cooldown or attackData.AttackDelay or attackData.Recovery)
+
+	if typeof(delay) == "number" and delay > 0 then
+		return delay
+	end
+
+	if attackKind == "Uptilt" then
+		return 0.42
+	elseif attackKind == "Downslam" then
+		return 0.62
+	end
+
+	return self.Config.TestDummyAttackInterval or 0.36
+end
+
+function NPCM1:GetM1HitDelay(comboOrData)
+	if self.Config.GetM1HitDelay then
+		return self.Config.GetM1HitDelay(comboOrData)
+	end
+
+	local data = typeof(comboOrData) == "table" and comboOrData or self:GetM1Data(comboOrData or 1)
+	return data.HitDelay or 0.08
+end
+
+function NPCM1:GetM1Cooldown(comboOrData)
+	if self.Config.GetM1Cooldown then
+		return self.Config.GetM1Cooldown(comboOrData)
+	end
+
+	local data = typeof(comboOrData) == "table" and comboOrData or self:GetM1Data(comboOrData or 1)
+	return self:GetAttackDelay(data, "M1")
+end
+
+function NPCM1:GetM1NextInputDelay(comboOrData)
+	if self.Config.GetM1NextInputDelay then
+		return self.Config.GetM1NextInputDelay(comboOrData)
+	end
+
+	return self:GetM1Cooldown(comboOrData)
+end
+
+function NPCM1:GetM1FinalLock()
+	if self.Config.GetM1FinalLock then
+		return self.Config.GetM1FinalLock()
+	end
+
+	return self:GetM1NextInputDelay(self:GetFinalM1())
+end
+
 function NPCM1:SetupNPC(npc, options)
 	options = options or {}
 
@@ -425,6 +485,14 @@ function NPCM1:SetupNPC(npc, options)
 	npc:SetAttribute("NPCAttacking", false)
 	npc:SetAttribute("NPCUsedUptilt", false)
 	npc:SetAttribute("NPCAirComboReady", options.AirCombo == true)
+	npc:SetAttribute("M1Token", npc:GetAttribute("M1Token") or 0)
+	npc:SetAttribute("CurrentM1Action", nil)
+	npc:SetAttribute("SuccessfulM1InCombo", false)
+	npc:SetAttribute("NPCM1Busy", false)
+	npc:SetAttribute("M1Active", false)
+	npc:SetAttribute("NPCM1ActionStartedAt", 0)
+	npc:SetAttribute("NPCM1ActionTimeoutAt", 0)
+	npc:SetAttribute("NPCM1LastRecoveryReason", nil)
 end
 
 function NPCM1:GetHumanoidAndRoot(model)
@@ -521,15 +589,191 @@ function NPCM1:StopAllMovementControllers(npcRoot, targetRoot)
 end
 
 function NPCM1:CanAttack(npc)
+	self:ClearDummyAttackStateIfTimedOut(npc)
+
 	local humanoid, root = self:GetHumanoidAndRoot(npc)
 
 	if not humanoid or not root then return false end
 	if humanoid.Health <= 0 then return false end
 	if npc:GetAttribute("NPCAttacking") then return false end
+	if npc:GetAttribute("Attacking") then return false end
+	if npc:GetAttribute("UsingMove") then return false end
 	if npc:GetAttribute("Stunned") then return false end
 	if npc:GetAttribute("Guardbroken") then return false end
+	if npc:GetAttribute("Blocking") then return false end
+	if npc:GetAttribute("SpawnSetupActive") then return false end
+	if npc:GetAttribute("IntroLocked") then return false end
+	if npc:GetAttribute("Morphing") then return false end
+	if npc:GetAttribute("CharacterSwitchDebounce") then return false end
+	if npc:GetAttribute("Emoting") then return false end
+	if os.clock() < (npc:GetAttribute("M1CooldownUntil") or 0) then return false end
 
 	return true
+end
+
+function NPCM1:IsControlledDummy(npc)
+	if not npc or not npc.Parent then
+		return false
+	end
+
+	return npc:GetAttribute("DebugDummy") == true
+		or npc:GetAttribute("ArenaDummy") == true
+		or npc:GetAttribute("RespawnDummy") == true
+		or npc:GetAttribute("ArenaRespawnDummy") == true
+		or npc:GetAttribute("TestDummy") == true
+		or npc:GetAttribute("ComboDummy") == true
+		or npc:GetAttribute("AirComboDummy") == true
+end
+
+function NPCM1:GetDummyActionTimeout()
+	local timeout = self.Config.DummyM1ActionTimeout or self.Config.TestDummyM1ActionTimeout
+
+	if typeof(timeout) == "number" and timeout > 0 then
+		return timeout
+	end
+
+	return DEFAULT_DUMMY_ACTION_TIMEOUT
+end
+
+function NPCM1:ClearDummyAttackState(npc, reason)
+	if not self:IsControlledDummy(npc) then
+		return false
+	end
+
+	npc:SetAttribute("NPCAttacking", false)
+	npc:SetAttribute("Attacking", false)
+	npc:SetAttribute("CurrentM1Action", nil)
+	npc:SetAttribute("NPCM1Busy", false)
+	npc:SetAttribute("M1Active", false)
+	npc:SetAttribute("M1CancelableByHit", true)
+	npc:SetAttribute("NPCM1ActionStartedAt", 0)
+	npc:SetAttribute("NPCM1ActionTimeoutAt", 0)
+
+	if reason then
+		npc:SetAttribute("NPCM1LastRecoveryReason", reason)
+	end
+
+	return true
+end
+
+function NPCM1:ClearDummyAttackStateIfTimedOut(npc)
+	if not self:IsControlledDummy(npc) then
+		return false
+	end
+
+	local timeoutAt = npc:GetAttribute("NPCM1ActionTimeoutAt") or 0
+	if timeoutAt <= 0 or os.clock() < timeoutAt then
+		return false
+	end
+
+	if npc:GetAttribute("NPCAttacking") == true
+		or npc:GetAttribute("Attacking") == true
+		or npc:GetAttribute("NPCM1Busy") == true
+		or npc:GetAttribute("M1Active") == true
+	then
+		return self:ClearDummyAttackState(npc, "Timeout")
+	end
+
+	npc:SetAttribute("NPCM1ActionStartedAt", 0)
+	npc:SetAttribute("NPCM1ActionTimeoutAt", 0)
+	return false
+end
+
+function NPCM1:BeginAction(npc, actionName, cooldown)
+	local token = (npc:GetAttribute("M1Token") or 0) + 1
+	local now = os.clock()
+
+	npc:SetAttribute("M1Token", token)
+	npc:SetAttribute("CurrentM1Action", actionName)
+	npc:SetAttribute("NPCAttacking", true)
+	npc:SetAttribute("Attacking", true)
+	npc:SetAttribute("NPCM1Busy", true)
+	npc:SetAttribute("M1Active", true)
+	npc:SetAttribute("M1CancelableByHit", true)
+	npc:SetAttribute("M1CooldownUntil", now + (cooldown or 0))
+
+	if self:IsControlledDummy(npc) then
+		npc:SetAttribute("NPCM1ActionStartedAt", now)
+		npc:SetAttribute("NPCM1ActionTimeoutAt", now + math.max(self:GetDummyActionTimeout(), (cooldown or 0) + 0.25))
+	end
+
+	return token
+end
+
+function NPCM1:IsActionActive(npc, token, attackData)
+	if not npc or not npc.Parent then return false end
+	if npc:GetAttribute("M1Token") ~= token then return false end
+	if npc:GetAttribute("NPCAttacking") ~= true then return false end
+	if npc:GetAttribute("Attacking") ~= true then return false end
+	if npc:GetAttribute("UsingMove") == true then return false end
+	if npc:GetAttribute("Guardbroken") == true then return false end
+
+	if npc:GetAttribute("Stunned") == true
+		and npc:GetAttribute("IFrameActive") ~= true
+		and npc:GetAttribute("ArmorActive") ~= true
+		and not (attackData and attackData.CancelableByHit == false)
+		and not (attackData and attackData.ArmorPreventsHitCancel == true)
+	then
+		return false
+	end
+
+	return true
+end
+
+function NPCM1:EndAction(npc, token)
+	if not npc or not npc.Parent then return end
+	if token ~= nil and npc:GetAttribute("M1Token") ~= token then return end
+
+	npc:SetAttribute("NPCAttacking", false)
+	npc:SetAttribute("Attacking", false)
+	npc:SetAttribute("CurrentM1Action", nil)
+	npc:SetAttribute("NPCM1Busy", false)
+	npc:SetAttribute("M1Active", false)
+	npc:SetAttribute("NPCM1ActionStartedAt", 0)
+	npc:SetAttribute("NPCM1ActionTimeoutAt", 0)
+end
+
+function NPCM1:PlayAttackStartFX(npc, root, actionKind, combo)
+	if not self.VFXService then
+		return
+	end
+
+	if actionKind == "M1" then
+		if self.AnimationService and self.AnimationService.PlayM1Animation then
+			self.AnimationService:PlayM1Animation(npc, combo or 1)
+		end
+
+		if self.VFXService.PlayCharacterM1VFX then
+			self.VFXService:PlayCharacterM1VFX(npc, combo or 1, nil, nil, false)
+		end
+
+		if self.VFXService.PlayCharacterSFXAtPart then
+			local characterName = npc:GetAttribute("CharacterName") or self.Config.DefaultCharacterName or "Chara"
+			local soundName = "M" .. tostring(combo or 1)
+			local played = self.VFXService:PlayCharacterSFXAtPart(characterName, soundName, root, 2)
+
+			if not played and combo ~= 1 then
+				self.VFXService:PlayCharacterSFXAtPart(characterName, "M1", root, 2)
+			end
+		end
+	elseif actionKind == "Uptilt" or actionKind == "Downslam" then
+		if self.AnimationService then
+			if actionKind == "Uptilt" and self.AnimationService.PlayUptiltAnimation then
+				self.AnimationService:PlayUptiltAnimation(npc)
+			elseif actionKind == "Downslam" and self.AnimationService.PlayDownslamAnimation then
+				self.AnimationService:PlayDownslamAnimation(npc)
+			end
+		end
+
+		if self.VFXService.PlayCharacterMoveVFX then
+			self.VFXService:PlayCharacterMoveVFX(npc, actionKind, nil, nil)
+		end
+
+		if self.VFXService.PlayCharacterSFXAtPart then
+			local characterName = npc:GetAttribute("CharacterName") or self.Config.DefaultCharacterName or "Chara"
+			self.VFXService:PlayCharacterSFXAtPart(characterName, actionKind, root, 2)
+		end
+	end
 end
 
 function NPCM1:IsAirborne(humanoid)
@@ -544,6 +788,7 @@ function NPCM1:ResetCombo(npc)
 	npc:SetAttribute("NPCLastM1Time", 0)
 	npc:SetAttribute("NPCUsedUptilt", false)
 	npc:SetAttribute("NPCAirComboReady", false)
+	npc:SetAttribute("SuccessfulM1InCombo", false)
 end
 
 function NPCM1:RefreshCombo(npc)
@@ -994,8 +1239,8 @@ end
 
 function NPCM1:DoDownslam(npc)
 	local humanoid, root = self:GetHumanoidAndRoot(npc)
-	if not humanoid or not root then return end
-	if not self:CanAttack(npc) then return end
+	if not humanoid or not root then return false end
+	if not self:CanAttack(npc) then return false end
 
 	local data = self:GetDownslamData()
 	local attackData = self:BuildAttackData(data, {
@@ -1008,11 +1253,14 @@ function NPCM1:DoDownslam(npc)
 		Stun = data.AirStunMax or data.Stun or 1.3,
 	})
 
-	npc:SetAttribute("NPCAttacking", true)
+	local actionDelay = self:GetAttackDelay(data, "Downslam")
+	local token = self:BeginAction(npc, "Downslam", actionDelay)
 	npc:SetAttribute("NPCAirComboReady", false)
+	self:PlayAttackStartFX(npc, root, "Downslam")
 
 	task.delay(data.HitDelay or 0.08, function()
 		if not npc.Parent or humanoid.Health <= 0 then return end
+		if not self:IsActionActive(npc, token, attackData) then return end
 
 		self:PerformHitbox(npc, root, data, function(target, targetHumanoid, targetRoot)
 			local result = self:TryStandardHitStart(
@@ -1075,19 +1323,21 @@ function NPCM1:DoDownslam(npc)
 		end)
 	end)
 
-	task.delay(data.Cooldown or 0.75, function()
+	task.delay(actionDelay, function()
 		if npc and npc.Parent then
-			npc:SetAttribute("NPCAttacking", false)
+			self:EndAction(npc, token)
 			self:ResetCombo(npc)
 		end
 	end)
+
+	return true
 end
 
 function NPCM1:DoUptilt(npc)
 	local humanoid, root = self:GetHumanoidAndRoot(npc)
-	if not humanoid or not root then return end
-	if not self:CanAttack(npc) then return end
-	if npc:GetAttribute("NPCUsedUptilt") then return end
+	if not humanoid or not root then return false end
+	if not self:CanAttack(npc) then return false end
+	if npc:GetAttribute("NPCUsedUptilt") then return false end
 
 	local data = self:GetUptiltData()
 	local attackData = self:BuildAttackData(data, {
@@ -1099,12 +1349,17 @@ function NPCM1:DoUptilt(npc)
 		Stun = data.Stun,
 	})
 
-	npc:SetAttribute("NPCAttacking", true)
+	local actionDelay = self:GetAttackDelay(data, "Uptilt")
+	local token = self:BeginAction(npc, "Uptilt", actionDelay)
 	npc:SetAttribute("NPCUsedUptilt", true)
 	npc:SetAttribute("NPCAirComboReady", true)
+	npc:SetAttribute("NPCComboCount", math.max(self:GetFinalM1() - 1, 1))
+	npc:SetAttribute("NPCLastM1Time", os.clock())
+	self:PlayAttackStartFX(npc, root, "Uptilt")
 
 	task.delay(data.HitDelay or 0.09, function()
 		if not npc.Parent or humanoid.Health <= 0 then return end
+		if not self:IsActionActive(npc, token, attackData) then return end
 
 		self:PerformHitbox(npc, root, data, function(target, targetHumanoid, targetRoot)
 			local result = self:TryStandardHitStart(
@@ -1136,10 +1391,6 @@ function NPCM1:DoUptilt(npc)
 				return
 			end
 
-			local currentCombo = npc:GetAttribute("NPCComboCount") or 0
-			npc:SetAttribute("NPCComboCount", math.clamp(currentCombo + 1, 1, self:GetFinalM1() - 1))
-			npc:SetAttribute("NPCLastM1Time", os.clock())
-
 			local armorInfo = self:ApplyDamageAndStun(
 				npc,
 				target,
@@ -1155,11 +1406,13 @@ function NPCM1:DoUptilt(npc)
 		end)
 	end)
 
-	task.delay(data.Cooldown or 0.45, function()
+	task.delay(actionDelay, function()
 		if npc and npc.Parent then
-			npc:SetAttribute("NPCAttacking", false)
+			self:EndAction(npc, token)
 		end
 	end)
+
+	return true
 end
 
 function NPCM1:ApplyM5Knockback(root, targetRoot, data)
@@ -1180,25 +1433,23 @@ function NPCM1:ApplyM5Knockback(root, targetRoot, data)
 end
 
 function NPCM1:PerformM1(npc, options)
-	if not npc or not npc.Parent then return end
-	if not self:CanAttack(npc) then return end
+	if not npc or not npc.Parent then return false end
+	if not self:CanAttack(npc) then return false end
 
 	options = options or {}
 
 	if options.wantUptilt then
-		self:DoUptilt(npc)
-		return
+		return self:DoUptilt(npc)
 	end
 
 	local humanoid, root = self:GetHumanoidAndRoot(npc)
-	if not humanoid or not root then return end
+	if not humanoid or not root then return false end
 
 	local finalM1 = self:GetFinalM1()
 	local combo = self:GetNextCombo(npc)
 
 	if combo == finalM1 and self:IsAirborne(humanoid) then
-		self:DoDownslam(npc)
-		return
+		return self:DoDownslam(npc)
 	end
 
 	local data = self:GetM1Data(combo)
@@ -1215,10 +1466,13 @@ function NPCM1:PerformM1(npc, options)
 		Stun = data.Stun,
 	})
 
-	npc:SetAttribute("NPCAttacking", true)
+	local actionDelay = self:GetAttackDelay(data, "M1")
+	local token = self:BeginAction(npc, "M" .. tostring(combo), actionDelay)
+	self:PlayAttackStartFX(npc, root, "M1", combo)
 
 	task.delay(data.HitDelay or 0.08, function()
 		if not npc.Parent or humanoid.Health <= 0 then return end
+		if not self:IsActionActive(npc, token, attackData) then return end
 
 		self:PerformHitbox(npc, root, data, function(target, targetHumanoid, targetRoot)
 			local blockMode = isFinal and "GuardbreakBlocking" or "Normal"
@@ -1258,6 +1512,8 @@ function NPCM1:PerformM1(npc, options)
 				return
 			end
 
+			npc:SetAttribute("SuccessfulM1InCombo", true)
+
 			local armorInfo = self:ApplyDamageAndStun(
 				npc,
 				target,
@@ -1291,15 +1547,25 @@ function NPCM1:PerformM1(npc, options)
 		end)
 	end)
 
-	task.delay(data.Cooldown or 0.3, function()
+	task.delay(actionDelay, function()
 		if npc and npc.Parent then
-			npc:SetAttribute("NPCAttacking", false)
+			self:EndAction(npc, token)
 
 			if combo == finalM1 then
 				self:ResetCombo(npc)
 			end
 		end
 	end)
+
+	return true
+end
+
+function NPCM1:AttemptNormalM1(npc)
+	return self:PerformM1(npc)
+end
+
+function NPCM1:AttemptUptilt(npc)
+	return self:PerformM1(npc, { wantUptilt = true })
 end
 
 return NPCM1

@@ -57,6 +57,7 @@ function DebugDummyController.new(services)
 	if NPCM1 then
 		self.NPCM1 = NPCM1.new(self.Services.Config or {}, {
 			StateService = self.Services.StateService,
+			AnimationService = self.Services.AnimationService,
 			MovementService = self.Services.MovementService,
 			BlockService = self.Services.BlockService,
 			VFXService = self.Services.VFXService,
@@ -430,8 +431,33 @@ function DebugDummyController:StartSoulBurstLoop(dummy)
 	local lastHealth = humanoid.Health
 	self:Track(dummy, humanoid.HealthChanged:Connect(function(newHealth)
 		if newHealth < lastHealth then
-			local gained = (lastHealth - newHealth) * 2
-			setSoul((dummy:GetAttribute("Soul") or 0) + gained)
+			local damage = lastHealth - newHealth
+
+			if soulBurstService and soulBurstService.GetSoulBurst and soulBurstService.AwardForHitTaken then
+				local previousSoul = soulBurstService:GetSoulBurst(dummy)
+
+				task.defer(function()
+					if not dummy or not dummy.Parent then
+						return
+					end
+
+					local currentSoul = soulBurstService:GetSoulBurst(dummy)
+
+					if currentSoul <= previousSoul then
+						soulBurstService:AwardForHitTaken(dummy, damage, 0, {
+							AttackType = "SoulBurstDummyDamage",
+						})
+						currentSoul = soulBurstService:GetSoulBurst(dummy)
+					end
+
+					setSoul(currentSoul)
+				end)
+			else
+				local config = self.Services.Config or {}
+				local gained = (config.SoulBurstHitGain or 6)
+					+ (damage * (config.SoulBurstDamageGainMultiplier or 0.5))
+				setSoul((dummy:GetAttribute("Soul") or 0) + gained)
+			end
 		end
 
 		lastHealth = newHealth
@@ -605,6 +631,18 @@ function DebugDummyController:GetM1ActionData(action)
 end
 
 function DebugDummyController:GetActionCooldown(action)
+	if self.NPCM1 then
+		if action == "Uptilt" then
+			return self.NPCM1:GetAttackDelay(self.NPCM1:GetUptiltData(), "Uptilt")
+		elseif action == "Downslam" then
+			return self.NPCM1:GetAttackDelay(self.NPCM1:GetDownslamData(), "Downslam")
+		elseif action == "M1" then
+			return self.NPCM1:GetM1NextInputDelay(1)
+		elseif typeof(action) == "number" then
+			return self.NPCM1:GetM1NextInputDelay(action)
+		end
+	end
+
 	local data = self:GetM1ActionData(action)
 	return data.Cooldown or 0.35
 end
@@ -614,12 +652,24 @@ function DebugDummyController:WaitActionCooldown(dummy, action)
 	local startTime = os.clock()
 
 	while self:IsAlive(dummy) and os.clock() - startTime < cooldown do
+		if self.NPCM1 and self.NPCM1.ClearDummyAttackStateIfTimedOut then
+			self.NPCM1:ClearDummyAttackStateIfTimedOut(dummy)
+		end
+
 		task.wait(0.05)
 	end
 end
 
+function DebugDummyController:RecoverM1StateIfNeeded(dummy)
+	if not self.NPCM1 or not self.NPCM1.ClearDummyAttackStateIfTimedOut then
+		return false
+	end
+
+	return self.NPCM1:ClearDummyAttackStateIfTimedOut(dummy)
+end
+
 function DebugDummyController:StartM1Loop(dummy, features, metadata)
-	if not self.NPCM1 or not self.NPCM1.SetupNPC or not self.NPCM1.PerformM1 then
+	if not self.NPCM1 or not self.NPCM1.SetupNPC or not self.NPCM1.AttemptNormalM1 then
 		warn("[DebugDummyController] M1 dummy started without NPCM1 support:", dummy.Name)
 		return
 	end
@@ -628,82 +678,70 @@ function DebugDummyController:StartM1Loop(dummy, features, metadata)
 		AirCombo = features.Aircombo == true or features.AirComboNPC == true,
 	})
 
-	local characterName = metadata.CharacterName or dummy:GetAttribute("CharacterName")
-	local attackRange = (self.Services.Config and self.Services.Config.TestDummyAttackRange) or 8
 	local comboPause = (self.Services.Config and self.Services.Config.TestDummyComboPause) or 1.5
+	local retryDelay = (self.Services.Config and self.Services.Config.TestDummyM1RetryDelay) or 0.12
 
 	task.spawn(function()
+		local airStep = 1
+
 		while self:IsAlive(dummy) do
+			self:RecoverM1StateIfNeeded(dummy)
+
 			local humanoid, root = self:GetHumanoidAndRoot(dummy)
 			if not humanoid or not root then
 				break
 			end
 
-			local target = self:GetNearestLivePlayerTarget(root.Position, attackRange + 3)
-			if not target then
-				task.wait(0.15)
-				continue
-			end
-
-			self:FaceRoot(root, target.Root)
-
 			if features.Aircombo then
-				for combo = 1, 3 do
-					if not self:IsAlive(dummy) then
-						break
+				if not self.NPCM1:CanAttack(dummy) then
+					if dummy:GetAttribute("Stunned") == true or dummy:GetAttribute("Guardbroken") == true then
+						airStep = 1
+						if self.NPCM1.ResetCombo then
+							self.NPCM1:ResetCombo(dummy)
+						end
 					end
 
-					target = self:GetNearestLivePlayerTarget(root.Position, attackRange + 6)
-					if not target then
-						break
+					task.wait(retryDelay)
+				elseif airStep <= 3 then
+					if self.NPCM1:AttemptNormalM1(dummy) then
+						self:WaitActionCooldown(dummy, airStep)
+						airStep += 1
+					else
+						task.wait(retryDelay)
 					end
-
-					self:FaceRoot(root, target.Root)
-					self:PlayOneShotAnimation(dummy, characterName, "M" .. tostring(combo))
-					self.NPCM1:PerformM1(dummy)
-					self:WaitActionCooldown(dummy, combo)
-				end
-
-				if self:IsAlive(dummy) then
-					target = self:GetNearestLivePlayerTarget(root.Position, attackRange + 8)
-					if target then
-						self:FaceRoot(root, target.Root)
-						self:PlayOneShotAnimation(dummy, characterName, "Uptilt")
-						self.NPCM1:PerformM1(dummy, { wantUptilt = true })
+				elseif airStep == 4 then
+					if self.NPCM1:AttemptUptilt(dummy) then
 						self:WaitActionCooldown(dummy, "Uptilt")
+						airStep = 5
+					else
+						task.wait(retryDelay)
+					end
+				else
+					if self.NPCM1:AttemptNormalM1(dummy) then
+						self:WaitActionCooldown(dummy, self.NPCM1.GetFinalM1 and self.NPCM1:GetFinalM1() or "M1")
+
+						if self.NPCM1.ResetCombo then
+							self.NPCM1:ResetCombo(dummy)
+						end
+
+						airStep = 1
+						task.wait(comboPause)
+					else
+						task.wait(retryDelay)
 					end
 				end
-
-				if self:IsAlive(dummy) and self.NPCM1.DoDownslam then
-					target = self:GetNearestLivePlayerTarget(root.Position, attackRange + 10)
-					if target then
-						self:FaceRoot(root, target.Root)
-						self:PlayOneShotAnimation(dummy, characterName, "Downslam")
-						self.NPCM1:DoDownslam(dummy)
-						self:WaitActionCooldown(dummy, "Downslam")
-					end
-				end
-
-				task.wait(comboPause)
 			else
-				local finalM1 = self.NPCM1.GetFinalM1 and self.NPCM1:GetFinalM1() or 5
-				for combo = 1, finalM1 do
-					if not self:IsAlive(dummy) then
-						break
-					end
+				if self.NPCM1:CanAttack(dummy) then
+					local accepted = self.NPCM1:AttemptNormalM1(dummy)
 
-					target = self:GetNearestLivePlayerTarget(root.Position, attackRange + 5)
-					if not target then
-						break
+					if accepted then
+						self:WaitActionCooldown(dummy, "M1")
+					else
+						task.wait(retryDelay)
 					end
-
-					self:FaceRoot(root, target.Root)
-					self:PlayOneShotAnimation(dummy, characterName, "M" .. tostring(combo))
-					self.NPCM1:PerformM1(dummy)
-					self:WaitActionCooldown(dummy, combo)
+				else
+					task.wait(retryDelay)
 				end
-
-				task.wait(comboPause)
 			end
 		end
 	end)
@@ -821,6 +859,10 @@ function DebugDummyController:Start(dummy, features, metadata)
 	self:SetupStats(dummy, humanoid, features)
 	self:ApplyCollisionRules(dummy)
 
+	if self.Services.KillCreditService and self.Services.KillCreditService.SetupDummy then
+		self.Services.KillCreditService:SetupDummy(dummy)
+	end
+
 	pcall(function()
 		root:SetNetworkOwner(nil)
 	end)
@@ -835,7 +877,11 @@ function DebugDummyController:Start(dummy, features, metadata)
 		end
 	end))
 
-	if features.M1NPC == true or features.Combo == true or features.Aircombo == true then
+	if features.M1NPC == true
+		or features.Combo == true
+		or features.AirComboNPC == true
+		or features.Aircombo == true
+	then
 		self:StartM1Loop(dummy, features, metadata)
 	end
 

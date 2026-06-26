@@ -229,6 +229,10 @@
           "$path": "src/ServerScriptService/TestTools/DebugDummyController.lua"
         },
 
+        "DummyFactory": {
+          "$path": "src/ServerScriptService/TestTools/DummyFactory.lua"
+        },
+
         "NPCM1": {
           "$path": "src/ServerScriptService/TestTools/NPCM1.lua"
         },

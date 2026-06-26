@@ -51,6 +51,10 @@ local SlashBarrage = {
 local ANIMATION_NAME = "SlashBarrage"
 local HIT_MARKER = "Hit"
 
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local CharaMoveUtil = require(MoveHelpers:WaitForChild("CharaMoveUtil"))
+local CharaImpactHelper = require(MoveHelpers:WaitForChild("CharaImpactHelper"))
+
 function SlashBarrage.Execute(context)
 	print("[SlashBarrage] Execute started")
 
@@ -83,43 +87,27 @@ function SlashBarrage.Execute(context)
 	end
 
 	local function playCharaSFX(soundName, lifetime)
-		if context.VFXService and context.VFXService.PlayCharacterSFXAtPart then
-			context.VFXService:PlayCharacterSFXAtPart("Chara", soundName, root, lifetime or 2)
-		end
+		CharaMoveUtil.PlaySFX(context, soundName, root, lifetime or 2)
 	end
 
 	local function playCharaM1HitSFX(targetRoot)
 		if not targetRoot then return end
 
-		if context.VFXService and context.VFXService.PlayCharacterSFXAtPart then
-			context.VFXService:PlayCharacterSFXAtPart("Chara", "M1", targetRoot, 2)
-		end
+		CharaMoveUtil.PlaySFX(context, "M1", targetRoot, 2)
 	end
 
 	local function playSlashVFX(targetCharacter, targetRoot)
-		if context.VFXService and context.VFXService.PlayCharacterMoveVFX then
-			context.VFXService:PlayCharacterMoveVFX(
-				character,
-				moveData.SlashEffectName or "SlashBarrageSlash",
-				targetCharacter,
-				targetRoot
-			)
-		end
+		CharaMoveUtil.PlayMoveVFX(context, moveData.SlashEffectName or "SlashBarrageSlash", targetCharacter, targetRoot)
 	end
 
 	local function playVictimHitShake(targetCharacter)
-		if not targetCharacter or not targetCharacter.Parent then return end
-		if not context.CinematicService then return end
-		if not context.CinematicService.ShakeOnce then return end
-
-		pcall(function()
-			context.CinematicService:ShakeOnce(
-				targetCharacter,
-				moveData.VictimShakeMagnitude or SlashBarrage.VictimShakeMagnitude or 0.45,
-				moveData.VictimShakeRoughness or SlashBarrage.VictimShakeRoughness or 8,
-				moveData.VictimShakeDuration or SlashBarrage.VictimShakeDuration or 0.11
-			)
-		end)
+		CharaImpactHelper.ShakeCharacter(
+			context,
+			targetCharacter,
+			moveData.VictimShakeMagnitude or SlashBarrage.VictimShakeMagnitude or 0.45,
+			moveData.VictimShakeRoughness or SlashBarrage.VictimShakeRoughness or 8,
+			moveData.VictimShakeDuration or SlashBarrage.VictimShakeDuration or 0.11
+		)
 	end
 
 	local track = animationService:PlayCharacterAnimation(

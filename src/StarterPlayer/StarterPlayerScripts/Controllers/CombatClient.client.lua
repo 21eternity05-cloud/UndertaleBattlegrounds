@@ -19,13 +19,14 @@ local emoteRemote = remotes:WaitForChild("EmoteRemote")
 
 local assets = ReplicatedStorage:WaitForChild("Assets")
 local charactersFolder = assets:WaitForChild("Characters")
-local ClientModules = script.Parent:WaitForChild("ClientModules")
+local ClientModules = script.Parent.Parent:WaitForChild("ClientModules")
 local MoveHudController = require(ClientModules:WaitForChild("MoveHudController"))
 
 local mouseHeld = false
 local localM1Cooldown = false
 
-local LOCAL_M1_COOLDOWN = 0.27
+-- This is a client retry throttle only. Server CombatConfig.M1Data owns actual M1 cadence.
+local LOCAL_M1_RETRY_DELAY = 0.08
 
 local uptiltBuffered = false
 local UPTILT_BUFFER_TIME = 0.15
@@ -87,7 +88,8 @@ local DEFAULT_MOVE_DISPLAY = {
 
 local TARGETABLE_FOLDERS = {
 	"Dummies",
-	"TestDummies",
+	"DebugDummies",
+	"ArenaRespawnDummies",
 	"NPCs",
 	"Characters",
 	"TargetDummies",
@@ -322,25 +324,6 @@ local function canRequestBadTimeEarlyCancel(moveSlot)
 	return character:GetAttribute("UsingMove") == true
 end
 
-local function canRequestBlock()
-	local character = getCharacter()
-	if not character then return false end
-
-	if character:GetAttribute("SpawnSetupActive") then return false end
-	if character:GetAttribute("CharacterSwitchDebounce") then return false end
-	if character:GetAttribute("Morphing") then return false end
-	if character:GetAttribute("IntroLocked") then return false end
-	if character:GetAttribute("MovementLocked") then return false end
-	if character:GetAttribute("DashLocked") then return false end
-	if character:GetAttribute("Stunned") then return false end
-	if character:GetAttribute("Blocking") then return false end
-	if character:GetAttribute("Guardbroken") then return false end
-	if character:GetAttribute("UsingMove") then return false end
-	if character:GetAttribute("Emoting") then return false end
-
-	return true
-end
-
 local function bufferUptilt()
 	uptiltBuffered = true
 
@@ -352,7 +335,6 @@ end
 local function requestBlockStart()
 	if blocking then return true end
 	if cancelEmoteIfActive() then return false end
-	if not canRequestBlock() then return false end
 
 	blocking = true
 	combatRemote:FireServer("BlockStart")
@@ -616,7 +598,7 @@ local function requestAttack()
 		spaceHeld = spaceHeld,
 	})
 
-	task.delay(LOCAL_M1_COOLDOWN, function()
+	task.delay(LOCAL_M1_RETRY_DELAY, function()
 		localM1Cooldown = false
 	end)
 end
@@ -624,7 +606,7 @@ end
 local function holdM1Loop()
 	while mouseHeld do
 		requestAttack()
-		task.wait(LOCAL_M1_COOLDOWN)
+		task.wait(LOCAL_M1_RETRY_DELAY)
 	end
 end
 

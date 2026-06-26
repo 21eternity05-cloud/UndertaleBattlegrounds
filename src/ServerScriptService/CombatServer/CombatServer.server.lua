@@ -3,10 +3,17 @@ print("[CombatServer] Starting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local combatFolder = script.Parent
+local coreFolder = combatFolder:WaitForChild("Core")
+local combatSystemsFolder = combatFolder:WaitForChild("Combat")
+local characterFolder = combatFolder:WaitForChild("Character")
+local effectsFolder = combatFolder:WaitForChild("Effects")
+local progressionFolder = combatFolder:WaitForChild("Progression")
+local devFolder = combatFolder:WaitForChild("Dev")
+local worldBridgeFolder = combatFolder:WaitForChild("WorldBridge")
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local worldFolder = script.Parent.Parent:WaitForChild("World")
 
-local Config = require(combatFolder:WaitForChild("CombatConfig"))
+local Config = require(coreFolder:WaitForChild("CombatConfig"))
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local combatRemote = remotes:WaitForChild("CombatRemote")
@@ -14,41 +21,41 @@ local characterRemote = remotes:WaitForChild("CharacterRemote")
 local moveRemote = remotes:WaitForChild("MoveRemote")
 
 -- Core services
-local AnimationService = require(combatFolder:WaitForChild("AnimationService")).new(Config)
-local VFXService = require(combatFolder:WaitForChild("VFXService")).new(Config)
-local StateService = require(combatFolder:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
-local HitboxService = require(combatFolder:WaitForChild("HitboxService")).new(Config)
-local MovementService = require(combatFolder:WaitForChild("MovementService")).new(Config)
-local BlockService = require(combatFolder:WaitForChild("BlockService")).new(Config, StateService, VFXService)
-local WeaponService = require(combatFolder:WaitForChild("WeaponService")).new(Config)
-local DamageNumberService = require(combatFolder:WaitForChild("DamageNumberService")).new(Config)
-local CharacterMorphService = require(combatFolder:WaitForChild("CharacterMorphService")).new(Config)
+local AnimationService = require(effectsFolder:WaitForChild("AnimationService")).new(Config)
+local VFXService = require(effectsFolder:WaitForChild("VFXService")).new(Config)
+local StateService = require(coreFolder:WaitForChild("StateService")).new(Config, AnimationService, VFXService)
+local HitboxService = require(combatSystemsFolder:WaitForChild("HitboxService")).new(Config)
+local MovementService = require(combatSystemsFolder:WaitForChild("MovementService")).new(Config)
+local BlockService = require(combatSystemsFolder:WaitForChild("BlockService")).new(Config, StateService, VFXService)
+local WeaponService = require(characterFolder:WaitForChild("WeaponService")).new(Config)
+local DamageNumberService = require(effectsFolder:WaitForChild("DamageNumberService")).new(Config)
+local CharacterMorphService = require(characterFolder:WaitForChild("CharacterMorphService")).new(Config)
 
 -- Player / progression services
-local ProgressionService = require(combatFolder:WaitForChild("ProgressionService")).new(Config)
+local ProgressionService = require(progressionFolder:WaitForChild("ProgressionService")).new(Config)
 _G.UTBGProgressionService = ProgressionService
-local CharacterService = require(combatFolder:WaitForChild("CharacterService")).new(
+local CharacterService = require(characterFolder:WaitForChild("CharacterService")).new(
 	Config,
 	WeaponService,
 	ProgressionService,
 	CharacterMorphService
 )
-local UltService = require(combatFolder:WaitForChild("UltService")).new(Config)
-local AwakeningMusicService = require(combatFolder:WaitForChild("AwakeningMusicService")).new(Config)
+local UltService = require(combatSystemsFolder:WaitForChild("UltService")).new(Config)
+local AwakeningMusicService = require(effectsFolder:WaitForChild("AwakeningMusicService")).new(Config)
 
 -- Status / utility services
-local CombatStatusService = require(combatFolder:WaitForChild("CombatStatusService")).new(Config)
-local CinematicService = require(combatFolder:WaitForChild("CinematicService")).new(Config)
-local CharacterIntroService = require(combatFolder:WaitForChild("CharacterIntroService")).new(
+local CombatStatusService = require(coreFolder:WaitForChild("CombatStatusService")).new(Config)
+local CinematicService = require(effectsFolder:WaitForChild("CinematicService")).new(Config)
+local CharacterIntroService = require(characterFolder:WaitForChild("CharacterIntroService")).new(
 	Config,
 	AnimationService,
 	VFXService,
 	CinematicService,
 	CharacterMorphService
 )
-local ShopLocationService = require(combatFolder:WaitForChild("ShopLocationService")).new(Config)
-local DebugService = require(combatFolder:WaitForChild("DebugService")).new(Config)
-local SpawnService = require(combatFolder:WaitForChild("SpawnService")).new(
+local ShopLocationService = require(worldBridgeFolder:WaitForChild("ShopLocationService")).new(Config)
+local DebugService = require(devFolder:WaitForChild("DebugService")).new(Config)
+local SpawnService = require(characterFolder:WaitForChild("SpawnService")).new(
 	Config,
 	StateService,
 	CombatStatusService
@@ -56,14 +63,14 @@ local SpawnService = require(combatFolder:WaitForChild("SpawnService")).new(
 local EmoteService = require(servicesFolder:WaitForChild("EmoteService")).new(Config, StateService)
 local ArenaRespawnDummyService = require(worldFolder:WaitForChild("ArenaRespawnDummyService")).new(Config)
 
-local CounterService = require(combatFolder:WaitForChild("CounterService")).new(
+local CounterService = require(combatSystemsFolder:WaitForChild("CounterService")).new(
 	Config,
 	StateService,
 	MovementService,
 	VFXService
 )
 
-local ProjectileService = require(combatFolder:WaitForChild("ProjectileService")).new(
+local ProjectileService = require(combatSystemsFolder:WaitForChild("ProjectileService")).new(
 	Config,
 	HitboxService,
 	BlockService,
@@ -76,7 +83,7 @@ local ProjectileService = require(combatFolder:WaitForChild("ProjectileService")
 	ProgressionService
 )
 
-local M1Service = require(combatFolder:WaitForChild("M1Service")).new(
+local M1Service = require(combatSystemsFolder:WaitForChild("M1Service")).new(
 	Config,
 	StateService,
 	HitboxService,
@@ -87,7 +94,7 @@ local M1Service = require(combatFolder:WaitForChild("M1Service")).new(
 	CombatStatusService
 )
 
-local MoveService = require(combatFolder:WaitForChild("MoveService")).new(
+local MoveService = require(combatSystemsFolder:WaitForChild("MoveService")).new(
 	Config,
 	StateService,
 	HitboxService,
@@ -98,7 +105,7 @@ local MoveService = require(combatFolder:WaitForChild("MoveService")).new(
 	CombatStatusService
 )
 
-local GrabService = require(combatFolder:WaitForChild("GrabService")).new(
+local GrabService = require(combatSystemsFolder:WaitForChild("GrabService")).new(
 	Config,
 	StateService,
 	MovementService,
@@ -107,7 +114,7 @@ local GrabService = require(combatFolder:WaitForChild("GrabService")).new(
 	ProgressionService
 )
 
-local SoulBurstService = require(combatFolder:WaitForChild("SoulBurstService")).new(
+local SoulBurstService = require(combatSystemsFolder:WaitForChild("SoulBurstService")).new(
 	Config,
 	StateService,
 	CombatStatusService,
@@ -120,7 +127,7 @@ local SoulBurstService = require(combatFolder:WaitForChild("SoulBurstService")).
 	CinematicService
 )
 
-local KillCreditService = require(combatFolder:WaitForChild("KillCreditService")).new(
+local KillCreditService = require(progressionFolder:WaitForChild("KillCreditService")).new(
 	Config,
 	ProgressionService,
 	CombatStatusService,
@@ -141,6 +148,8 @@ CharacterService.CombatStatusService = CombatStatusService
 CharacterService.SpawnService = SpawnService
 CharacterService.CharacterIntroService = CharacterIntroService
 CharacterService.StateService = StateService
+CharacterService.SoulBurstService = SoulBurstService
+CharacterService.UltService = UltService
 BlockService.SpawnService = SpawnService
 
 M1Service.UltService = UltService
@@ -181,6 +190,7 @@ _G.UTBGDevServices = {
 	CounterService = CounterService,
 	DebugService = DebugService,
 	HitboxService = HitboxService,
+	KillCreditService = KillCreditService,
 	MovementService = MovementService,
 	ProgressionService = ProgressionService,
 	StateService = StateService,

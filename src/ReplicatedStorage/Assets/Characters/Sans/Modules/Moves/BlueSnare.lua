@@ -84,54 +84,25 @@ local BlueSnare = {
 	FinalImpactFrameDuration = 0.07,
 }
 
-local function playSansSFX(ctx, soundName, part, lifetime)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterSFXAtPart then return end
-	if not part or not part.Parent then return end
+local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
+local SansMoveUtil = require(MoveHelpers:WaitForChild("SansMoveUtil"))
+local BlueSoulHelper = require(MoveHelpers:WaitForChild("BlueSoulHelper"))
+local SansImpactHelper = require(MoveHelpers:WaitForChild("SansImpactHelper"))
 
-	ctx.VFXService:PlayCharacterSFXAtPart("Sans", soundName, part, lifetime or 2)
+local function playSansSFX(ctx, soundName, part, lifetime)
+	SansMoveUtil.PlaySFX(ctx, soundName, part, lifetime or 2)
 end
 
 local function playSansMoveVFX(ctx, moveName, targetCharacter, targetRoot)
-	if not ctx.VFXService then return end
-	if not ctx.VFXService.PlayCharacterMoveVFX then return end
-
-	ctx.VFXService:PlayCharacterMoveVFX(
-		ctx.Character,
-		moveName,
-		targetCharacter,
-		targetRoot
-	)
+	SansMoveUtil.PlayMoveVFX(ctx, moveName, targetCharacter, targetRoot)
 end
 
 local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ShakeOnce then return end
-
-	pcall(function()
-		ctx.CinematicService:ShakeOnce(targetCharacter, magnitude, roughness, duration)
-	end)
+	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
 local function playImpactFrame(ctx, targetCharacter, duration)
-	if not targetCharacter or not targetCharacter.Parent then return end
-	if not ctx.CinematicService then return end
-	if not ctx.CinematicService.ImpactFrame then return end
-
-	local success = pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
-	end)
-
-	if success then
-		return
-	end
-
-	pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, {
-			Duration = duration,
-		})
-	end)
+	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
 end
 
 local function playCatchPolish(ctx, targetCharacter)
@@ -296,41 +267,7 @@ local function getHoldPosition(root, moveData)
 end
 
 local function stopCombatMovement(ctx, root, victimRoot)
-	if not ctx.MovementService then
-		return
-	end
-
-	if ctx.MovementService.ClearCombatMovementControllers then
-		if root then
-			ctx.MovementService:ClearCombatMovementControllers(root)
-		end
-
-		if victimRoot then
-			ctx.MovementService:ClearCombatMovementControllers(victimRoot)
-		end
-
-		return
-	end
-
-	if ctx.MovementService.StopCarryController then
-		if root then
-			ctx.MovementService:StopCarryController(root)
-		end
-
-		if victimRoot then
-			ctx.MovementService:StopCarryController(victimRoot)
-		end
-	end
-
-	if ctx.MovementService.StopYHoldController then
-		if root then
-			ctx.MovementService:StopYHoldController(root)
-		end
-
-		if victimRoot then
-			ctx.MovementService:StopYHoldController(victimRoot)
-		end
-	end
+	BlueSoulHelper.ClearCombatMovement(ctx, root, victimRoot)
 end
 
 local function reportDamage(ctx, targetCharacter, targetRoot, damage)

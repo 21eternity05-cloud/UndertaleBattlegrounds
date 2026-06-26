@@ -190,6 +190,14 @@ function StateService:StopBlockingVisuals(character)
 	end
 end
 
+function StateService:ClearBlockIntent(character)
+	if not character or not character.Parent then return end
+
+	character:SetAttribute("BlockHeld", false)
+	character:SetAttribute("BlockBufferedUntil", 0)
+	character:SetAttribute("BlockBufferToken", (character:GetAttribute("BlockBufferToken") or 0) + 1)
+end
+
 function StateService:LockJump(character, duration)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
@@ -236,7 +244,6 @@ function StateService:StunCharacter(character, duration, animationKey)
 	local stunId = (character:GetAttribute("StunId") or 0) + 1
 	character:SetAttribute("StunId", stunId)
 
-	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("Stunned", true)
 	self:StopBlockingVisuals(character)
 	self:StopCurrentStunAnimations(character)
@@ -307,7 +314,6 @@ function StateService:GuardbreakCharacter(character, duration)
 	self:StopBlockingVisuals(character)
 	self:StopCurrentStunAnimations(character)
 
-	character:SetAttribute("BlockBufferedUntil", 0)
 	character:SetAttribute("BlockLockedUntil", blockLockedUntil)
 	character:SetAttribute("BlockInputReleasedAfterGuardbreak", true)
 	character:SetAttribute("Guardbroken", true)

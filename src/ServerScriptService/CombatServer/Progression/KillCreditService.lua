@@ -24,15 +24,16 @@ function KillCreditService:IsTestDummy(character)
 
 	if character:GetAttribute("TestDummy") == true
 		or character:GetAttribute("RespawnDummy") == true
+		or character:GetAttribute("ArenaRespawnDummy") == true
+		or character:GetAttribute("ArenaDummy") == true
+		or character:GetAttribute("DebugDummy") == true
 		or character:GetAttribute("ComboDummy") == true
 		or character:GetAttribute("AirComboDummy") == true
 		or character:GetAttribute("BlockDummy") == true
+		or character:GetAttribute("SoulBurstDummy") == true
+		or character:GetAttribute("TRUEDummy") == true
+		or character:GetAttribute("TrueDummy") == true
 	then
-		return true
-	end
-
-	local testDummies = workspace:FindFirstChild("TestDummies")
-	if testDummies and character:IsDescendantOf(testDummies) then
 		return true
 	end
 
@@ -130,7 +131,10 @@ function KillCreditService:RecordDamage(attackerCharacter, victimCharacter, dama
 
 	local attackerPlayer = self:GetPlayer(attackerCharacter)
 	local victimPlayer = self:GetPlayer(victimCharacter)
-	if not attackerPlayer or not victimPlayer then
+	if not attackerPlayer then
+		return
+	end
+	if not victimPlayer and not self:IsTestDummy(victimCharacter) then
 		return
 	end
 
@@ -299,7 +303,11 @@ function KillCreditService:SetupHealingLock(character, humanoid)
 end
 
 function KillCreditService:SetupCharacter(player, character)
-	if not player or not character or self.SetupCharacters[character] then
+	if not character or self.SetupCharacters[character] then
+		return
+	end
+
+	if not player and not self:IsTestDummy(character) then
 		return
 	end
 
@@ -328,6 +336,10 @@ function KillCreditService:SetupCharacter(player, character)
 	end)
 
 	self:SetupHealingLock(character, humanoid)
+end
+
+function KillCreditService:SetupDummy(character)
+	self:SetupCharacter(nil, character)
 end
 
 function KillCreditService:SetupPlayer(player)

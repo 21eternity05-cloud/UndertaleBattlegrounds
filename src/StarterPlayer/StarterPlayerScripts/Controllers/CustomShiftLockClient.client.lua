@@ -37,6 +37,7 @@ local POLICY_ATTRIBUTES = {
 
 local shiftLockEnabled = false
 local shiftLockApplied = false
+local cleanupToken = 0
 
 local autoRotateHumanoid = nil
 local oldAutoRotate = nil
@@ -126,12 +127,20 @@ local function restoreAutoRotate()
 		return
 	end
 
-	if autoRotateHumanoid.Parent and typeof(oldAutoRotate) == "boolean" then
-		autoRotateHumanoid.AutoRotate = oldAutoRotate
+	if autoRotateHumanoid.Parent then
+		autoRotateHumanoid.AutoRotate = true
 	end
 
 	autoRotateHumanoid = nil
 	oldAutoRotate = nil
+end
+
+local function forceCurrentHumanoidAutoRotate()
+	local _, humanoid = getCharacterHumanoidRoot()
+
+	if humanoid then
+		humanoid.AutoRotate = true
+	end
 end
 
 local function applyShiftLockCursor()
@@ -154,9 +163,43 @@ local function restoreShiftLockCursor()
 	oldMouseIcon = nil
 end
 
-local function releaseShiftLock()
+local function reassertShiftLockReleased(token)
+	task.defer(function()
+		if cleanupToken ~= token or shiftLockEnabled then
+			return
+		end
+
+		for _ = 1, 2 do
+			RunService.RenderStepped:Wait()
+
+			if cleanupToken ~= token or shiftLockEnabled then
+				return
+			end
+
+			shiftLockApplied = false
+			player:SetAttribute("CustomShiftLockActive", false)
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			restoreShiftLockCursor()
+			forceCurrentHumanoidAutoRotate()
+		end
+	end)
+end
+
+local function releaseShiftLock(forceFullCleanup)
+	if forceFullCleanup then
+		cleanupToken += 1
+		shiftLockApplied = false
+		player:SetAttribute("CustomShiftLockActive", false)
+	end
+
 	if not shiftLockApplied then
 		restoreShiftLockCursor()
+		restoreAutoRotate()
+		if forceFullCleanup then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			forceCurrentHumanoidAutoRotate()
+			reassertShiftLockReleased(cleanupToken)
+		end
 		return
 	end
 
@@ -167,6 +210,11 @@ local function releaseShiftLock()
 
 	restoreShiftLockCursor()
 	restoreAutoRotate()
+
+	if forceFullCleanup then
+		forceCurrentHumanoidAutoRotate()
+		reassertShiftLockReleased(cleanupToken)
+	end
 end
 
 local function applyShiftLock()
@@ -203,7 +251,18 @@ end
 local function setShiftLockEnabled(enabled)
 	shiftLockEnabled = enabled == true
 	player:SetAttribute("CustomShiftLockEnabled", shiftLockEnabled)
-	refreshShiftLock()
+
+	if shiftLockEnabled then
+		refreshShiftLock()
+	else
+		releaseShiftLock(true)
+	end
+end
+
+local function resetShiftLockForCharacterChange()
+	shiftLockEnabled = false
+	player:SetAttribute("CustomShiftLockEnabled", false)
+	releaseShiftLock(true)
 end
 
 local function disconnectCharacterAttributeConnections()
@@ -242,7 +301,7 @@ player.CharacterAdded:Connect(watchCharacter)
 
 player.CharacterRemoving:Connect(function()
 	disconnectCharacterAttributeConnections()
-	releaseShiftLock()
+	resetShiftLockForCharacterChange()
 end)
 
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(refreshShiftLock)

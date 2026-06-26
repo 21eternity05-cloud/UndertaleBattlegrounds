@@ -10,6 +10,7 @@ local CharacterData = require(Shared:WaitForChild("CharacterData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
 local EmoteData = require(Shared:WaitForChild("EmoteData"))
 local LoreFragmentData = require(Shared:WaitForChild("Interactables"):WaitForChild("LoreFragmentData"))
+local DummyFactory = require(script.Parent:WaitForChild("DummyFactory"))
 
 local function makeFallbackDebugDummyController(reason)
 	warn("[DevAdminService] DebugDummyController unavailable:", reason)
@@ -108,6 +109,7 @@ local MAX_EMOTE_SLOTS = 8
 function DevAdminService.new()
 	return setmetatable({
 		DummyController = nil,
+		DummyFactory = DummyFactory.new(),
 		NukeRunning = false,
 	}, DevAdminService)
 end
@@ -215,17 +217,7 @@ function DevAdminService:GetDevServices()
 end
 
 function DevAdminService:GetDummyController()
-	local services = self:GetDevServices()
-
-	local currentServices = self.DummyController and self.DummyController.Services or {}
-
-	if not self.DummyController
-		or (not currentServices.BlockService and services.BlockService)
-	then
-		self.DummyController = DebugDummyControllerModule.new(services)
-	end
-
-	return self.DummyController
+	return self.DummyFactory:GetDummyController()
 end
 
 function DevAdminService:GetPlayerCharacter(player)
@@ -1570,317 +1562,39 @@ function DevAdminService:GetDebugDummiesFolder()
 end
 
 function DevAdminService:GetUsableCharacterModel(characterModelAsset, modelName)
-	if not characterModelAsset then
-		return nil
-	end
-
-	if characterModelAsset:IsA("Model") then
-		if typeof(modelName) == "string" and modelName ~= "" and characterModelAsset.Name ~= modelName then
-			return nil
-		end
-
-		return characterModelAsset
-	end
-
-	if characterModelAsset:IsA("Folder") then
-		if typeof(modelName) == "string" and modelName ~= "" then
-			local namedModel = characterModelAsset:FindFirstChild(modelName)
-			if namedModel and namedModel:IsA("Model") then
-				return namedModel
-			end
-		end
-
-		local defaultModel = characterModelAsset:FindFirstChild("Default")
-		if defaultModel and defaultModel:IsA("Model") then
-			return defaultModel
-		end
-
-		local directModel = characterModelAsset:FindFirstChildWhichIsA("Model")
-
-		if directModel then
-			return directModel
-		end
-
-		return characterModelAsset:FindFirstChildWhichIsA("Model", true)
-	end
-
-	return characterModelAsset:FindFirstChildWhichIsA("Model", true)
+	return self.DummyFactory:GetUsableCharacterModel(characterModelAsset, modelName)
 end
 
 function DevAdminService:GetSkinConfig(characterFolder)
-	local modulesFolder = characterFolder and characterFolder:FindFirstChild("Modules")
-	local skinModule = modulesFolder and modulesFolder:FindFirstChild("SkinModule")
-
-	if not skinModule then
-		return nil
-	end
-
-	local success, skinConfig = pcall(require, skinModule)
-	if not success or typeof(skinConfig) ~= "table" then
-		warn("[DevAdminService] Failed to load SkinModule for:", characterFolder.Name)
-		return nil
-	end
-
-	return skinConfig
+	return self.DummyFactory:GetSkinConfig(characterFolder)
 end
 
 function DevAdminService:GetValidCharacterModels()
-	local assets = ReplicatedStorage:FindFirstChild("Assets")
-	local characters = assets and assets:FindFirstChild("Characters")
-	local models = {}
-
-	if not characters then
-		warn("[DevAdminService] Missing ReplicatedStorage > Assets > Characters")
-		return models
-	end
-
-	for _, characterFolder in ipairs(characters:GetChildren()) do
-		if not characterFolder:IsA("Folder") then
-			continue
-		end
-
-		local characterModelAsset = characterFolder:FindFirstChild("CharacterModel")
-		local skinConfig = self:GetSkinConfig(characterFolder)
-		local foundSkinModel = false
-
-		if skinConfig and typeof(skinConfig.Skins) == "table" then
-			for skinName, skinData in pairs(skinConfig.Skins) do
-				local modelName = typeof(skinData) == "table" and skinData.CharacterModelName or nil
-				local model = self:GetUsableCharacterModel(characterModelAsset, modelName)
-
-				if model and model:IsA("Model") then
-					foundSkinModel = true
-					table.insert(models, {
-						CharacterName = characterFolder.Name,
-						SkinName = skinName,
-						Model = model,
-					})
-				end
-			end
-		end
-
-		if not foundSkinModel then
-			local model = self:GetUsableCharacterModel(characterModelAsset)
-
-			if model and model:IsA("Model") then
-				table.insert(models, {
-					CharacterName = characterFolder.Name,
-					SkinName = (skinConfig and skinConfig.DefaultSkin) or "Default",
-					Model = model,
-				})
-			else
-				warn("[DevAdminService] No usable CharacterModel found for:", characterFolder.Name)
-			end
-		end
-	end
-
-	if #models == 0 then
-		warn("[DevAdminService] No valid CharacterModel assets found under:", characters:GetFullName())
-	end
-
-	return models
+	return self.DummyFactory:GetValidCharacterModels()
 end
 
 function DevAdminService:ValidateDummyFeatures(features)
-	local count = 0
-
-	for tagName in pairs(EXCLUSIVE_DUMMY_TAGS) do
-		if features[tagName] == true then
-			count += 1
-		end
-	end
-
-	return count <= 1
+	return self.DummyFactory:ValidateDummyFeatures(features)
 end
 
 function DevAdminService:GetDummyName(features)
-	local parts = {}
-
-	if features.Moving then
-		table.insert(parts, "Moving")
-	end
-	if features.Block then
-		table.insert(parts, "Blocking")
-	end
-	if features.Combo then
-		table.insert(parts, "Combo")
-	end
-	if features.Aircombo then
-		table.insert(parts, "AirCombo")
-	end
-	if features.SOULBURST then
-		table.insert(parts, "SOULBURST")
-	end
-	if features.Super then
-		table.insert(parts, "SUPER")
-	end
-	if features.TRUE then
-		table.insert(parts, "TRUE")
-	end
-	if features.Respawn then
-		table.insert(parts, "Respawn")
-	end
-
-	if #parts == 0 then
-		return "BasicDebugDummy"
-	end
-
-	return table.concat(parts, "") .. "Dummy"
+	return self.DummyFactory:GetDummyName(features)
 end
 
 function DevAdminService:GetModelRoot(model)
-	return model:FindFirstChild("HumanoidRootPart")
-		or model:FindFirstChild("Torso")
-		or model:FindFirstChild("UpperTorso")
-		or model.PrimaryPart
+	return self.DummyFactory:GetModelRoot(model)
 end
 
 function DevAdminService:GetDummyFeatures(dummyType)
-	if typeof(dummyType) ~= "string" then
-		return nil
-	end
-
-	return DUMMY_TYPES[dummyType]
+	return self.DummyFactory:GetDummyFeatures(dummyType)
 end
 
 function DevAdminService:ApplyDummyAttributes(dummy, features, sourceCharacterName, sourceSkinName, options)
-	options = options or {}
-
-	local isDebugDummy = options.DebugDummy ~= false
-
-	dummy:SetAttribute("DebugDummy", isDebugDummy)
-	dummy:SetAttribute("CharacterName", sourceCharacterName)
-	dummy:SetAttribute("SourceCharacterName", sourceCharacterName)
-	dummy:SetAttribute("SkinName", sourceSkinName or "Default")
-	dummy:SetAttribute("SourceSkinName", sourceSkinName or "Default")
-	dummy:SetAttribute("SelectedSkin", sourceSkinName or "Default")
-	dummy:SetAttribute("EquippedSkin_" .. tostring(sourceCharacterName), sourceSkinName or "Default")
-	dummy:SetAttribute("DummyType", self:GetDummyName(features))
-	dummy:SetAttribute("MovingDummy", features.Moving == true)
-	dummy:SetAttribute("BlockingDummy", features.Block == true)
-	dummy:SetAttribute("BlockDummy", features.Block == true)
-	dummy:SetAttribute("ComboDummy", features.Combo == true)
-	dummy:SetAttribute("AirComboDummy", features.Aircombo == true)
-	dummy:SetAttribute("AircomboDummy", features.Aircombo == true)
-	dummy:SetAttribute("SoulBurstDummy", features.SOULBURST == true)
-	dummy:SetAttribute("CanSoulBurst", features.SOULBURST == true)
-	dummy:SetAttribute("SuperDummy", features.Super == true)
-	dummy:SetAttribute("ImmortalDummy", features.Immortal == true or features.Super == true)
-	dummy:SetAttribute("TRUEDummy", features.TRUE == true)
-	dummy:SetAttribute("TrueDummy", features.TRUE == true)
-	dummy:SetAttribute("RespawnDummy", features.Respawn == true)
-	dummy:SetAttribute("MorphEnabled", true)
-	dummy:SetAttribute("CombatMode", "Base")
-	dummy:SetAttribute("AwakeningActive", false)
-	dummy:SetAttribute("AwakeningEndsAt", 0)
-
-	if sourceCharacterName == "Chara" then
-		dummy:SetAttribute("CharaSkin", sourceSkinName or "Default")
-	end
-
-	if features.Block then
-		dummy:SetAttribute("BlockHeld", true)
-	end
-
-	if isDebugDummy then
-		CollectionService:AddTag(dummy, "DebugDummy")
-	else
-		CollectionService:RemoveTag(dummy, "DebugDummy")
-	end
-
-	CollectionService:AddTag(dummy, "TargetableCharacter")
+	self.DummyFactory:ApplyDummyAttributes(dummy, features, sourceCharacterName, sourceSkinName, options)
 end
 
 function DevAdminService:SpawnConfiguredDummy(dummyType, spawnCFrame, options)
-	options = options or {}
-
-	local features = self:GetDummyFeatures(dummyType)
-	if not features then
-		return nil, "Unknown dummy type."
-	end
-
-	if not self:ValidateDummyFeatures(features) then
-		return nil, "Invalid dummy tag overlap."
-	end
-
-	local models = self:GetValidCharacterModels()
-	if #models == 0 then
-		return nil, "No valid CharacterModel assets found under ReplicatedStorage/Assets/Characters."
-	end
-
-	local picked = models[math.random(1, #models)]
-	local dummy = picked.Model:Clone()
-	local humanoid = dummy:FindFirstChildOfClass("Humanoid")
-	local root = self:GetModelRoot(dummy)
-
-	if root and not dummy.PrimaryPart then
-		dummy.PrimaryPart = root
-	end
-
-	if not humanoid or not root then
-		dummy:Destroy()
-		return nil, "Selected CharacterModel is missing Humanoid/root."
-	end
-
-	dummy.Name = options.Name or self:GetDummyName(features)
-	self:ApplyDummyAttributes(dummy, features, picked.CharacterName, picked.SkinName, {
-		DebugDummy = options.DebugDummy,
-	})
-
-	if typeof(options.Attributes) == "table" then
-		for attributeName, value in pairs(options.Attributes) do
-			dummy:SetAttribute(attributeName, value)
-		end
-	end
-
-	if typeof(options.Tags) == "table" then
-		for _, tagName in ipairs(options.Tags) do
-			CollectionService:AddTag(dummy, tagName)
-		end
-	end
-
-	local folder = options.Parent or self:GetDebugDummiesFolder()
-	dummy.Parent = folder
-
-	dummy:PivotTo(spawnCFrame or CFrame.new())
-
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
-
-	local services = self:GetDevServices()
-	if services.WeaponService and services.WeaponService.EquipWeapon then
-		services.WeaponService:EquipWeapon(dummy, picked.CharacterName)
-	end
-
-	if services.WeaponService and services.WeaponService.SanitizeEquippedWeapons then
-		services.WeaponService:SanitizeEquippedWeapons(dummy)
-	end
-
-	if services.CharacterMorphService and services.CharacterMorphService.ApplyCharacterCollisionRules then
-		services.CharacterMorphService:ApplyCharacterCollisionRules(dummy)
-	end
-
-	if features.SOULBURST then
-		dummy:SetAttribute("Soul", 0)
-		dummy:SetAttribute("SoulBurst", 0)
-	end
-
-	local started, behaviorMessage = self:GetDummyController():Start(dummy, features, {
-		CharacterName = picked.CharacterName,
-		SkinName = picked.SkinName,
-	})
-	if not started then
-		warn("[DevAdminService] Dummy behavior failed:", behaviorMessage)
-	end
-
-	return {
-		Dummy = dummy,
-		Features = features,
-		CharacterName = picked.CharacterName,
-		SkinName = picked.SkinName or "Default",
-		BehaviorStarted = started == true,
-		BehaviorMessage = behaviorMessage,
-	}, nil
+	return self.DummyFactory:SpawnConfiguredDummy(dummyType, spawnCFrame, options)
 end
 
 function DevAdminService:SpawnDummy(player, payload)

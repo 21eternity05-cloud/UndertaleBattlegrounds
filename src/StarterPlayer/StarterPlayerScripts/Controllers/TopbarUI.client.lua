@@ -22,7 +22,7 @@ local TitleData = require(Shared:WaitForChild("TitleData"))
 local EmoteData = require(Shared:WaitForChild("EmoteData"))
 local DevProductData = require(Shared:WaitForChild("DevProductData"))
 
-local ClientModules = script.Parent:WaitForChild("ClientModules")
+local ClientModules = script.Parent.Parent:WaitForChild("ClientModules")
 local ShopPreviewController = require(ClientModules:WaitForChild("ShopPreviewController"))
 
 local profile = nil

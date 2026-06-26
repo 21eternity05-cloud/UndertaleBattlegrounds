@@ -243,7 +243,7 @@ function DebugService:GetCombatDebugCharacters()
 	end
 
 	addFolderCharacters("DebugDummies")
-	addFolderCharacters("TestDummies")
+	addFolderCharacters("ArenaRespawnDummies")
 
 	return characters
 end
@@ -317,7 +317,7 @@ function DebugService:HealAllPlayersAndDummies()
 	end
 
 	healFolder("DebugDummies")
-	healFolder("TestDummies")
+	healFolder("ArenaRespawnDummies")
 end
 
 function DebugService:Start()
