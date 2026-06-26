@@ -2,8 +2,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
--- TODO: Redesign with Undertale-style black panels, thick white borders, square corners, and pixel typography.
-
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -16,6 +14,16 @@ local EmoteData = require(Shared:WaitForChild("EmoteData"))
 
 local MAX_SLOTS = 8
 local WHEEL_KEY = Enum.KeyCode.R
+
+local PIXEL_FONT = Enum.Font.Arcade
+
+local UT_BLACK = Color3.fromRGB(0, 0, 0)
+local UT_WHITE = Color3.fromRGB(255, 255, 255)
+local UT_GRAY = Color3.fromRGB(145, 145, 145)
+local UT_DARK_GRAY = Color3.fromRGB(42, 42, 42)
+local UT_ORANGE = Color3.fromRGB(255, 150, 40)
+local UT_YELLOW = Color3.fromRGB(255, 205, 50)
+
 local MOVE_KEYS = {
 	[Enum.KeyCode.W] = true,
 	[Enum.KeyCode.A] = true,
@@ -27,10 +35,30 @@ local gui = nil
 local wheel = nil
 local buttons = {}
 local equippedEmotes = {}
+
+local centerPanel = nil
+local centerSlotLabel = nil
 local centerTitle = nil
+local centerHint = nil
+
 local selectedSlot = 1
 local selectedEmoteId = nil
 local wheelOpen = false
+
+local function applyPixelFont(textObject)
+	textObject.Font = PIXEL_FONT
+end
+
+local function addPixelStroke(instance, thickness, color)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color or UT_WHITE
+	stroke.Thickness = thickness or 3
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.LineJoinMode = Enum.LineJoinMode.Miter
+	stroke.Parent = instance
+
+	return stroke
+end
 
 local function setMouseFreeMode(active)
 	player:SetAttribute("MouseFreeMode", active == true)
@@ -78,26 +106,64 @@ local function getEquippedEmote(slot)
 	return nil
 end
 
+local function setButtonSelected(button, selected, hasEmote)
+	local stroke = button:FindFirstChildOfClass("UIStroke")
+
+	if stroke then
+		if selected then
+			stroke.Color = hasEmote and UT_YELLOW or UT_ORANGE
+			stroke.Thickness = 4
+		else
+			stroke.Color = hasEmote and UT_WHITE or UT_DARK_GRAY
+			stroke.Thickness = 3
+		end
+	end
+
+	if selected then
+		button.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+		button.TextColor3 = hasEmote and UT_YELLOW or UT_ORANGE
+	else
+		button.BackgroundColor3 = UT_BLACK
+		button.TextColor3 = hasEmote and UT_WHITE or UT_GRAY
+	end
+end
+
+local function updateCenter()
+	local data = selectedEmoteId and EmoteData[selectedEmoteId]
+
+	if centerSlotLabel then
+		centerSlotLabel.Text = "SLOT " .. tostring(selectedSlot or 1)
+		centerSlotLabel.TextColor3 = data and UT_YELLOW or UT_ORANGE
+	end
+
+	if centerTitle then
+		centerTitle.Text = data and string.upper(data.DisplayName or selectedEmoteId) or "EMPTY"
+		centerTitle.TextColor3 = data and UT_WHITE or UT_GRAY
+	end
+
+	if centerHint then
+		centerHint.Text = data and "RELEASE R\nTO EMOTE" or "CHOOSE\nAN EMOTE"
+		centerHint.TextColor3 = data and UT_YELLOW or UT_GRAY
+	end
+
+	if centerPanel then
+		local stroke = centerPanel:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = data and UT_WHITE or UT_DARK_GRAY
+		end
+	end
+end
+
 local function highlightSelection(slot)
 	selectedSlot = slot
 	selectedEmoteId = getEquippedEmote(slot)
 
 	for index, button in pairs(buttons) do
-		local stroke = button:FindFirstChildOfClass("UIStroke")
-		if stroke then
-			stroke.Color = index == slot and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(90, 90, 105)
-			stroke.Thickness = index == slot and 2 or 1
-		end
-
-		button.BackgroundColor3 = index == slot
-			and Color3.fromRGB(58, 58, 70)
-			or Color3.fromRGB(28, 28, 34)
+		local hasEmote = getEquippedEmote(index) ~= nil
+		setButtonSelected(button, index == slot, hasEmote)
 	end
 
-	if centerTitle then
-		local data = selectedEmoteId and EmoteData[selectedEmoteId]
-		centerTitle.Text = data and (data.DisplayName or selectedEmoteId) or "Empty"
-	end
+	updateCenter()
 end
 
 local function refreshWheel()
@@ -108,12 +174,32 @@ local function refreshWheel()
 			local data = emoteId and EmoteData[emoteId]
 
 			button.Name = "Slot" .. tostring(slot)
-			button.Text = data and (tostring(slot) .. "\n" .. (data.DisplayName or emoteId)) or (tostring(slot) .. "\nEmpty")
-			button.TextColor3 = data and Color3.fromRGB(245, 245, 245) or Color3.fromRGB(145, 145, 158)
+
+			if data then
+				button.Text = tostring(slot) .. "\n" .. string.upper(data.DisplayName or emoteId)
+				button.TextColor3 = UT_WHITE
+			else
+				button.Text = tostring(slot) .. "\nEMPTY"
+				button.TextColor3 = UT_GRAY
+			end
 		end
 	end
 
-	highlightSelection(selectedSlot)
+	highlightSelection(selectedSlot or 1)
+end
+
+local function closeWheel(playSelection)
+	if not gui or not wheelOpen then
+		return
+	end
+
+	gui.Enabled = false
+	wheelOpen = false
+	setMouseFreeMode(false)
+
+	if playSelection and selectedEmoteId then
+		requestPlay(selectedEmoteId)
+	end
 end
 
 local function createWheel()
@@ -127,47 +213,81 @@ local function createWheel()
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
 	gui.Enabled = false
+	gui.DisplayOrder = 50
 	gui.Parent = playerGui
 
 	wheel = Instance.new("Frame")
 	wheel.Name = "Wheel"
 	wheel.AnchorPoint = Vector2.new(0.5, 0.5)
 	wheel.Position = UDim2.fromScale(0.5, 0.5)
-	wheel.Size = UDim2.fromOffset(360, 360)
+	wheel.Size = UDim2.fromOffset(440, 440)
 	wheel.BackgroundTransparency = 1
+	wheel.BorderSizePixel = 0
 	wheel.Parent = gui
 
-	local center = Instance.new("Frame")
-	center.Name = "Center"
-	center.AnchorPoint = Vector2.new(0.5, 0.5)
-	center.Position = UDim2.fromScale(0.5, 0.5)
-	center.Size = UDim2.fromOffset(118, 118)
-	center.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-	center.BackgroundTransparency = 0.08
-	center.BorderSizePixel = 0
-	center.Parent = wheel
+	centerPanel = Instance.new("Frame")
+	centerPanel.Name = "Description"
+	centerPanel.AnchorPoint = Vector2.new(0.5, 0.5)
+	centerPanel.Position = UDim2.fromScale(0.5, 0.5)
+	centerPanel.Size = UDim2.fromOffset(132, 132)
+	centerPanel.BackgroundColor3 = UT_BLACK
+	centerPanel.BackgroundTransparency = 0
+	centerPanel.BorderSizePixel = 0
+	centerPanel.ZIndex = 5
+	centerPanel.Parent = wheel
+	addPixelStroke(centerPanel, 4, UT_WHITE)
 
-	local centerCorner = Instance.new("UICorner")
-	centerCorner.CornerRadius = UDim.new(1, 0)
-	centerCorner.Parent = center
-
-	local centerStroke = Instance.new("UIStroke")
-	centerStroke.Color = Color3.fromRGB(90, 90, 105)
-	centerStroke.Thickness = 1
-	centerStroke.Parent = center
+	centerSlotLabel = Instance.new("TextLabel")
+	centerSlotLabel.Name = "SlotLabel"
+	centerSlotLabel.BackgroundTransparency = 1
+	centerSlotLabel.AnchorPoint = Vector2.new(0.5, 0)
+	centerSlotLabel.Position = UDim2.new(0.5, 0, 0, 12)
+	centerSlotLabel.Size = UDim2.new(1, -14, 0, 18)
+	applyPixelFont(centerSlotLabel)
+	centerSlotLabel.TextSize = 9
+	centerSlotLabel.TextColor3 = UT_YELLOW
+	centerSlotLabel.TextWrapped = true
+	centerSlotLabel.TextXAlignment = Enum.TextXAlignment.Center
+	centerSlotLabel.TextYAlignment = Enum.TextYAlignment.Center
+	centerSlotLabel.Text = "SLOT 1"
+	centerSlotLabel.ZIndex = 6
+	centerSlotLabel.Parent = centerPanel
 
 	centerTitle = Instance.new("TextLabel")
-	centerTitle.Name = "Title"
+	centerTitle.Name = "SelectedLabel"
 	centerTitle.BackgroundTransparency = 1
-	centerTitle.Size = UDim2.fromScale(1, 1)
-	centerTitle.Font = Enum.Font.GothamBold
-	centerTitle.TextSize = 15
-	centerTitle.TextColor3 = Color3.fromRGB(245, 245, 245)
+	centerTitle.AnchorPoint = Vector2.new(0.5, 0.5)
+	centerTitle.Position = UDim2.fromScale(0.5, 0.45)
+	centerTitle.Size = UDim2.new(1, -16, 0, 40)
+	applyPixelFont(centerTitle)
+	centerTitle.TextSize = 12
+	centerTitle.TextColor3 = UT_WHITE
 	centerTitle.TextWrapped = true
-	centerTitle.Text = "Emotes"
-	centerTitle.Parent = center
+	centerTitle.TextXAlignment = Enum.TextXAlignment.Center
+	centerTitle.TextYAlignment = Enum.TextYAlignment.Center
+	centerTitle.Text = "EMOTES"
+	centerTitle.ZIndex = 6
+	centerTitle.Parent = centerPanel
 
-	local radius = 128
+	centerHint = Instance.new("TextLabel")
+	centerHint.Name = "Hint"
+	centerHint.BackgroundTransparency = 1
+	centerHint.AnchorPoint = Vector2.new(0.5, 1)
+	centerHint.Position = UDim2.new(0.5, 0, 1, -12)
+	centerHint.Size = UDim2.new(1, -14, 0, 34)
+	applyPixelFont(centerHint)
+	centerHint.TextSize = 8
+	centerHint.TextColor3 = UT_YELLOW
+	centerHint.TextWrapped = true
+	centerHint.TextXAlignment = Enum.TextXAlignment.Center
+	centerHint.TextYAlignment = Enum.TextYAlignment.Center
+	centerHint.Text = "HOLD R"
+	centerHint.ZIndex = 6
+	centerHint.Parent = centerPanel
+
+	local radius = 158
+	local buttonSize = Vector2.new(112, 56)
+
 	for index = 1, MAX_SLOTS do
 		local angle = ((index - 1) / MAX_SLOTS) * math.pi * 2 - (math.pi / 2)
 		local x = math.cos(angle) * radius
@@ -177,38 +297,36 @@ local function createWheel()
 		button.Name = "Slot" .. tostring(index)
 		button.AnchorPoint = Vector2.new(0.5, 0.5)
 		button.Position = UDim2.new(0.5, x, 0.5, y)
-		button.Size = UDim2.fromOffset(112, 54)
-		button.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+		button.Size = UDim2.fromOffset(buttonSize.X, buttonSize.Y)
+		button.BackgroundColor3 = UT_BLACK
+		button.BackgroundTransparency = 0
 		button.BorderSizePixel = 0
-		button.AutoButtonColor = true
-		button.Font = Enum.Font.GothamSemibold
-		button.TextSize = 13
+		button.AutoButtonColor = false
+		applyPixelFont(button)
+		button.TextSize = 10
 		button.TextWrapped = true
-		button.TextColor3 = Color3.fromRGB(245, 245, 245)
-		button.Text = tostring(index) .. "\nEmpty"
+		button.TextColor3 = UT_GRAY
+		button.TextXAlignment = Enum.TextXAlignment.Center
+		button.TextYAlignment = Enum.TextYAlignment.Center
+		button.Text = tostring(index) .. "\nEMPTY"
+		button.ZIndex = 3
 		button.Parent = wheel
 
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 8)
-		corner.Parent = button
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(90, 90, 105)
-		stroke.Thickness = 1
-		stroke.Parent = button
+		addPixelStroke(button, 3, UT_DARK_GRAY)
 
 		button.MouseEnter:Connect(function()
-			highlightSelection(index)
+			if wheelOpen then
+				highlightSelection(index)
+			end
 		end)
 
 		button.MouseButton1Click:Connect(function()
-			highlightSelection(index)
-			if selectedEmoteId then
-				requestPlay(selectedEmoteId)
+			if not wheelOpen then
+				return
 			end
-			gui.Enabled = false
-			wheelOpen = false
-			setMouseFreeMode(false)
+
+			highlightSelection(index)
+			closeWheel(true)
 		end)
 
 		buttons[index] = button
@@ -226,7 +344,7 @@ local function selectFromMouse()
 	local center = wheel.AbsolutePosition + (wheel.AbsoluteSize / 2)
 	local offset = mouse - center
 
-	if offset.Magnitude < 36 then
+	if offset.Magnitude < 62 then
 		return
 	end
 
@@ -254,24 +372,12 @@ local function openWheel()
 	end
 
 	highlightSelection(selectedSlot or 1)
+
 	gui.Enabled = true
 	wheelOpen = true
 	setMouseFreeMode(true)
+
 	selectFromMouse()
-end
-
-local function closeWheel(playSelection)
-	if not gui or not wheelOpen then
-		return
-	end
-
-	gui.Enabled = false
-	wheelOpen = false
-	setMouseFreeMode(false)
-
-	if playSelection and selectedEmoteId then
-		requestPlay(selectedEmoteId)
-	end
 end
 
 progressionRemote.OnClientEvent:Connect(function(payload)
@@ -289,7 +395,9 @@ progressionRemote.OnClientEvent:Connect(function(payload)
 end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
+	if gameProcessed then
+		return
+	end
 
 	if input.KeyCode == WHEEL_KEY then
 		openWheel()
