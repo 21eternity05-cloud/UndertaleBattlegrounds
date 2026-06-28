@@ -72,6 +72,7 @@ function ProgressionService.new(config)
 	self.Remote = nil
 	self.SettingsRemote = nil
 	self.KillAwarded = setmetatable({}, { __mode = "k" })
+	self.Killstreaks = {}
 	self.DataStoreWarnings = {}
 	self.RefusedFallbackSaveWarnings = {}
 	self.TitleAssetWarnings = {}
@@ -594,6 +595,22 @@ function ProgressionService:GetProfile(player)
 	return self.Profiles[player]
 end
 
+function ProgressionService:IsSkinPubliclyAvailable(player, skinData)
+	if typeof(skinData) ~= "table" then
+		return false
+	end
+
+	if skinData.Hidden == true then
+		return false
+	end
+
+	if skinData.DeveloperOnly == true and not DeveloperPermissions.IsDeveloper(player) then
+		return false
+	end
+
+	return true
+end
+
 function ProgressionService:EnsureLeaderstats(player)
 	local profile = self:GetProfile(player)
 	if not profile then return end
@@ -772,6 +789,54 @@ function ProgressionService:GetKillRewardForTarget(targetCharacter)
 	return self.Config.KillDustReward or 0
 end
 
+function ProgressionService:IsRealPlayerKill(attackerPlayer, targetCharacter)
+	if not attackerPlayer or not targetCharacter then
+		return false
+	end
+
+	if self:IsRespawnDummy(targetCharacter) then
+		return false
+	end
+
+	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
+
+	return targetPlayer ~= nil and targetPlayer ~= attackerPlayer
+end
+
+function ProgressionService:ResetKillstreak(player)
+	if not player then
+		return
+	end
+
+	self.Killstreaks[player] = 0
+	player:SetAttribute("Killstreak", 0)
+end
+
+function ProgressionService:GetKillstreakBonus(streak)
+	local bonuses = self.Config.KillstreakDustBonuses
+
+	if typeof(bonuses) == "table" and typeof(bonuses[streak]) == "number" then
+		return math.max(0, math.floor(bonuses[streak]))
+	end
+
+	local repeatEvery = self.Config.KillstreakRepeatEvery or 0
+	local repeatBonus = self.Config.KillstreakRepeatBonus or 0
+
+	if streak > 10 and repeatEvery > 0 and streak % repeatEvery == 0 then
+		return math.max(0, math.floor(repeatBonus))
+	end
+
+	return 0
+end
+
+function ProgressionService:AdvanceKillstreak(player)
+	local streak = math.max(0, math.floor((self.Killstreaks[player] or 0) + 1))
+	self.Killstreaks[player] = streak
+	player:SetAttribute("Killstreak", streak)
+
+	return streak, self:GetKillstreakBonus(streak)
+end
+
 function ProgressionService:GetKillVerb()
 	local verbs = self.Config.KillBannerVerbs
 
@@ -812,12 +877,23 @@ function ProgressionService:AwardKill(attackerCharacter, targetCharacter)
 
 	self.KillAwarded[targetCharacter] = true
 
-	local dustReward = self:GetKillRewardForTarget(targetCharacter)
+	local baseDustReward = self:GetKillRewardForTarget(targetCharacter)
+	local dustReward = baseDustReward
 	local attackerCharacterName = self:GetAttackerCharacterName(attackerPlayer, attackerCharacter)
+	local isRealPlayerKill = self:IsRealPlayerKill(attackerPlayer, targetCharacter)
 
-	self:AddKill(attackerPlayer, 1)
-	self:IncrementCharacterKill(attackerPlayer, attackerCharacterName, 1)
-	self:UnlockEarnedKillTitles(attackerPlayer)
+	if isRealPlayerKill then
+		local streak, streakBonus = self:AdvanceKillstreak(attackerPlayer)
+
+		self:AddKill(attackerPlayer, 1)
+		self:IncrementCharacterKill(attackerPlayer, attackerCharacterName, 1)
+		self:UnlockEarnedKillTitles(attackerPlayer)
+
+		if streakBonus > 0 then
+			dustReward += streakBonus
+			print("[ProgressionService] Killstreak bonus:", attackerPlayer.Name, "x" .. tostring(streak), "+" .. tostring(streakBonus), "Dust")
+		end
+	end
 
 	if dustReward > 0 then
 		self:AddDust(attackerPlayer, dustReward)
@@ -834,7 +910,9 @@ function ProgressionService:AwardKill(attackerCharacter, targetCharacter)
 		"target:",
 		targetCharacter.Name,
 		"dust:",
-		dustReward
+		dustReward,
+		"realPlayerKill:",
+		isRealPlayerKill
 	)
 
 	task.defer(function()
@@ -914,6 +992,10 @@ function ProgressionService:IsSkinOwned(player, characterName, skinName)
 		return false
 	end
 
+	if not self:IsSkinPubliclyAvailable(player, skinData) then
+		return false
+	end
+
 	if skinData.Free == true or (skinData.Cost or 0) <= 0 then
 		return true
 	end
@@ -966,6 +1048,10 @@ function ProgressionService:PurchaseSkin(player, characterName, skinName)
 
 	if not skinData then
 		return false, "UnknownSkin"
+	end
+
+	if not self:IsSkinPubliclyAvailable(player, skinData) then
+		return false, "UnavailableSkin"
 	end
 
 	if self:IsSkinOwned(player, characterName, skinName) then
@@ -1589,6 +1675,24 @@ function ProgressionService:SetupPlayer(player)
 	self:GetProfile(player)
 	self:EnsureLeaderstats(player)
 	self:SyncPlayerAttributes(player)
+	self:ResetKillstreak(player)
+
+	local function hookCharacter(character)
+		self:ResetKillstreak(player)
+
+		local humanoid = character:WaitForChild("Humanoid", 8)
+		if humanoid then
+			humanoid.Died:Connect(function()
+				self:ResetKillstreak(player)
+			end)
+		end
+	end
+
+	if player.Character then
+		task.defer(hookCharacter, player.Character)
+	end
+
+	player.CharacterAdded:Connect(hookCharacter)
 
 	task.defer(function()
 		self:SendSnapshot(player)
@@ -1637,6 +1741,7 @@ function ProgressionService:Start()
 		self:SaveProfile(player)
 		self.Profiles[player] = nil
 		self.ProfileLoaded[player] = nil
+		self.Killstreaks[player] = nil
 		self.RefusedFallbackSaveWarnings[tostring(player.UserId) .. ":Profile did not safely load from DataStore"] = nil
 	end)
 

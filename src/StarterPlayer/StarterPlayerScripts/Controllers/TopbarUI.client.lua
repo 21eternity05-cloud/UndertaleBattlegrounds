@@ -304,6 +304,20 @@ local function canShowCharacter(characterName)
 	return DeveloperPermissions.CanAccessCharacter(player, data)
 end
 
+local function canPreviewCharacter(characterName)
+	return getCharacterData(characterName) ~= nil
+end
+
+local function isPreviewOnlyCharacter(characterName)
+	local data = getCharacterData(characterName)
+
+	if not data then
+		return false
+	end
+
+	return not DeveloperPermissions.CanAccessCharacter(player, data)
+end
+
 local function getSortedCharacters(ownedOnly)
 	local characters = {}
 
@@ -326,6 +340,29 @@ local function getSortedCharacters(ownedOnly)
 		end
 
 		return costA < costB
+	end)
+
+	return characters
+end
+
+local function getSortedCustomizeCharacters()
+	local characters = {}
+
+	for _, characterName in ipairs(getCharacterOrder()) do
+		if canPreviewCharacter(characterName) then
+			table.insert(characters, characterName)
+		end
+	end
+
+	table.sort(characters, function(a, b)
+		local dataA = getCharacterData(a) or {}
+		local dataB = getCharacterData(b) or {}
+
+		if DeveloperPermissions.IsPublicCharacter(dataA) ~= DeveloperPermissions.IsPublicCharacter(dataB) then
+			return DeveloperPermissions.IsPublicCharacter(dataA)
+		end
+
+		return (dataA.DisplayName or a) < (dataB.DisplayName or b)
 	end)
 
 	return characters
@@ -379,8 +416,13 @@ local function getSkinOrder(characterName)
 		return order, skins
 	end
 
-	for skinName in pairs(skins) do
-		table.insert(order, skinName)
+	for skinName, skinData in pairs(skins) do
+		if typeof(skinData) == "table"
+			and skinData.Hidden ~= true
+			and (skinData.DeveloperOnly ~= true or DeveloperPermissions.IsDeveloper(player))
+		then
+			table.insert(order, skinName)
+		end
 	end
 
 	table.sort(order, function(a, b)
@@ -1007,6 +1049,71 @@ local function showSettings()
 		{ Id = "Titles", Label = "Titles" },
 	}
 
+	local helpPanel = nil
+	local function closeHelp()
+		if helpPanel then
+			helpPanel:Destroy()
+			helpPanel = nil
+		end
+	end
+
+	local function showHelp()
+		closeHelp()
+
+		helpPanel = makeFloatingPanel(
+			root,
+			"ControlsHelpPanel",
+			UDim2.fromOffset(430, 54),
+			UDim2.fromOffset(360, 390),
+			0.04
+		)
+
+		makeText(
+			helpPanel,
+			"HelpTitle",
+			"Controls",
+			UDim2.fromOffset(16, 14),
+			UDim2.new(1, -92, 0, 28),
+			20,
+			true
+		)
+
+		local closeButton = makeButton(
+			helpPanel,
+			"CloseHelp",
+			"X",
+			UDim2.new(1, -54, 0, 12),
+			UDim2.fromOffset(38, 32),
+			Color3.fromRGB(45, 36, 36)
+		)
+		closeButton.MouseButton1Click:Connect(closeHelp)
+
+		local controls = {
+			"Mouse hold - M1 auto combo",
+			"Spacebar + Mouse - Uptilt",
+			"F - Block",
+			"Q - Dash",
+			"Q while stunned - Soul Burst",
+			"R - Emote Wheel",
+			"1, 2, 3, 4 - Moves",
+			"G - Ultimate Move",
+		}
+
+		for index, line in ipairs(controls) do
+			local label = makeText(
+				helpPanel,
+				"ControlLine" .. tostring(index),
+				line,
+				UDim2.fromOffset(18, 58 + (index - 1) * 34),
+				UDim2.new(1, -36, 0, 26),
+				14,
+				false
+			)
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.TextColor3 = Color3.fromRGB(245, 245, 248)
+		end
+	end
+
 	for index, settingInfo in ipairs(settingRows) do
 		local rowY = 58 + (index - 1) * 48
 		local label = makeText(
@@ -1044,6 +1151,16 @@ local function showSettings()
 			refreshToggle()
 		end)
 	end
+
+	local helpButton = makeButton(
+		panel,
+		"HelpControlsButton",
+		"Help / Controls",
+		UDim2.fromOffset(16, 256),
+		UDim2.new(1, -32, 0, 38),
+		Color3.fromRGB(36, 36, 46)
+	)
+	helpButton.MouseButton1Click:Connect(showHelp)
 end
 
 local function showCustomize()
@@ -1365,14 +1482,18 @@ local function showCustomize()
 		selectedCustomizeSkin = getEquippedSkin(characterName)
 
 		characterNameLabel.Text = data.DisplayName or characterName
-		roleLabel.Text = data.Role or ""
-		descriptionLabel.Text = data.Description or "No description yet."
+		local previewOnly = isPreviewOnlyCharacter(characterName)
+		roleLabel.Text = previewOnly and "COMING SOON" or (data.Role or "")
+		descriptionLabel.Text = previewOnly
+			and ((data.Description or "No description yet.") .. "\nPreview only. This character is not publicly selectable yet.")
+			or (data.Description or "No description yet.")
 
 		local owned = isOwned(characterName)
-		playAsButton.Text = owned and "Play As" or "Locked"
-		playAsButton.Active = owned
-		playAsButton.AutoButtonColor = owned
-		playAsButton.BackgroundColor3 = owned
+		local canPlay = owned and not previewOnly
+		playAsButton.Text = previewOnly and "Coming Soon" or (owned and "Play As" or "Locked")
+		playAsButton.Active = canPlay
+		playAsButton.AutoButtonColor = canPlay
+		playAsButton.BackgroundColor3 = canPlay
 			and Color3.fromRGB(42, 56, 80)
 			or Color3.fromRGB(45, 36, 36)
 
@@ -1486,7 +1607,7 @@ local function showCustomize()
 	end
 
 	playAsButton.MouseButton1Click:Connect(function()
-		if not isOwned(selectedCustomizeCharacter) then
+		if not isOwned(selectedCustomizeCharacter) or isPreviewOnlyCharacter(selectedCustomizeCharacter) then
 			return
 		end
 
@@ -1622,14 +1743,17 @@ local function showCustomize()
 
 		if category == "Characters" then
 			setEmoteControlsVisible(false)
-			for _, characterName in ipairs(getSortedCharacters(false)) do
+			for _, characterName in ipairs(getSortedCustomizeCharacters()) do
 				local data = getCharacterData(characterName)
 
 				if data then
 					local owned = isOwned(characterName)
+					local previewOnly = isPreviewOnlyCharacter(characterName)
 					local text = data.DisplayName or characterName
 
-					if not owned then
+					if previewOnly then
+						text ..= "  -  COMING SOON"
+					elseif not owned then
 						text ..= "  -  " .. tostring(data.Cost or 0) .. " Dust"
 					end
 
@@ -1637,10 +1761,14 @@ local function showCustomize()
 						clearPurchaseConfirm()
 						setCharacterBottomInfo(characterName)
 
-						if not owned then
+						if previewOnly then
+							purchaseLabel.Text = "Preview only. This character is not publicly selectable yet."
+							confirmButton.Visible = false
+							cancelButton.Visible = false
+						elseif not owned then
 							showPurchaseConfirm(characterName)
 						end
-					end, owned)
+					end, owned and not previewOnly)
 				end
 			end
 		elseif category == "Titles" then

@@ -69,6 +69,14 @@
       "Assets": {
         "$className": "Folder",
 
+        "BGM": {
+          "$className": "Sound",
+          "$properties": {
+            "Looped": true,
+            "Volume": 0.35
+          }
+        },
+
         "Emotes": {
           "$className": "Folder",
 

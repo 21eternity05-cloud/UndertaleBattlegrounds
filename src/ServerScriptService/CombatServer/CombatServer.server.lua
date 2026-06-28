@@ -34,6 +34,10 @@ local CharacterMorphService = require(characterFolder:WaitForChild("CharacterMor
 -- Player / progression services
 local ProgressionService = require(progressionFolder:WaitForChild("ProgressionService")).new(Config)
 _G.UTBGProgressionService = ProgressionService
+local LeaderboardService = require(progressionFolder:WaitForChild("LeaderboardService")).new(
+	Config,
+	ProgressionService
+)
 local CharacterService = require(characterFolder:WaitForChild("CharacterService")).new(
 	Config,
 	WeaponService,
@@ -191,6 +195,7 @@ _G.UTBGDevServices = {
 	DebugService = DebugService,
 	HitboxService = HitboxService,
 	KillCreditService = KillCreditService,
+	LeaderboardService = LeaderboardService,
 	MovementService = MovementService,
 	ProgressionService = ProgressionService,
 	StateService = StateService,
@@ -291,6 +296,7 @@ StateService:StartCharacterSetup()
 EmoteService:Start()
 KillCreditService:Start()
 ProgressionService:Start()
+LeaderboardService:Start()
 CharacterMorphService:Start()
 CharacterService:Start()
 CinematicService:Start()

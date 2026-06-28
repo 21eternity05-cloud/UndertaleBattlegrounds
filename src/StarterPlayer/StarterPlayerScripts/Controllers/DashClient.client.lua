@@ -336,6 +336,17 @@ local function setDashPlaneVelocity(linearVelocity, direction)
 	)
 end
 
+local function syncAutoRotateAfterDash(humanoid)
+	if not humanoid or not humanoid.Parent then
+		return
+	end
+
+	local shiftLockActive = player:GetAttribute("CustomShiftLockActive") == true
+	local shiftLockEnabled = player:GetAttribute("CustomShiftLockEnabled") == true
+
+	humanoid.AutoRotate = not (shiftLockActive or shiftLockEnabled)
+end
+
 local function dash()
 	if not canDash then return end
 	if isDashing then return end
@@ -358,7 +369,6 @@ local function dash()
 	local dashType = getDashType()
 	local currentDirection = getFlatDirection(getDirectionFromDashType(dashType))
 
-	local oldAutoRotate = humanoid.AutoRotate
 	humanoid.AutoRotate = false
 
 	local attachment = Instance.new("Attachment")
@@ -431,9 +441,7 @@ local function dash()
 			attachment:Destroy()
 		end
 
-		if humanoid and humanoid.Parent then
-			humanoid.AutoRotate = oldAutoRotate
-		end
+		syncAutoRotateAfterDash(humanoid)
 
 		clampPostDashVelocity(root)
 

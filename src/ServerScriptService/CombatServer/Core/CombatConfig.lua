@@ -8,6 +8,14 @@ CombatConfig.KillDustReward = 10
 -- Test dummy reward.
 CombatConfig.RespawnDummyKillDustReward = 1
 
+CombatConfig.KillstreakDustBonuses = {
+	[3] = 5,
+	[5] = 10,
+	[10] = 20,
+}
+CombatConfig.KillstreakRepeatEvery = 5
+CombatConfig.KillstreakRepeatBonus = 10
+
 CombatConfig.KillBannerVerbs = {
 	"erased",
 	"sent to the Hollow Route",
