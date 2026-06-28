@@ -74,6 +74,7 @@ end
 function DeveloperPermissions.IsPublicCharacter(data)
 	return typeof(data) == "table"
 		and data.ReleaseCharacter == true
+		and data.Public ~= false
 		and data.Hidden ~= true
 		and data.DeveloperOnly ~= true
 		and data.WIP ~= true

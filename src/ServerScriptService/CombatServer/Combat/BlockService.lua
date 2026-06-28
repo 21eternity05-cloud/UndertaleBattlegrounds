@@ -206,6 +206,22 @@ function BlockService:StartBlockingNow(character, humanoid)
 	self.VFXService:StartBlockVFX(character)
 end
 
+function BlockService:RefreshBlockingVisuals(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	if character:GetAttribute("Blocking") ~= true then
+		return
+	end
+
+	if self.StateService.AnimationService then
+		self.StateService.AnimationService:PlayBlockAnimation(character)
+	end
+
+	self.VFXService:StartBlockVFX(character)
+end
+
 function BlockService:StartBlockRetry(player, character)
 	self.BlockRetryPlayers[character] = player
 
@@ -268,6 +284,11 @@ function BlockService:SetCharacterBlocking(character, isBlocking)
 	if isBlocking then
 		character:SetAttribute("BlockHeld", true)
 
+		if character:GetAttribute("Blocking") == true then
+			self:RefreshBlockingVisuals(character)
+			return
+		end
+
 		if self:CanBlockNow(character) then
 			self:StartBlockingNow(character, humanoid)
 		end
@@ -301,6 +322,11 @@ function BlockService:SetBlocking(player, isBlocking)
 	if isBlocking then
 		character:SetAttribute("BlockHeld", true)
 		self:HookBlockWakeSignals(player, character)
+
+		if character:GetAttribute("Blocking") == true then
+			self:RefreshBlockingVisuals(character)
+			return
+		end
 
 		if self:CanBlockNow(character) then
 			character:SetAttribute("BlockHeld", true)

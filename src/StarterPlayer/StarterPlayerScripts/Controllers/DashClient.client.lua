@@ -553,7 +553,11 @@ local function requestSoulBurstIfStunned()
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
+	if gameProcessed then
+		if input.KeyCode ~= DASH_KEY or UserInputService:GetFocusedTextBox() then
+			return
+		end
+	end
 
 	if input.KeyCode == DASH_KEY then
 		if requestSoulBurstIfStunned() then

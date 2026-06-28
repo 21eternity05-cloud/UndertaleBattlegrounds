@@ -320,7 +320,18 @@ function VFXService:StartBlockBillboard(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	if root:FindFirstChild("ActiveBlockBillboard") then return end
+	local existingBillboard = root:FindFirstChild("ActiveBlockBillboard")
+	if existingBillboard then
+		existingBillboard:SetAttribute("BlockActive", true)
+		existingBillboard.Enabled = true
+
+		local existingImage = existingBillboard:FindFirstChildWhichIsA("ImageLabel", true)
+		if existingImage then
+			existingImage.ImageTransparency = 0
+		end
+
+		return
+	end
 
 	local vfxFolder = self:GetUniversalVFXFolder()
 	if not vfxFolder then return end
@@ -330,6 +341,7 @@ function VFXService:StartBlockBillboard(character)
 
 	local billboard = template:Clone()
 	billboard.Name = "ActiveBlockBillboard"
+	billboard:SetAttribute("BlockActive", true)
 	billboard.Adornee = root
 	billboard.Enabled = true
 	billboard.Parent = root
@@ -363,6 +375,7 @@ function VFXService:StopBlockBillboard(character)
 
 	local billboard = root:FindFirstChild("ActiveBlockBillboard")
 	if not billboard then return end
+	billboard:SetAttribute("BlockActive", false)
 
 	local image = billboard:FindFirstChildWhichIsA("ImageLabel", true)
 
@@ -374,7 +387,7 @@ function VFXService:StopBlockBillboard(character)
 		):Play()
 
 		task.delay(0.13, function()
-			if billboard and billboard.Parent then
+			if billboard and billboard.Parent and billboard:GetAttribute("BlockActive") ~= true then
 				billboard:Destroy()
 			end
 		end)
@@ -389,8 +402,15 @@ function VFXService:StartBlockVFX(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	if not root:FindFirstChild("ActiveBlockVFX") then
-		self:EnableAttachmentOnPart("Block", root, nil, "ActiveBlockVFX")
+	local active = root:FindFirstChild("ActiveBlockVFX")
+	if active then
+		active:SetAttribute("BlockActive", true)
+		self:SetAttachmentEmittersEnabled(active, true)
+	else
+		active = self:EnableAttachmentOnPart("Block", root, nil, "ActiveBlockVFX")
+		if active then
+			active:SetAttribute("BlockActive", true)
+		end
 	end
 
 	self:StartBlockBillboard(character)
@@ -404,8 +424,14 @@ function VFXService:StopBlockVFX(character)
 
 	local active = root:FindFirstChild("ActiveBlockVFX")
 	if active then
+		active:SetAttribute("BlockActive", false)
 		self:SetAttachmentEmittersEnabled(active, false)
-		Debris:AddItem(active, 0.75)
+
+		task.delay(0.75, function()
+			if active and active.Parent and active:GetAttribute("BlockActive") ~= true then
+				active:Destroy()
+			end
+		end)
 	end
 
 	self:StopBlockBillboard(character)
