@@ -78,7 +78,7 @@ local RedSlash = {
 local ANIMATION_NAME = "RedSlash"
 local CHARGE_MARKER = "charge"
 
-local WINDUP_TIME = 0.9
+local WINDUP_TIME = 0.66
 local HITBOX_ACTIVE_TIME = 0.16
 local HITBOX_TICK_RATE = 0.04
 local ENDLAG_TIME = 0.35

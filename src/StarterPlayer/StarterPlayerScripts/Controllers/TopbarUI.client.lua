@@ -21,6 +21,7 @@ local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
 local EmoteData = require(Shared:WaitForChild("EmoteData"))
 local DevProductData = require(Shared:WaitForChild("DevProductData"))
+local DeveloperPermissions = require(Shared:WaitForChild("DeveloperPermissions"))
 
 local ClientModules = script.Parent.Parent:WaitForChild("ClientModules")
 local ShopPreviewController = require(ClientModules:WaitForChild("ShopPreviewController"))
@@ -259,6 +260,12 @@ local function isOwned(characterName)
 		return false
 	end
 
+	if DeveloperPermissions.CanAccessCharacter(player, data)
+		and not DeveloperPermissions.IsPublicCharacter(data)
+	then
+		return true
+	end
+
 	if data.Free == true or data.Cost == 0 then
 		return true
 	end
@@ -287,13 +294,23 @@ local function getCharacterData(characterName)
 	return nil
 end
 
+local function canShowCharacter(characterName)
+	local data = getCharacterData(characterName)
+
+	if not data then
+		return false
+	end
+
+	return DeveloperPermissions.CanAccessCharacter(player, data)
+end
+
 local function getSortedCharacters(ownedOnly)
 	local characters = {}
 
 	for _, characterName in ipairs(getCharacterOrder()) do
 		local data = getCharacterData(characterName)
 
-		if data and (not ownedOnly or isOwned(characterName)) then
+		if data and canShowCharacter(characterName) and (not ownedOnly or isOwned(characterName)) then
 			table.insert(characters, characterName)
 		end
 	end

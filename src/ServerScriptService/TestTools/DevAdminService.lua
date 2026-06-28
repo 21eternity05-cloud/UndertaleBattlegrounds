@@ -10,6 +10,7 @@ local CharacterData = require(Shared:WaitForChild("CharacterData"))
 local TitleData = require(Shared:WaitForChild("TitleData"))
 local EmoteData = require(Shared:WaitForChild("EmoteData"))
 local LoreFragmentData = require(Shared:WaitForChild("Interactables"):WaitForChild("LoreFragmentData"))
+local DeveloperPermissions = require(Shared:WaitForChild("DeveloperPermissions"))
 local DummyFactory = require(script.Parent:WaitForChild("DummyFactory"))
 
 local function makeFallbackDebugDummyController(reason)
@@ -67,22 +68,8 @@ local DebugDummyControllerModule = loadDebugDummyController()
 local DevAdminService = {}
 DevAdminService.__index = DevAdminService
 
-local GROUP_ID = 33686072 -- TODO: set real Roblox group id.
-local MIN_DEVELOPER_RANK = 200
-local OWNER_RANK = 255
-local DEVELOPERS_CAN_USE_DATA_MANAGER = false
+local DEVELOPERS_CAN_USE_DATA_MANAGER = true
 local DEVELOPERS_CAN_USE_ABUSE = false
-local PLACE_OWNER_CAN_USE_DEV_MENU = true
-
-local OWNER_USER_IDS = {
-	-- [123456789] = true,
-	[78551444] = true,
-}
-
-local DEVELOPER_USER_IDS = {
-	-- [123456789] = true,
-	[78551444] = true,
-}
 
 local DUMMY_TYPES = {
 	Basic = {},
@@ -115,53 +102,15 @@ function DevAdminService.new()
 end
 
 function DevAdminService:GetGroupRank(player)
-	if GROUP_ID <= 0 then
-		return 0
-	end
-
-	local success, rank = pcall(function()
-		return player:GetRankInGroup(GROUP_ID)
-	end)
-
-	if not success or typeof(rank) ~= "number" then
-		return 0
-	end
-
-	return rank
+	return DeveloperPermissions.GetGroupRank(player)
 end
 
 function DevAdminService:IsPlaceOwner(player)
-	if not PLACE_OWNER_CAN_USE_DEV_MENU then
-		return false
-	end
-
-	if game.CreatorType ~= Enum.CreatorType.User then
-		return false
-	end
-
-	return player.UserId == game.CreatorId
+	return DeveloperPermissions.IsPlaceOwner(player)
 end
 
 function DevAdminService:GetRole(player)
-	if not player then
-		return "None"
-	end
-
-	if OWNER_USER_IDS[player.UserId] == true or self:IsPlaceOwner(player) then
-		return "Owner"
-	end
-
-	local rank = self:GetGroupRank(player)
-
-	if rank >= OWNER_RANK then
-		return "Owner"
-	end
-
-	if DEVELOPER_USER_IDS[player.UserId] == true or rank >= MIN_DEVELOPER_RANK then
-		return "Developer"
-	end
-
-	return "None"
+	return DeveloperPermissions.GetRole(player)
 end
 
 function DevAdminService:CanUseDevMenu(player)

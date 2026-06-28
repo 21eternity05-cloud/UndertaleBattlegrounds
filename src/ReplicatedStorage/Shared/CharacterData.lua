@@ -8,6 +8,7 @@ local CharacterData = {
 		Free = true,
 		Prototype = false,
 		ReleaseCharacter = true,
+		Public = true,
 		Moves = {
 			"Knife Dash",
 			"Slash Barrage",
@@ -26,6 +27,7 @@ local CharacterData = {
 		Free = true,
 		Prototype = false,
 		ReleaseCharacter = true,
+		Public = true,
 		Moves = {
 			"Bone Shot",
 			"Bone Zone",
@@ -46,6 +48,9 @@ local CharacterData = {
 		Locked = true,
 		Prototype = true,
 		ReleaseCharacter = false,
+		Public = false,
+		DeveloperOnly = true,
+		WIP = true,
 		Lore = "She enters the Hollow Route because it imitates a child in danger.",
 		Moves = {
 			"Mother's Grip",
@@ -61,6 +66,10 @@ local CharacterData = {
 		DisplayName = "Disbelief Papyrus",
 		Cost = 35,
 		Free = false,
+		ReleaseCharacter = false,
+		Public = false,
+		DeveloperOnly = true,
+		WIP = true,
 	},
 
 	GlitchtaleFrisk = {
@@ -68,6 +77,10 @@ local CharacterData = {
 		DisplayName = "Glitchtale Frisk",
 		Cost = 40,
 		Free = false,
+		ReleaseCharacter = false,
+		Public = false,
+		DeveloperOnly = true,
+		WIP = true,
 	},
 }
 

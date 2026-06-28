@@ -22,6 +22,16 @@ local STEERING_TIME = 0.22
 local WALL_CHECK_DISTANCE = 2.9
 local WALL_CHECK_FRAME_INTERVAL = 2
 local POST_DASH_MAX_HORIZONTAL_SPEED = 48
+local DASH_TRAIL_ACTIVE_TIME = DASH_DURATION + 0.04
+local DASH_TRAIL_LIFETIME = 0.22
+local DASH_TRAIL_CLEANUP_BUFFER = 0.05
+local DASH_TRAIL_FAILSAFE_TIME = 0.8
+local DASH_TRAIL_LIMBS = {
+	"Left Arm",
+	"Right Arm",
+	"Left Leg",
+	"Right Leg",
+}
 
 local canDash = true
 local isDashing = false
@@ -186,22 +196,82 @@ local function getFlatDirection(direction)
 	return flat.Unit
 end
 
-local function createDashDust(root, dashDirection)
-	local dust = Instance.new("Part")
-	dust.Name = "DashDust"
-	dust.Anchored = true
-	dust.CanCollide = false
-	dust.CanTouch = false
-	dust.CanQuery = false
-	dust.Size = Vector3.new(2, 0.15, 2)
-	dust.CFrame = CFrame.lookAt(
-		root.Position - Vector3.new(0, 2.7, 0),
-		root.Position - Vector3.new(0, 2.7, 0) + dashDirection
-	)
-	dust.Transparency = 0.45
-	dust.Parent = workspace
+local function createDashLimbTrails(character)
+	if not character or not character.Parent then
+		return nil
+	end
 
-	Debris:AddItem(dust, 0.15)
+	local createdObjects = {}
+	local cleanedUp = false
+
+	for _, limbName in ipairs(DASH_TRAIL_LIMBS) do
+		local limb = character:FindFirstChild(limbName)
+		if limb and limb:IsA("BasePart") then
+			local upperAttachment = Instance.new("Attachment")
+			upperAttachment.Name = "DashTrailAttachmentA"
+			upperAttachment.Position = Vector3.new(0, limb.Size.Y * 0.45, 0)
+			upperAttachment.Parent = limb
+
+			local lowerAttachment = Instance.new("Attachment")
+			lowerAttachment.Name = "DashTrailAttachmentB"
+			lowerAttachment.Position = Vector3.new(0, -limb.Size.Y * 0.45, 0)
+			lowerAttachment.Parent = limb
+
+			local trail = Instance.new("Trail")
+			trail.Name = "DashLimbTrail"
+			trail.Attachment0 = upperAttachment
+			trail.Attachment1 = lowerAttachment
+			trail.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+			trail.Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0.25),
+				NumberSequenceKeypoint.new(1, 1),
+			})
+			trail.WidthScale = NumberSequence.new(0.2)
+			trail.Lifetime = DASH_TRAIL_LIFETIME
+			trail.MinLength = 0.1
+			trail.MaxLength = 0
+			trail.LightEmission = .2
+			trail.LightInfluence = 0
+			trail.Texture = ""
+			trail.TextureMode = Enum.TextureMode.Stretch
+			trail.FaceCamera = true
+			trail.Parent = limb
+
+			table.insert(createdObjects, trail)
+			table.insert(createdObjects, upperAttachment)
+			table.insert(createdObjects, lowerAttachment)
+
+			Debris:AddItem(trail, DASH_TRAIL_FAILSAFE_TIME)
+			Debris:AddItem(upperAttachment, DASH_TRAIL_FAILSAFE_TIME)
+			Debris:AddItem(lowerAttachment, DASH_TRAIL_FAILSAFE_TIME)
+		end
+	end
+
+	local function cleanup()
+		if cleanedUp then
+			return
+		end
+
+		cleanedUp = true
+
+		for _, object in ipairs(createdObjects) do
+			if object and object:IsA("Trail") then
+				object.Enabled = false
+			end
+		end
+
+		task.delay(DASH_TRAIL_LIFETIME + DASH_TRAIL_CLEANUP_BUFFER, function()
+			for _, object in ipairs(createdObjects) do
+				if object and object.Parent then
+					object:Destroy()
+				end
+			end
+		end)
+	end
+
+	task.delay(DASH_TRAIL_ACTIVE_TIME, cleanup)
+
+	return cleanup
 end
 
 local function getWallRaycastParams(character)
@@ -308,11 +378,18 @@ local function dash()
 	setDashPlaneVelocity(linearVelocity, currentDirection)
 	local lastAppliedDirection = currentDirection
 	local lastFaceDirection = nil
-	createDashDust(root, currentDirection)
+	local cleanupDashTrails = createDashLimbTrails(character)
 
 	local startTime = os.clock()
 	local cleanedUp = false
 	local wallCheckFrame = WALL_CHECK_FRAME_INTERVAL - 1
+	local connection = nil
+	local diedConnection = nil
+	local ancestryConnection = nil
+	local characterRemovingConnection = nil
+
+	Debris:AddItem(linearVelocity, DASH_DURATION + 1)
+	Debris:AddItem(attachment, DASH_DURATION + 1)
 
 	local function cleanupDash()
 		if cleanedUp then
@@ -320,6 +397,31 @@ local function dash()
 		end
 
 		cleanedUp = true
+
+		if connection then
+			connection:Disconnect()
+			connection = nil
+		end
+
+		if diedConnection then
+			diedConnection:Disconnect()
+			diedConnection = nil
+		end
+
+		if ancestryConnection then
+			ancestryConnection:Disconnect()
+			ancestryConnection = nil
+		end
+
+		if characterRemovingConnection then
+			characterRemovingConnection:Disconnect()
+			characterRemovingConnection = nil
+		end
+
+		if cleanupDashTrails then
+			cleanupDashTrails()
+			cleanupDashTrails = nil
+		end
 
 		if linearVelocity and linearVelocity.Parent then
 			linearVelocity:Destroy()
@@ -342,24 +444,32 @@ local function dash()
 		end)
 	end
 
-	local connection
+	diedConnection = humanoid.Died:Connect(cleanupDash)
+	ancestryConnection = character.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			cleanupDash()
+		end
+	end)
+	characterRemovingConnection = player.CharacterRemoving:Connect(function(removedCharacter)
+		if removedCharacter == character then
+			cleanupDash()
+		end
+	end)
+
 	connection = RunService.PreRender:Connect(function(deltaTime)
 		local elapsed = os.clock() - startTime
 
 		if not character or not character.Parent then
-			connection:Disconnect()
 			cleanupDash()
 			return
 		end
 
 		if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
-			connection:Disconnect()
 			cleanupDash()
 			return
 		end
 
 		if not root or not root.Parent then
-			connection:Disconnect()
 			cleanupDash()
 			return
 		end
@@ -368,13 +478,11 @@ local function dash()
 			or character:GetAttribute("Guardbroken")
 			or isDashLocked(character)
 		then
-			connection:Disconnect()
 			cleanupDash()
 			return
 		end
 
 		if elapsed >= DASH_DURATION then
-			connection:Disconnect()
 			cleanupDash()
 			return
 		end
@@ -397,7 +505,6 @@ local function dash()
 			wallCheckFrame = 0
 
 			if isWallAhead(character, root, currentDirection) then
-				connection:Disconnect()
 				cleanupDash()
 				return
 			end

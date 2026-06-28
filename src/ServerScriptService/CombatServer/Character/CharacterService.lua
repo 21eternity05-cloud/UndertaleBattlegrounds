@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CharacterData = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("CharacterData"))
+local DeveloperPermissions = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("DeveloperPermissions"))
 
 local CharacterService = {}
 CharacterService.__index = CharacterService
@@ -93,9 +94,27 @@ function CharacterService:IsValidCharacter(characterName)
 	return self.Config.ValidCharacters and self.Config.ValidCharacters[characterName] == true
 end
 
+function CharacterService:CanPlayerAccessCharacter(player, characterName)
+	local data = CharacterData[characterName]
+
+	if data then
+		return DeveloperPermissions.CanAccessCharacter(player, data)
+	end
+
+	return false
+end
+
 function CharacterService:IsCharacterUnlocked(player, characterName)
 	if not self:IsValidCharacter(characterName) then
 		return false
+	end
+
+	if not self:CanPlayerAccessCharacter(player, characterName) then
+		return false
+	end
+
+	if DeveloperPermissions.IsDeveloper(player) then
+		return true
 	end
 
 	if self.ProgressionService and self.ProgressionService.IsCharacterUnlocked then
@@ -221,12 +240,13 @@ function CharacterService:ApplyCharacterAttributes(player, character, characterN
 	end
 end
 
-function CharacterService:ResetRuntimeMeters(player, character, reason)
+function CharacterService:ResetRuntimeMeters(player, character, reason, options)
 	if not player then
 		return
 	end
 
 	character = character or player.Character
+	options = options or {}
 
 	if self.SoulBurstService and self.SoulBurstService.SetSoulBurst then
 		self.SoulBurstService:SetSoulBurst(player, self.Config.SoulBurstMax or self.SoulBurstService:GetMax(), reason or "CharacterSetup")
@@ -236,11 +256,15 @@ function CharacterService:ResetRuntimeMeters(player, character, reason)
 		character:SetAttribute("Soul", maxSoul)
 	end
 
-	if self.UltService and self.UltService.SetUlt then
-		self.UltService:SetUlt(player, 0, reason or "CharacterSetup")
-	else
-		player:SetAttribute("Ult", 0)
-		player:SetAttribute("Ultimate", 0)
+	if options.ResetUlt ~= false then
+		if self.UltService and self.UltService.SetUlt then
+			self.UltService:SetUlt(player, 0, reason or "CharacterSetup")
+		else
+			player:SetAttribute("Ult", 0)
+			player:SetAttribute("Ultimate", 0)
+		end
+	elseif self.UltService and self.UltService.SendUpdate then
+		self.UltService:SendUpdate(player)
 	end
 end
 
@@ -514,6 +538,12 @@ function CharacterService:SetCharacter(player, characterName, options)
 		return
 	end
 
+	if not self:CanPlayerAccessCharacter(player, characterName) then
+		warn("[CharacterService] Developer-only character select rejected:", player.Name, characterName)
+		self:NotifyPlayer(player, "That character is not available yet.")
+		return false
+	end
+
 	if not self:IsCharacterUnlocked(player, characterName) then
 		warn("[CharacterService] Locked character select rejected:", player.Name, characterName)
 
@@ -597,7 +627,9 @@ function CharacterService:RunSpawnSetup(player, character)
 		self.StateService:SetupCharacter(character)
 	end
 
-	self:ResetRuntimeMeters(player, character, "Spawn")
+	self:ResetRuntimeMeters(player, character, "Spawn", {
+		ResetUlt = false,
+	})
 
 	self:BeginCharacterSetupLock(character)
 

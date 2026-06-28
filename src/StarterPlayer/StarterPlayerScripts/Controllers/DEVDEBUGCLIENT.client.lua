@@ -562,7 +562,7 @@ renderData = function()
 	makeSectionTitle("Data Manager")
 
 	if status.CanUseDataManager ~= true then
-		makeParagraph("Owner-only tools are locked for this account.")
+		makeParagraph("Data Manager tools are locked for this account.")
 		return
 	end
 
@@ -778,7 +778,7 @@ end
 
 local function showTab(tabName)
 	if tabName == "Data" and status.CanUseDataManager ~= true then
-		setStatus("Data Manager is owner-only.", false)
+		setStatus("Data Manager is locked for this account.", false)
 		return
 	end
 
@@ -819,7 +819,7 @@ local function makeTab(name, label, disabled)
 end
 
 makeTab("Combat", "Combat Debug", false)
-makeTab("Data", status.CanUseDataManager and "Data Manager" or "Data Manager\nOwner only", status.CanUseDataManager ~= true)
+makeTab("Data", status.CanUseDataManager and "Data Manager" or "Data Manager\nLocked", status.CanUseDataManager ~= true)
 makeTab("Abuse", status.CanUseAbuseTools and "ABUSE" or "ABUSE\nOwner only", false)
 
 local dragging = false

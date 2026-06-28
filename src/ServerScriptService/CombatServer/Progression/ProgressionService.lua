@@ -9,6 +9,7 @@ local TitleData = require(Shared:WaitForChild("TitleData"))
 local CustomizationData = require(Shared:WaitForChild("CustomizationData"))
 local EmoteData = require(Shared:WaitForChild("EmoteData"))
 local DevProductData = require(Shared:WaitForChild("DevProductData"))
+local DeveloperPermissions = require(Shared:WaitForChild("DeveloperPermissions"))
 local Assets = ReplicatedStorage:WaitForChild("Assets")
 local CharactersFolder = Assets:WaitForChild("Characters")
 
@@ -249,7 +250,10 @@ function ProgressionService:MakeDefaultProfile()
 	local ownedCharacters = {}
 
 	for characterName, data in pairs(CharacterData) do
-		if typeof(data) == "table" and (data.Free == true or (data.Cost or 0) <= 0) then
+		if typeof(data) == "table"
+			and DeveloperPermissions.IsPublicCharacter(data)
+			and (data.Free == true or (data.Cost or 0) <= 0)
+		then
 			ownedCharacters[characterName] = true
 		end
 	end
@@ -845,6 +849,14 @@ function ProgressionService:IsCharacterUnlocked(player, characterName)
 		return false
 	end
 
+	if not DeveloperPermissions.CanAccessCharacter(player, data) then
+		return false
+	end
+
+	if DeveloperPermissions.IsDeveloper(player) then
+		return true
+	end
+
 	if data.Free == true or (data.Cost or 0) <= 0 then
 		return true
 	end
@@ -859,6 +871,10 @@ function ProgressionService:PurchaseCharacter(player, characterName)
 
 	if not data then
 		return false, "UnknownCharacter"
+	end
+
+	if not DeveloperPermissions.IsPublicCharacter(data) then
+		return false, "UnavailableCharacter"
 	end
 
 	if self:IsCharacterUnlocked(player, characterName) then
