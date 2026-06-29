@@ -211,7 +211,63 @@
       "$className": "ServerScriptService",
 
       "CombatServer": {
-        "$path": "src/ServerScriptService/CombatServer"
+        "$className": "Folder",
+
+        "CombatServer": {
+          "$path": "src/ServerScriptService/CombatServer/CombatServer.server.lua"
+        },
+
+        "Core": {
+          "$path": "src/ServerScriptService/CombatServer/Core"
+        },
+
+        "Combat": {
+          "$path": "src/ServerScriptService/CombatServer/Combat"
+        },
+
+        "Character": {
+          "$path": "src/ServerScriptService/CombatServer/Character"
+        },
+
+        "Effects": {
+          "$className": "Folder",
+
+          "AnimationService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/AnimationService.lua"
+          },
+
+          "AwakeningMusicService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/AwakeningMusicService.lua"
+          },
+
+          "CinematicService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/CinematicService.lua"
+          },
+
+          "DamageNumberService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/DamageNumberService.lua"
+          },
+
+          "DebrisVFXService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/DebrisVFXService.lua"
+          },
+
+          "VFXService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/VFXService.lua"
+          }
+        },
+
+        "Progression": {
+          "$path": "src/ServerScriptService/CombatServer/Progression"
+        },
+
+        "Dev": {
+          "$path": "src/ServerScriptService/CombatServer/Dev"
+        },
+
+        "WorldBridge": {
+          "$path": "src/ServerScriptService/CombatServer/WorldBridge"
+        }
       },
 
       "Services": {

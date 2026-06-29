@@ -39,6 +39,7 @@ CombatConfig.DebugHitboxes = false
 CombatConfig.DebugKnockback = false
 CombatConfig.DebugDamageNumbers = false
 CombatConfig.DebugEnabled = false
+CombatConfig.DebugSplatPlaceholders = false
 
 CombatConfig.PostM5M1Immunity = 1
 

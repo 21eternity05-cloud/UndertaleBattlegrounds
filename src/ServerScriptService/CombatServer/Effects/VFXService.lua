@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
+local DebrisVFXService = require(script.Parent:WaitForChild("DebrisVFXService"))
 
 local VFXService = {}
 VFXService.__index = VFXService
@@ -54,6 +55,7 @@ function VFXService.new(config)
 	end
 
 	self.CharacterVFXModules = {}
+	self.DebrisVFXService = DebrisVFXService.new(config)
 
 	return self
 end
@@ -486,6 +488,26 @@ end
 function VFXService:PlayBlockBreak(targetRoot)
 	self:EmitAttachmentOnPart("BlockBreak", targetRoot, 2)
 	self:PlaySFXAtPart("BlockBreak", targetRoot, 2)
+end
+
+function VFXService:SpawnGroundDebrisRing(positionOrCFrame, options)
+	if not self.DebrisVFXService then return end
+	return self.DebrisVFXService:SpawnGroundRing(positionOrCFrame, options)
+end
+
+function VFXService:SpawnWallImpactDebris(positionOrCFrame, normal, options)
+	if not self.DebrisVFXService then return end
+	return self.DebrisVFXService:SpawnWallImpact(positionOrCFrame, normal, options)
+end
+
+function VFXService:StartDebrisTrail(character, attachmentsOrOffsets, options)
+	if not self.DebrisVFXService then return nil end
+	return self.DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, options)
+end
+
+function VFXService:StopDebrisTrail(trailHandle)
+	if not self.DebrisVFXService then return end
+	self.DebrisVFXService:StopDebrisTrail(trailHandle)
 end
 
 function VFXService:PlayCharacterMoveVFX(character, moveName, targetCharacter, targetRoot)

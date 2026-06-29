@@ -183,6 +183,12 @@ function MovementService:IsKnockbackDebugEnabled()
 	return false
 end
 
+function MovementService:IsSplatDebugEnabled()
+	return (self.Config and self.Config.DebugSplatPlaceholders == true)
+		or workspace:GetAttribute("DebugSplatPlaceholders") == true
+		or workspace:GetAttribute("DebugEnabled") == true
+end
+
 function MovementService:GetBattlegroundsMap()
 	local mapFolder = workspace:FindFirstChild("BattlegroundsMap")
 
@@ -277,11 +283,34 @@ function MovementService:PlayWallImmunityIndicator(raycastResult)
 		position += normal.Unit * 0.035
 	end
 
-	local part = self:CreateWallImmunityPart(position, normal)
+	if self.VFXService and self.VFXService.SpawnWallImpactDebris then
+		self.VFXService:SpawnWallImpactDebris(position, normal, {
+			Color = Color3.fromRGB(230, 230, 235),
+			Lifetime = 0.85,
+		})
+	end
 
 	if self.VFXService and self.VFXService.PlaySFXAtPart then
-		self.VFXService:PlaySFXAtPart("GroundSplat", part, 3)
+		local soundAnchor = Instance.new("Part")
+		soundAnchor.Name = "WallImpactSoundAnchor"
+		soundAnchor.Anchored = true
+		soundAnchor.CanCollide = false
+		soundAnchor.CanTouch = false
+		soundAnchor.CanQuery = false
+		soundAnchor.Transparency = 1
+		soundAnchor.Size = Vector3.new(0.2, 0.2, 0.2)
+		soundAnchor.CFrame = CFrame.new(position)
+		soundAnchor.Parent = workspace
+
+		self.VFXService:PlaySFXAtPart("GroundSplat", soundAnchor, 3)
+		Debris:AddItem(soundAnchor, 3)
 	end
+
+	if not self:IsSplatDebugEnabled() then
+		return
+	end
+
+	self:CreateWallImmunityPart(position, normal)
 end
 
 function MovementService:GetKnockbackDebugFolder()
@@ -777,6 +806,10 @@ function MovementService:ApplyLinearVelocityUntilStopped(root, velocity, maxForc
 end
 
 function MovementService:CreateGroundSplatPart(position, data)
+	if not self:IsSplatDebugEnabled() then
+		return nil
+	end
+
 	local part = Instance.new("Part")
 	part.Name = "GroundSlamSplatPlaceholder"
 	part.Anchored = true
@@ -802,6 +835,18 @@ function MovementService:PlayGroundSplatVFX(targetRoot, groundPosition, services
 
 	if not vfxService then
 		return
+	end
+
+	if vfxService.SpawnGroundDebrisRing then
+		vfxService:SpawnGroundDebrisRing(groundPosition, {
+			Radius = 7,
+			Count = 14,
+			Lifetime = 1.25,
+			Exclude = {
+				targetRoot and targetRoot:FindFirstAncestorOfClass("Model"),
+				services.AttackerCharacter,
+			},
+		})
 	end
 
 	if vfxService.EmitAttachmentAtWorldPosition then

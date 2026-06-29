@@ -58,6 +58,8 @@ function KnifeDash.Execute(ctx)
 
 	local originalWalkSpeed = humanoid.WalkSpeed
 	local dashFOVActive = false
+	local debrisTrailHandle = nil
+	local debrisTrailAttachments = {}
 
 	local function playCharaSFX(soundName, parentPart, lifetime)
 		CharaMoveUtil.PlaySFX(ctx, soundName, parentPart or root, lifetime or 2)
@@ -108,6 +110,57 @@ function KnifeDash.Execute(ctx)
 		end
 	end
 
+	local function stopDashDebrisTrail()
+		if debrisTrailHandle and ctx.VFXService and ctx.VFXService.StopDebrisTrail then
+			ctx.VFXService:StopDebrisTrail(debrisTrailHandle)
+		end
+
+		debrisTrailHandle = nil
+
+		for _, trailAttachment in ipairs(debrisTrailAttachments) do
+			if trailAttachment and trailAttachment.Parent then
+				trailAttachment:Destroy()
+			end
+		end
+
+		table.clear(debrisTrailAttachments)
+	end
+
+	local function startDashDebrisTrail()
+		if not ctx.VFXService or not ctx.VFXService.StartDebrisTrail then
+			return
+		end
+
+		stopDashDebrisTrail()
+
+		local leftAttachment = Instance.new("Attachment")
+		leftAttachment.Name = "KnifeDashDebrisLeft"
+		leftAttachment.Position = Vector3.new(-2.15, -2.5, 1.2)
+		leftAttachment.Parent = root
+
+		local rightAttachment = Instance.new("Attachment")
+		rightAttachment.Name = "KnifeDashDebrisRight"
+		rightAttachment.Position = Vector3.new(2.15, -2.5, 1.2)
+		rightAttachment.Parent = root
+
+		debrisTrailAttachments = {
+			leftAttachment,
+			rightAttachment,
+		}
+
+		debrisTrailHandle = ctx.VFXService:StartDebrisTrail(character, debrisTrailAttachments, {
+			TickRate = 0.05,
+			Lifetime = 0.8,
+			SpawnPerSide = 1,
+			MinSize = Vector3.new(0.25, 0.15, 0.25),
+			MaxSize = Vector3.new(0.75, 0.35, 0.75),
+			ScatterRadius = 0.7,
+			RaycastDistance = 8,
+			UseGroundColor = true,
+			Exclude = character,
+		})
+	end
+
 	local function stopKnifeDashAnimation(delayTime)
 		task.delay(delayTime or 0, function()
 			if not character or not character.Parent then return end
@@ -132,6 +185,7 @@ function KnifeDash.Execute(ctx)
 		print("[Chara] Knife Dash canceled during startup:", reason or "unknown")
 
 		restoreStartupMovement()
+		stopDashDebrisTrail()
 		playCharaMoveVFX("KnifeDashTrailStop")
 		stopKnifeDashAnimation(0)
 
@@ -192,6 +246,7 @@ function KnifeDash.Execute(ctx)
 
 	playCharaSFX("KnifeChargeEnd", root, 2)
 	playCharaMoveVFX("KnifeDashTrailStart")
+	startDashDebrisTrail()
 
 	-- Clean FOV increase starts only when the dash begins.
 	setDashFOVActive(true)
@@ -259,6 +314,7 @@ function KnifeDash.Execute(ctx)
 
 	local function cleanupDash()
 		setDashFOVActive(false)
+		stopDashDebrisTrail()
 
 		if linearVelocity then
 			linearVelocity:Destroy()

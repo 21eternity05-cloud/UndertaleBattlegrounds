@@ -460,6 +460,14 @@ function M1Service:PlayM1ActionVisual(character, actionName, targetCharacter, ta
 end
 
 function M1Service:CreateGroundSplatPart(position, data)
+	if not (
+		(self.Config and self.Config.DebugSplatPlaceholders == true)
+		or workspace:GetAttribute("DebugSplatPlaceholders") == true
+		or workspace:GetAttribute("DebugEnabled") == true
+	) then
+		return
+	end
+
 	local part = Instance.new("Part")
 	part.Name = "GroundSlamSplatPlaceholder"
 	part.Anchored = true
@@ -687,6 +695,18 @@ function M1Service:MonitorDownslamGroundSplat(attackerCharacter, targetCharacter
 			targetRoot.AssemblyLinearVelocity = Vector3.zero
 
 			self:CreateGroundSplatPart(groundResult.Position + Vector3.new(0, 0.08, 0), data)
+
+			if self.VFXService.SpawnGroundDebrisRing then
+				self.VFXService:SpawnGroundDebrisRing(groundResult.Position, {
+					Radius = 7,
+					Count = 14,
+					Lifetime = 1.25,
+					Exclude = {
+						targetCharacter,
+						attackerCharacter,
+					},
+				})
+			end
 
 			self.VFXService:EmitAttachmentAtWorldPosition(
 				"GroundSplatCrack",
