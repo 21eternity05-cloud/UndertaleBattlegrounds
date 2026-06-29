@@ -1,3 +1,8 @@
+-- Character visibility:
+-- Released = true means public players can see, select, and buy this character.
+-- DeveloperOnly = true means dev/admin players may access this character for testing.
+-- PublicPreview = true means public players can see this character as COMING SOON, but cannot select or buy it unless Released is true.
+-- PublicPreview = false means hide this character from public preview entirely.
 local CharacterData = {
 	Chara = {
 		Id = "Chara",
@@ -6,9 +11,9 @@ local CharacterData = {
 		Description = "Fast, aggressive pressure with sharp confirms and dangerous close-range punishment.",
 		Cost = 0,
 		Free = true,
-		Prototype = false,
-		ReleaseCharacter = true,
-		Public = true,
+		Released = true,
+		DeveloperOnly = false,
+		PublicPreview = true,
 		Moves = {
 			"Knife Dash",
 			"Slash Barrage",
@@ -25,9 +30,9 @@ local CharacterData = {
 		Description = "Projectile pressure, traps, blue magic control, and punishing ultimate confirms.",
 		Cost = 0,
 		Free = true,
-		Prototype = false,
-		ReleaseCharacter = true,
-		Public = true,
+		Released = true,
+		DeveloperOnly = false,
+		PublicPreview = true,
 		Moves = {
 			"Bone Shot",
 			"Bone Zone",
@@ -46,11 +51,9 @@ local CharacterData = {
 		Currency = "Dust",
 		Free = false,
 		Locked = true,
-		Prototype = true,
-		ReleaseCharacter = false,
-		Public = false,
+		Released = false,
 		DeveloperOnly = true,
-		WIP = true,
+		PublicPreview = false,
 		Lore = "She enters the Hollow Route because it imitates a child in danger.",
 		Moves = {
 			"Mother's Grip",
@@ -66,10 +69,9 @@ local CharacterData = {
 		DisplayName = "Disbelief Papyrus",
 		Cost = 35,
 		Free = false,
-		ReleaseCharacter = false,
-		Public = false,
+		Released = false,
 		DeveloperOnly = true,
-		WIP = true,
+		PublicPreview = true,
 	},
 
 	GlitchtaleFrisk = {
@@ -77,10 +79,9 @@ local CharacterData = {
 		DisplayName = "Glitchtale Frisk",
 		Cost = 40,
 		Free = false,
-		ReleaseCharacter = false,
-		Public = false,
+		Released = false,
 		DeveloperOnly = true,
-		WIP = true,
+		PublicPreview = true,
 	},
 }
 

@@ -9,8 +9,78 @@ function StateService.new(config, animationService, vfxService)
 	self.Config = config
 	self.AnimationService = animationService
 	self.VFXService = vfxService
+	self.BlockVisualConnections = setmetatable({}, { __mode = "k" })
 
 	return self
+end
+
+function StateService:ReconcileBlockingVisuals(character)
+	if not self.VFXService or not character or not character.Parent then
+		return
+	end
+
+	if self.VFXService.ReconcileBlockVFX then
+		self.VFXService:ReconcileBlockVFX(character)
+	elseif character:GetAttribute("Blocking") == true then
+		self.VFXService:StartBlockVFX(character)
+	else
+		self.VFXService:StopBlockVFX(character)
+	end
+end
+
+function StateService:HookBlockingVisualState(character)
+	if not character or self.BlockVisualConnections[character] then
+		return
+	end
+
+	local connections = {}
+
+	local function reconcile()
+		self:ReconcileBlockingVisuals(character)
+	end
+
+	for _, attributeName in ipairs({ "Blocking", "Stunned", "Guardbroken" }) do
+		table.insert(connections, character:GetAttributeChangedSignal(attributeName):Connect(reconcile))
+	end
+
+	local deathConnected = false
+	local function connectHumanoid(humanoid)
+		if deathConnected or not humanoid or not humanoid:IsA("Humanoid") then
+			return
+		end
+
+		deathConnected = true
+		table.insert(connections, humanoid.Died:Connect(function()
+			if self.VFXService and self.VFXService.StopBlockVFX then
+				self.VFXService:StopBlockVFX(character)
+			end
+		end))
+	end
+
+	connectHumanoid(character:FindFirstChildOfClass("Humanoid"))
+
+	table.insert(connections, character.ChildAdded:Connect(function(child)
+		connectHumanoid(child)
+	end))
+
+	table.insert(connections, character.AncestryChanged:Connect(function(_, parent)
+		if parent then
+			return
+		end
+
+		if self.VFXService and self.VFXService.StopBlockVFX then
+			self.VFXService:StopBlockVFX(character)
+		end
+
+		for _, connection in ipairs(connections) do
+			connection:Disconnect()
+		end
+
+		self.BlockVisualConnections[character] = nil
+	end))
+
+	self.BlockVisualConnections[character] = connections
+	self:ReconcileBlockingVisuals(character)
 end
 
 function StateService:SetupCharacter(character)
@@ -77,6 +147,8 @@ function StateService:SetupCharacter(character)
 	if not character:GetAttribute("CharacterName") then
 		character:SetAttribute("CharacterName", self.Config.DefaultCharacterName or "Chara")
 	end
+
+	self:HookBlockingVisualState(character)
 end
 
 function StateService:StartCharacterSetup()

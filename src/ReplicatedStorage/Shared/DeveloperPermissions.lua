@@ -72,10 +72,16 @@ function DeveloperPermissions.IsOwner(player)
 end
 
 function DeveloperPermissions.IsPublicCharacter(data)
-	return typeof(data) == "table"
-		and data.ReleaseCharacter == true
+	if typeof(data) ~= "table" or data.Hidden == true then
+		return false
+	end
+
+	if data.Released ~= nil then
+		return data.Released == true
+	end
+
+	return data.ReleaseCharacter == true
 		and data.Public ~= false
-		and data.Hidden ~= true
 		and data.DeveloperOnly ~= true
 		and data.WIP ~= true
 end
@@ -85,7 +91,31 @@ function DeveloperPermissions.CanAccessCharacter(player, data)
 		return true
 	end
 
+	if data.DeveloperOnly ~= nil then
+		return data.DeveloperOnly == true and DeveloperPermissions.IsDeveloper(player)
+	end
+
 	return DeveloperPermissions.IsDeveloper(player)
+end
+
+function DeveloperPermissions.CanPreviewCharacter(player, data)
+	if typeof(data) ~= "table" then
+		return false
+	end
+
+	if DeveloperPermissions.CanAccessCharacter(player, data) then
+		return true
+	end
+
+	if data.Hidden == true then
+		return false
+	end
+
+	if data.PublicPreview ~= nil then
+		return data.PublicPreview == true
+	end
+
+	return false
 end
 
 return DeveloperPermissions

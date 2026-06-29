@@ -305,7 +305,9 @@ local function canShowCharacter(characterName)
 end
 
 local function canPreviewCharacter(characterName)
-	return getCharacterData(characterName) ~= nil
+	local data = getCharacterData(characterName)
+
+	return DeveloperPermissions.CanPreviewCharacter(player, data)
 end
 
 local function isPreviewOnlyCharacter(characterName)
@@ -1915,15 +1917,32 @@ local function makeTopbarIcon(name, label, callback)
 	return icon
 end
 
-local function rebuildCharacterDropdown()
-	for _, icon in ipairs(dropdownIcons) do
+local function destroyCharacterDropdownIcons()
+	if icons.Characters then
 		pcall(function()
-			icon:destroy()
+			icons.Characters:setDropdown({})
 		end)
 	end
 
-	dropdownIcons = {}
+	for _, itemIcon in ipairs(dropdownIcons) do
+		if itemIcon then
+			pcall(function()
+				if itemIcon.destroy then
+					itemIcon:destroy()
+				elseif itemIcon.Destroy then
+					itemIcon:Destroy()
+				end
+			end)
+		end
+	end
 
+	table.clear(dropdownIcons)
+end
+
+local function rebuildCharacterDropdown()
+	destroyCharacterDropdownIcons()
+
+	local newDropdownIcons = {}
 	for _, characterName in ipairs(getSortedCharacters(true)) do
 		local data = getCharacterData(characterName)
 
@@ -1939,9 +1958,11 @@ local function rebuildCharacterDropdown()
 				requestPlayAs(characterName)
 			end)
 
-			table.insert(dropdownIcons, itemIcon)
+			table.insert(newDropdownIcons, itemIcon)
 		end
 	end
+
+	dropdownIcons = newDropdownIcons
 
 	if icons.Characters then
 		icons.Characters:setDropdown(dropdownIcons)

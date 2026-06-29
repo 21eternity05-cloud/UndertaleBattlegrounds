@@ -1,9 +1,32 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
-local TweenService = game:GetService("TweenService")
 
 local VFXService = {}
 VFXService.__index = VFXService
+
+local BLOCK_BILLBOARD_NAME = "ActiveBlockBillboard"
+local BLOCK_ATTACHMENT_NAME = "ActiveBlockVFX"
+
+local function forceBlockBillboardVisible(billboard)
+	if not billboard then return end
+
+	billboard:SetAttribute("BlockActive", true)
+	billboard.Enabled = true
+
+	for _, descendant in ipairs(billboard:GetDescendants()) do
+		if descendant:IsA("GuiObject") then
+			descendant.Visible = true
+		end
+
+		if descendant:IsA("ImageLabel") or descendant:IsA("ImageButton") then
+			descendant.ImageTransparency = 0
+		elseif descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+			descendant.TextTransparency = 0
+		elseif descendant:IsA("Frame") then
+			descendant.BackgroundTransparency = 0
+		end
+	end
+end
 
 function VFXService.new(config)
 	local self = setmetatable({}, VFXService)
@@ -320,14 +343,14 @@ function VFXService:StartBlockBillboard(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local existingBillboard = root:FindFirstChild("ActiveBlockBillboard")
+	local existingBillboard = root:FindFirstChild(BLOCK_BILLBOARD_NAME)
 	if existingBillboard then
-		existingBillboard:SetAttribute("BlockActive", true)
-		existingBillboard.Enabled = true
+		forceBlockBillboardVisible(existingBillboard)
 
-		local existingImage = existingBillboard:FindFirstChildWhichIsA("ImageLabel", true)
-		if existingImage then
-			existingImage.ImageTransparency = 0
+		for _, child in ipairs(root:GetChildren()) do
+			if child ~= existingBillboard and child.Name == BLOCK_BILLBOARD_NAME then
+				child:Destroy()
+			end
 		end
 
 		return
@@ -340,31 +363,12 @@ function VFXService:StartBlockBillboard(character)
 	if not template or not template:IsA("BillboardGui") then return end
 
 	local billboard = template:Clone()
-	billboard.Name = "ActiveBlockBillboard"
+	billboard.Name = BLOCK_BILLBOARD_NAME
 	billboard:SetAttribute("BlockActive", true)
 	billboard.Adornee = root
 	billboard.Enabled = true
 	billboard.Parent = root
-
-	local image = billboard:FindFirstChildWhichIsA("ImageLabel", true)
-	if image then
-		image.ImageTransparency = 1
-
-		local originalSize = image.Size
-		image.Size = UDim2.fromScale(0.65, 0.65)
-
-		TweenService:Create(
-			image,
-			TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ ImageTransparency = 0 }
-		):Play()
-
-		TweenService:Create(
-			image,
-			TweenInfo.new(0.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-			{ Size = originalSize }
-		):Play()
-	end
+	forceBlockBillboardVisible(billboard)
 end
 
 function VFXService:StopBlockBillboard(character)
@@ -373,25 +377,17 @@ function VFXService:StopBlockBillboard(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local billboard = root:FindFirstChild("ActiveBlockBillboard")
-	if not billboard then return end
-	billboard:SetAttribute("BlockActive", false)
+	local billboards = {}
+	for _, child in ipairs(root:GetChildren()) do
+		if child.Name == BLOCK_BILLBOARD_NAME then
+			table.insert(billboards, child)
+		end
+	end
 
-	local image = billboard:FindFirstChildWhichIsA("ImageLabel", true)
+	if #billboards == 0 then return end
 
-	if image then
-		TweenService:Create(
-			image,
-			TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ ImageTransparency = 1 }
-		):Play()
-
-		task.delay(0.13, function()
-			if billboard and billboard.Parent and billboard:GetAttribute("BlockActive") ~= true then
-				billboard:Destroy()
-			end
-		end)
-	else
+	for _, billboard in ipairs(billboards) do
+		billboard:SetAttribute("BlockActive", false)
 		billboard:Destroy()
 	end
 end
@@ -402,12 +398,18 @@ function VFXService:StartBlockVFX(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local active = root:FindFirstChild("ActiveBlockVFX")
+	local active = root:FindFirstChild(BLOCK_ATTACHMENT_NAME)
 	if active then
 		active:SetAttribute("BlockActive", true)
 		self:SetAttachmentEmittersEnabled(active, true)
+
+		for _, child in ipairs(root:GetChildren()) do
+			if child ~= active and child.Name == BLOCK_ATTACHMENT_NAME then
+				child:Destroy()
+			end
+		end
 	else
-		active = self:EnableAttachmentOnPart("Block", root, nil, "ActiveBlockVFX")
+		active = self:EnableAttachmentOnPart("Block", root, nil, BLOCK_ATTACHMENT_NAME)
 		if active then
 			active:SetAttribute("BlockActive", true)
 		end
@@ -422,19 +424,32 @@ function VFXService:StopBlockVFX(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local active = root:FindFirstChild("ActiveBlockVFX")
-	if active then
-		active:SetAttribute("BlockActive", false)
-		self:SetAttachmentEmittersEnabled(active, false)
-
-		task.delay(0.75, function()
-			if active and active.Parent and active:GetAttribute("BlockActive") ~= true then
-				active:Destroy()
-			end
-		end)
+	for _, active in ipairs(root:GetChildren()) do
+		if active.Name == BLOCK_ATTACHMENT_NAME then
+			active:SetAttribute("BlockActive", false)
+			self:SetAttachmentEmittersEnabled(active, false)
+			active:Destroy()
+		end
 	end
 
 	self:StopBlockBillboard(character)
+end
+
+function VFXService:ReconcileBlockVFX(character)
+	if not character or not character.Parent then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local shouldShow = character:GetAttribute("Blocking") == true
+		and character:GetAttribute("Stunned") ~= true
+		and character:GetAttribute("Guardbroken") ~= true
+		and humanoid
+		and humanoid.Health > 0
+
+	if shouldShow then
+		self:StartBlockVFX(character)
+	else
+		self:StopBlockVFX(character)
+	end
 end
 
 function VFXService:EmitHitVFXOnVictim(targetRoot, attackerCharacter)
