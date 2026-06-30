@@ -7,6 +7,7 @@ VFXService.__index = VFXService
 
 local BLOCK_BILLBOARD_NAME = "ActiveBlockBillboard"
 local BLOCK_ATTACHMENT_NAME = "ActiveBlockVFX"
+local IMMUNITY_HIGHLIGHT_NAME = "ActiveImmunityHighlight"
 
 local function forceBlockBillboardVisible(billboard)
 	if not billboard then return end
@@ -451,6 +452,60 @@ function VFXService:ReconcileBlockVFX(character)
 		self:StartBlockVFX(character)
 	else
 		self:StopBlockVFX(character)
+	end
+end
+
+function VFXService:EnsureImmunityHighlight(character)
+	if not character or not character.Parent then return nil end
+
+	local highlight = character:FindFirstChild(IMMUNITY_HIGHLIGHT_NAME)
+	if highlight and highlight:IsA("Highlight") then
+		for _, child in ipairs(character:GetChildren()) do
+			if child ~= highlight and child.Name == IMMUNITY_HIGHLIGHT_NAME then
+				child:Destroy()
+			end
+		end
+	else
+		if highlight then
+			highlight:Destroy()
+		end
+
+		highlight = Instance.new("Highlight")
+		highlight.Name = IMMUNITY_HIGHLIGHT_NAME
+		highlight.Parent = character
+	end
+
+	highlight.FillColor = Color3.fromRGB(170, 70, 255)
+	highlight.OutlineColor = Color3.fromRGB(170, 70, 255)
+	highlight.FillTransparency = 1
+	highlight.OutlineTransparency = 0.15
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+
+	return highlight
+end
+
+function VFXService:ClearImmunityHighlight(character)
+	if not character then return end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if child.Name == IMMUNITY_HIGHLIGHT_NAME then
+			child:Destroy()
+		end
+	end
+end
+
+function VFXService:ReconcileImmunityHighlight(character)
+	if not character or not character.Parent then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local alive = humanoid and humanoid.Health > 0
+	local wallImmune = character:GetAttribute("WallImmune") == true
+	local m1Immune = character:GetAttribute("M1Immune") == true
+
+	if alive and (wallImmune or m1Immune) then
+		self:EnsureImmunityHighlight(character)
+	else
+		self:ClearImmunityHighlight(character)
 	end
 end
 

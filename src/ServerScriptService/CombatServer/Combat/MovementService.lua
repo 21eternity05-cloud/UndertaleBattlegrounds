@@ -15,6 +15,7 @@ function MovementService.new(config)
 	self.ActiveCombatKnockbacks = {}
 	self.ActiveCollisionChecks = {}
 	self.ActiveGroundSplatDownslams = {}
+	self.WallImmunityTokens = setmetatable({}, { __mode = "k" })
 
 	return self
 end
@@ -313,6 +314,55 @@ function MovementService:PlayWallImmunityIndicator(raycastResult)
 	self:CreateWallImmunityPart(position, normal)
 end
 
+function MovementService:ReconcileCharacterImmunityHighlight(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	local now = os.clock()
+	local wallImmuneUntil = character:GetAttribute("WallComboProtectedUntil") or 0
+	local m1ImmuneUntil = character:GetAttribute("M1ImmuneUntil") or 0
+
+	character:SetAttribute("WallImmune", now < wallImmuneUntil)
+	character:SetAttribute("M1Immune", now < m1ImmuneUntil)
+
+	if self.VFXService and self.VFXService.ReconcileImmunityHighlight then
+		self.VFXService:ReconcileImmunityHighlight(character)
+	end
+end
+
+function MovementService:ScheduleImmunityHighlightReconcile(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	local now = os.clock()
+	local wallImmuneUntil = character:GetAttribute("WallComboProtectedUntil") or 0
+	local m1ImmuneUntil = character:GetAttribute("M1ImmuneUntil") or 0
+	local nextUntil = math.huge
+	if now < wallImmuneUntil then
+		nextUntil = math.min(nextUntil, wallImmuneUntil)
+	end
+	if now < m1ImmuneUntil then
+		nextUntil = math.min(nextUntil, m1ImmuneUntil)
+	end
+	if nextUntil == math.huge or nextUntil <= now then
+		return
+	end
+
+	local token = (self.WallImmunityTokens[character] or 0) + 1
+	self.WallImmunityTokens[character] = token
+
+	task.delay(math.max(nextUntil - now, 0) + 0.03, function()
+		if self.WallImmunityTokens[character] ~= token then
+			return
+		end
+
+		self:ReconcileCharacterImmunityHighlight(character)
+		self:ScheduleImmunityHighlightReconcile(character)
+	end)
+end
+
 function MovementService:GetKnockbackDebugFolder()
 	local folder = workspace:FindFirstChild("KnockbackDebug")
 
@@ -467,6 +517,8 @@ function MovementService:ApplyWallImpactProtection(targetRoot, wallNormal, rayca
 
 	character:SetAttribute("WallComboProtectedUntil", math.max(currentProtectedUntil, protectedUntil))
 	character:SetAttribute("M1ImmuneUntil", math.max(currentM1ImmuneUntil, protectedUntil))
+	self:ReconcileCharacterImmunityHighlight(character)
+	self:ScheduleImmunityHighlightReconcile(character)
 
 	self:PlayWallImmunityIndicator(raycastResult)
 

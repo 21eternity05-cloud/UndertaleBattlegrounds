@@ -10,6 +10,8 @@ function StateService.new(config, animationService, vfxService)
 	self.AnimationService = animationService
 	self.VFXService = vfxService
 	self.BlockVisualConnections = setmetatable({}, { __mode = "k" })
+	self.ImmunityVisualConnections = setmetatable({}, { __mode = "k" })
+	self.ImmunityVisualTokens = setmetatable({}, { __mode = "k" })
 
 	return self
 end
@@ -83,6 +85,121 @@ function StateService:HookBlockingVisualState(character)
 	self:ReconcileBlockingVisuals(character)
 end
 
+function StateService:ReconcileImmunityVisuals(character)
+	if not character or not character.Parent then
+		return
+	end
+
+	local now = os.clock()
+	local m1ImmuneUntil = character:GetAttribute("M1ImmuneUntil") or 0
+	local wallImmuneUntil = character:GetAttribute("WallComboProtectedUntil") or 0
+	local m1Immune = now < m1ImmuneUntil
+	local wallImmune = now < wallImmuneUntil
+
+	if character:GetAttribute("M1Immune") ~= m1Immune then
+		character:SetAttribute("M1Immune", m1Immune)
+	end
+
+	if character:GetAttribute("WallImmune") ~= wallImmune then
+		character:SetAttribute("WallImmune", wallImmune)
+	end
+
+	if self.VFXService and self.VFXService.ReconcileImmunityHighlight then
+		self.VFXService:ReconcileImmunityHighlight(character)
+	end
+
+	local nextUntil = math.huge
+	if m1Immune then
+		nextUntil = math.min(nextUntil, m1ImmuneUntil)
+	end
+	if wallImmune then
+		nextUntil = math.min(nextUntil, wallImmuneUntil)
+	end
+	if nextUntil == math.huge or nextUntil <= now then
+		return
+	end
+
+	local token = (self.ImmunityVisualTokens[character] or 0) + 1
+	self.ImmunityVisualTokens[character] = token
+
+	task.delay(math.max(nextUntil - now, 0) + 0.03, function()
+		if self.ImmunityVisualTokens[character] ~= token then
+			return
+		end
+
+		self:ReconcileImmunityVisuals(character)
+	end)
+end
+
+function StateService:HookImmunityVisualState(character)
+	if not character or self.ImmunityVisualConnections[character] then
+		return
+	end
+
+	local connections = {}
+
+	local function reconcileTimedState()
+		self:ReconcileImmunityVisuals(character)
+	end
+
+	local function reconcileHighlightOnly()
+		if self.VFXService and self.VFXService.ReconcileImmunityHighlight then
+			self.VFXService:ReconcileImmunityHighlight(character)
+		end
+	end
+
+	for _, attributeName in ipairs({ "M1ImmuneUntil", "WallComboProtectedUntil" }) do
+		table.insert(connections, character:GetAttributeChangedSignal(attributeName):Connect(reconcileTimedState))
+	end
+
+	for _, attributeName in ipairs({ "M1Immune", "WallImmune" }) do
+		table.insert(connections, character:GetAttributeChangedSignal(attributeName):Connect(reconcileHighlightOnly))
+	end
+
+	local deathConnected = false
+	local function connectHumanoid(humanoid)
+		if deathConnected or not humanoid or not humanoid:IsA("Humanoid") then
+			return
+		end
+
+		deathConnected = true
+		table.insert(connections, humanoid.Died:Connect(function()
+			character:SetAttribute("M1Immune", false)
+			character:SetAttribute("WallImmune", false)
+
+			if self.VFXService and self.VFXService.ClearImmunityHighlight then
+				self.VFXService:ClearImmunityHighlight(character)
+			end
+		end))
+	end
+
+	connectHumanoid(character:FindFirstChildOfClass("Humanoid"))
+
+	table.insert(connections, character.ChildAdded:Connect(function(child)
+		connectHumanoid(child)
+	end))
+
+	table.insert(connections, character.AncestryChanged:Connect(function(_, parent)
+		if parent then
+			return
+		end
+
+		if self.VFXService and self.VFXService.ClearImmunityHighlight then
+			self.VFXService:ClearImmunityHighlight(character)
+		end
+
+		for _, connection in ipairs(connections) do
+			connection:Disconnect()
+		end
+
+		self.ImmunityVisualConnections[character] = nil
+		self.ImmunityVisualTokens[character] = nil
+	end))
+
+	self.ImmunityVisualConnections[character] = connections
+	self:ReconcileImmunityVisuals(character)
+end
+
 function StateService:SetupCharacter(character)
 	character:SetAttribute("ComboCount", 0)
 	character:SetAttribute("LastM1Time", 0)
@@ -116,6 +233,9 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("StunId", 0)
 	character:SetAttribute("GuardbreakId", 0)
 	character:SetAttribute("M1ImmuneUntil", 0)
+	character:SetAttribute("WallComboProtectedUntil", 0)
+	character:SetAttribute("M1Immune", false)
+	character:SetAttribute("WallImmune", false)
 	character:SetAttribute("CurrentMoveId", nil)
 	character:SetAttribute("MoveCancelableByHit", true)
 	character:SetAttribute("MoveHitCancelsTarget", true)
@@ -149,6 +269,7 @@ function StateService:SetupCharacter(character)
 	end
 
 	self:HookBlockingVisualState(character)
+	self:HookImmunityVisualState(character)
 end
 
 function StateService:StartCharacterSetup()
@@ -245,7 +366,9 @@ end
 function StateService:ApplyM1Immunity(character, duration)
 	if not character or not character.Parent then return end
 
-	character:SetAttribute("M1ImmuneUntil", os.clock() + duration)
+	local immuneUntil = os.clock() + duration
+	character:SetAttribute("M1ImmuneUntil", immuneUntil)
+	self:ReconcileImmunityVisuals(character)
 end
 
 function StateService:StopBlockingVisuals(character)
