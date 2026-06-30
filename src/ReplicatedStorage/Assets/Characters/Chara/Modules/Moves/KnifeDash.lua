@@ -533,7 +533,11 @@ function KnifeDash.Execute(ctx)
 
 			print("[Chara] Knife Dash whiffed")
 
-			ctx:FinishMove(moveData.WhiffEndlag or 0.52)
+			local whiffEndlag = moveData.WhiffEndlag or 0.52
+			if ctx.ApplyWhiffMovementLock then
+				ctx:ApplyWhiffMovementLock(whiffEndlag)
+			end
+			ctx:FinishMove(whiffEndlag)
 		end
 	end)
 
@@ -552,7 +556,11 @@ function KnifeDash.Execute(ctx)
 
 		print("[Chara] Knife Dash timeout whiff")
 
-		ctx:FinishMove(moveData.WhiffEndlag or 0.52)
+		local whiffEndlag = moveData.WhiffEndlag or 0.52
+		if ctx.ApplyWhiffMovementLock then
+			ctx:ApplyWhiffMovementLock(whiffEndlag)
+		end
+		ctx:FinishMove(whiffEndlag)
 	end)
 end
 

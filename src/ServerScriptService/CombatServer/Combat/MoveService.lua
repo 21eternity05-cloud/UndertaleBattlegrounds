@@ -791,6 +791,18 @@ function MoveService:BuildContext(
 		end)
 	end
 
+	function context:ApplyWhiffMovementLock(duration, options)
+		if not moveService.StateService or not moveService.StateService.ApplyWhiffMovementLock then
+			return nil
+		end
+
+		return moveService.StateService:ApplyWhiffMovementLock(
+			character,
+			duration or 0,
+			options
+		)
+	end
+
 	function context:DefaultApplyHit(targetCharacter2, targetHumanoid2, targetRoot2)
 		if not moveService:CanAttackContinue(character, moveData) then
 			return "Canceled"

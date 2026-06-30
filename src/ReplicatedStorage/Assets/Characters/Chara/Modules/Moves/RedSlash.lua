@@ -448,7 +448,12 @@ function RedSlash.Execute(context)
 	-- Do NOT stop trail here.
 	-- Trail stops when the animation ends/stops, or when finishMove runs.
 
-	task.wait(didConnect and ENDLAG_TIME or (moveData.WhiffEndlag or RedSlash.WhiffEndlag or 0.5))
+	local endlag = didConnect and ENDLAG_TIME or (moveData.WhiffEndlag or RedSlash.WhiffEndlag or 0.5)
+	if not didConnect and context.ApplyWhiffMovementLock then
+		context:ApplyWhiffMovementLock(endlag)
+	end
+
+	task.wait(endlag)
 
 	if not finished then
 		finishMove(0)

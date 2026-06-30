@@ -12,6 +12,7 @@ function StateService.new(config, animationService, vfxService)
 	self.BlockVisualConnections = setmetatable({}, { __mode = "k" })
 	self.ImmunityVisualConnections = setmetatable({}, { __mode = "k" })
 	self.ImmunityVisualTokens = setmetatable({}, { __mode = "k" })
+	self.WhiffMovementLocks = setmetatable({}, { __mode = "k" })
 
 	return self
 end
@@ -237,6 +238,8 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("M1Immune", false)
 	character:SetAttribute("WallImmune", false)
 	character:SetAttribute("CurrentMoveId", nil)
+	character:SetAttribute("WhiffMovementLocked", false)
+	character:SetAttribute("WhiffMoveLockToken", 0)
 	character:SetAttribute("MoveCancelableByHit", true)
 	character:SetAttribute("MoveHitCancelsTarget", true)
 	character:SetAttribute("M1Token", 0)
@@ -425,6 +428,107 @@ function StateService:LockJump(character, duration)
 		currentHumanoid.JumpPower = self.Config.DefaultJumpPower
 		currentHumanoid.JumpHeight = self.Config.DefaultJumpHeight
 	end)
+end
+
+function StateService:CanRestoreWhiffWalkSpeed(character)
+	if character:GetAttribute("Stunned") then return false end
+	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Grabbed") then return false end
+	if character:GetAttribute("CinematicLocked") then return false end
+	if character:GetAttribute("MovementLocked") then return false end
+	if character:GetAttribute("Blocking") then return false end
+	if character:GetAttribute("Emoting") then return false end
+
+	return true
+end
+
+function StateService:HasNonWhiffDashLock(character)
+	return character:GetAttribute("SpawnSetupActive") == true
+		or character:GetAttribute("CharacterSwitchDebounce") == true
+		or character:GetAttribute("Morphing") == true
+		or character:GetAttribute("IntroLocked") == true
+		or character:GetAttribute("MovementLocked") == true
+		or character:GetAttribute("CinematicLocked") == true
+		or character:GetAttribute("Grabbed") == true
+		or character:GetAttribute("Grabbing") == true
+		or character:GetAttribute("UltimateLocked") == true
+end
+
+function StateService:ReleaseWhiffMovementLock(character, token)
+	if not character then
+		return
+	end
+	if character:GetAttribute("WhiffMoveLockToken") ~= token then
+		return
+	end
+
+	local lockState = self.WhiffMovementLocks[character]
+	self.WhiffMovementLocks[character] = nil
+
+	character:SetAttribute("WhiffMovementLocked", false)
+
+	if character.Parent then
+		local shouldStayDashLocked = (lockState and lockState.PreviousDashLocked == true)
+			or self:HasNonWhiffDashLock(character)
+
+		character:SetAttribute("DashLocked", shouldStayDashLocked)
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return
+	end
+	if not character.Parent then
+		return
+	end
+	if not self:CanRestoreWhiffWalkSpeed(character) then
+		return
+	end
+
+	local previousWalkSpeed = lockState and lockState.PreviousWalkSpeed
+	if typeof(previousWalkSpeed) ~= "number" or previousWalkSpeed <= 0 then
+		previousWalkSpeed = self.Config.DefaultWalkSpeed or 16
+	end
+
+	humanoid.WalkSpeed = previousWalkSpeed
+end
+
+function StateService:ApplyWhiffMovementLock(character, duration, options)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return nil
+	end
+
+	duration = math.max(0, duration or 0)
+	options = options or {}
+
+	local token = (character:GetAttribute("WhiffMoveLockToken") or 0) + 1
+	local existing = self.WhiffMovementLocks[character]
+	local previousWalkSpeed = existing and existing.PreviousWalkSpeed or humanoid.WalkSpeed
+	local previousDashLocked = existing and existing.PreviousDashLocked or character:GetAttribute("DashLocked") == true
+	local whiffWalkSpeed = options.WalkSpeed or self.Config.WhiffWalkSpeed or 8
+
+	self.WhiffMovementLocks[character] = {
+		Token = token,
+		PreviousWalkSpeed = previousWalkSpeed,
+		PreviousDashLocked = previousDashLocked,
+	}
+
+	character:SetAttribute("WhiffMoveLockToken", token)
+	character:SetAttribute("WhiffMovementLocked", true)
+	character:SetAttribute("DashLocked", options.DashLocked ~= false)
+
+	humanoid.WalkSpeed = whiffWalkSpeed
+
+	task.delay(duration, function()
+		self:ReleaseWhiffMovementLock(character, token)
+	end)
+
+	return token
 end
 
 function StateService:StopCurrentStunAnimations(character)

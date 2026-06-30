@@ -34,6 +34,7 @@ CombatConfig.JumpLockAfterM1 = 0.5
 CombatConfig.DefaultWalkSpeed = 16
 CombatConfig.DefaultJumpPower = 50
 CombatConfig.DefaultJumpHeight = 7.2
+CombatConfig.WhiffWalkSpeed = 8
 
 CombatConfig.DebugHitboxes = false
 CombatConfig.DebugKnockback = false

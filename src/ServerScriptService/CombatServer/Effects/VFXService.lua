@@ -519,9 +519,31 @@ function VFXService:GetSoulBurstHighlightColor(character)
 		return nil
 	end
 
+	local function valueObjectColor(parent, name)
+		if not parent then
+			return nil
+		end
+
+		local object = parent:FindFirstChild(name)
+		if object and object:IsA("Color3Value") then
+			return object.Value
+		end
+
+		return nil
+	end
+
+	local characterName = self:GetCharacterName(character)
+	local characterVFX = self:GetCharacterVFXFolder(characterName)
+	local color = valueObjectColor(characterVFX, "UltColor")
+		or valueObjectColor(characterVFX, "SoulColor")
+		or valueObjectColor(characterVFX, "HeartColor")
+
+	if color then
+		return color
+	end
+
 	if character then
-		local color = asColor(character:GetAttribute("HeartColor"))
-			or asColor(character:GetAttribute("SoulColor"))
+		color = asColor(character:GetAttribute("HeartColor"))
 
 		if color then
 			return color
@@ -530,7 +552,6 @@ function VFXService:GetSoulBurstHighlightColor(character)
 		local player = game:GetService("Players"):GetPlayerFromCharacter(character)
 		if player then
 			color = asColor(player:GetAttribute("HeartColor"))
-				or asColor(player:GetAttribute("SoulColor"))
 
 			if color then
 				return color

@@ -19,7 +19,7 @@ local SpecialHell = {
 	Radius = 7,
 	Offset = CFrame.new(0, 0, -5),
 
-	StartupAnimationSpeed = 0.85,
+	StartupAnimationSpeed = 1,
 	GrabActiveTime = 0.15,
 	GrabTickRate = 0.03,
 	WhiffEndlag = 1.05,
@@ -811,6 +811,17 @@ function SpecialHell.Execute(ctx)
 		ctx:FinishMove(delayTime or 0)
 	end
 
+	local function finishWhiff(delayTime)
+		delayTime = delayTime or 0
+		cleanup()
+
+		if ctx.ApplyWhiffMovementLock then
+			ctx:ApplyWhiffMovementLock(delayTime)
+		end
+
+		ctx:FinishMove(delayTime)
+	end
+
 	local function doHell()
 		if hellResolved then
 			return
@@ -1058,7 +1069,7 @@ function SpecialHell.Execute(ctx)
 
 		if not confirmed and not finished then
 			print("[SpecialHell] Whiffed")
-			finish(moveData.WhiffEndlag or 1.05)
+			finishWhiff(moveData.WhiffEndlag or 1.05)
 		end
 	end))
 
@@ -1071,7 +1082,7 @@ function SpecialHell.Execute(ctx)
 			warn("[SpecialHell] Startup ended before Grab marker")
 		end
 
-		finish(moveData.WhiffEndlag or 1.05)
+		finishWhiff(moveData.WhiffEndlag or 1.05)
 	end))
 
 	task.delay(moveData.MaxLockTime or 9.5, function()
