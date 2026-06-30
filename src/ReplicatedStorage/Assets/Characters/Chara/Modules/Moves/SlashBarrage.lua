@@ -50,6 +50,7 @@ local SlashBarrage = {
 
 local ANIMATION_NAME = "SlashBarrage"
 local HIT_MARKER = "Hit"
+--note: this move has 4 hit markers
 
 local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
 local CharaMoveUtil = require(MoveHelpers:WaitForChild("CharaMoveUtil"))
