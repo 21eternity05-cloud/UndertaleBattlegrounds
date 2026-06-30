@@ -696,11 +696,40 @@ function M1Service:MonitorDownslamGroundSplat(attackerCharacter, targetCharacter
 
 			self:CreateGroundSplatPart(groundResult.Position + Vector3.new(0, 0.08, 0), data)
 
-			if self.VFXService.SpawnGroundDebrisRing then
-				self.VFXService:SpawnGroundDebrisRing(groundResult.Position, {
-					Radius = 7,
-					Count = 14,
-					Lifetime = 1.25,
+			if self.VFXService.SpawnCrater then
+				self.VFXService:SpawnCrater(groundResult.Position, {
+					Radius = 8,
+					InnerRadius = 2.2,
+					Count = 18,
+					OuterScatterCount = 8,
+					MinSize = Vector3.new(1.4, 0.25, 0.8),
+					MaxSize = Vector3.new(3.8, 0.55, 1.4),
+					OuterMinSize = Vector3.new(0.9, 0.18, 0.7),
+					OuterMaxSize = Vector3.new(2.2, 0.35, 1.1),
+					Lifetime = 2.3,
+					RemoveTweenTime = 0.45,
+					UpTiltDegrees = 12,
+					RandomTiltDegrees = 8,
+					UseGroundColor = true,
+					Exclude = {
+						targetCharacter,
+						attackerCharacter,
+					},
+				})
+			end
+
+			if self.VFXService.SpawnFlyRocks then
+				self.VFXService:SpawnFlyRocks(groundResult.Position, {
+					Count = 12,
+					MinSize = Vector3.new(0.35, 0.35, 0.35),
+					MaxSize = Vector3.new(1.0, 1.0, 1.0),
+					MinUpVelocity = 38,
+					MaxUpVelocity = 62,
+					OutwardVelocity = 20,
+					AngularVelocity = 8,
+					Lifetime = 1.35,
+					TrailLifetime = 0.22,
+					UseGroundColor = true,
 					Exclude = {
 						targetCharacter,
 						attackerCharacter,

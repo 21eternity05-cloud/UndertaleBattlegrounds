@@ -284,10 +284,13 @@ function MovementService:PlayWallImmunityIndicator(raycastResult)
 		position += normal.Unit * 0.035
 	end
 
-	if self.VFXService and self.VFXService.SpawnWallImpactDebris then
-		self.VFXService:SpawnWallImpactDebris(position, normal, {
-			Color = Color3.fromRGB(230, 230, 235),
-			Lifetime = 0.85,
+	if self.VFXService and self.VFXService.SpawnWallShatter then
+		self.VFXService:SpawnWallShatter(position, normal, {
+			Scale = 3,
+			Lifetime = 1.8,
+			RemoveTweenTime = 0.35,
+			CrackColor = Color3.fromRGB(220, 220, 230),
+			ChunkColor = Color3.fromRGB(185, 185, 195),
 		})
 	end
 
@@ -889,11 +892,40 @@ function MovementService:PlayGroundSplatVFX(targetRoot, groundPosition, services
 		return
 	end
 
-	if vfxService.SpawnGroundDebrisRing then
-		vfxService:SpawnGroundDebrisRing(groundPosition, {
-			Radius = 7,
-			Count = 14,
-			Lifetime = 1.25,
+	if vfxService.SpawnCrater then
+		vfxService:SpawnCrater(groundPosition, {
+			Radius = 8,
+			InnerRadius = 2.2,
+			Count = 18,
+			OuterScatterCount = 8,
+			MinSize = Vector3.new(1.4, 0.25, 0.8),
+			MaxSize = Vector3.new(3.8, 0.55, 1.4),
+			OuterMinSize = Vector3.new(0.9, 0.18, 0.7),
+			OuterMaxSize = Vector3.new(2.2, 0.35, 1.1),
+			Lifetime = 2.3,
+			RemoveTweenTime = 0.45,
+			UpTiltDegrees = 12,
+			RandomTiltDegrees = 8,
+			UseGroundColor = true,
+			Exclude = {
+				targetRoot and targetRoot:FindFirstAncestorOfClass("Model"),
+				services.AttackerCharacter,
+			},
+		})
+	end
+
+	if vfxService.SpawnFlyRocks then
+		vfxService:SpawnFlyRocks(groundPosition, {
+			Count = 12,
+			MinSize = Vector3.new(0.35, 0.35, 0.35),
+			MaxSize = Vector3.new(1.0, 1.0, 1.0),
+			MinUpVelocity = 38,
+			MaxUpVelocity = 62,
+			OutwardVelocity = 20,
+			AngularVelocity = 8,
+			Lifetime = 1.35,
+			TrailLifetime = 0.22,
+			UseGroundColor = true,
 			Exclude = {
 				targetRoot and targetRoot:FindFirstAncestorOfClass("Model"),
 				services.AttackerCharacter,

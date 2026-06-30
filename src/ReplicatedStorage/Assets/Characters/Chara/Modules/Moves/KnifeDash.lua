@@ -111,8 +111,8 @@ function KnifeDash.Execute(ctx)
 	end
 
 	local function stopDashDebrisTrail()
-		if debrisTrailHandle and ctx.VFXService and ctx.VFXService.StopDebrisTrail then
-			ctx.VFXService:StopDebrisTrail(debrisTrailHandle)
+		if debrisTrailHandle and ctx.VFXService and ctx.VFXService.StopDivotTrail then
+			ctx.VFXService:StopDivotTrail(debrisTrailHandle)
 		end
 
 		debrisTrailHandle = nil
@@ -127,7 +127,7 @@ function KnifeDash.Execute(ctx)
 	end
 
 	local function startDashDebrisTrail()
-		if not ctx.VFXService or not ctx.VFXService.StartDebrisTrail then
+		if not ctx.VFXService or not ctx.VFXService.StartDivotTrail then
 			return
 		end
 
@@ -148,13 +148,15 @@ function KnifeDash.Execute(ctx)
 			rightAttachment,
 		}
 
-		debrisTrailHandle = ctx.VFXService:StartDebrisTrail(character, debrisTrailAttachments, {
-			TickRate = 0.05,
-			Lifetime = 0.8,
-			SpawnPerSide = 1,
-			MinSize = Vector3.new(0.25, 0.15, 0.25),
-			MaxSize = Vector3.new(0.75, 0.35, 0.75),
-			ScatterRadius = 0.7,
+		debrisTrailHandle = ctx.VFXService:StartDivotTrail(character, debrisTrailAttachments, {
+			TickRate = 0.025,
+			MinDistanceBetweenSpawns = 1.5,
+			Lifetime = 1.4,
+			RemoveTweenTime = 0.3,
+			SpawnPerPoint = 1,
+			MinSize = Vector3.new(0.5, 0.25, 0.5),
+			MaxSize = Vector3.new(1.0, 0.45, 1.0),
+			ScatterRadius = 0.5,
 			RaycastDistance = 8,
 			UseGroundColor = true,
 			Exclude = character,

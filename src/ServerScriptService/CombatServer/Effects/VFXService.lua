@@ -651,24 +651,45 @@ function VFXService:PlayBlockBreak(targetRoot)
 	self:PlaySFXAtPart("BlockBreak", targetRoot, 2)
 end
 
-function VFXService:SpawnGroundDebrisRing(positionOrCFrame, options)
+function VFXService:SpawnCrater(positionOrCFrame, options)
 	if not self.DebrisVFXService then return end
-	return self.DebrisVFXService:SpawnGroundRing(positionOrCFrame, options)
+	return self.DebrisVFXService:SpawnCrater(positionOrCFrame, options)
+end
+
+function VFXService:SpawnGroundDebrisRing(positionOrCFrame, options)
+	return self:SpawnCrater(positionOrCFrame, options)
+end
+
+function VFXService:SpawnWallShatter(positionOrCFrame, normal, options)
+	if not self.DebrisVFXService then return end
+	return self.DebrisVFXService:SpawnWallShatter(positionOrCFrame, normal, options)
 end
 
 function VFXService:SpawnWallImpactDebris(positionOrCFrame, normal, options)
-	if not self.DebrisVFXService then return end
-	return self.DebrisVFXService:SpawnWallImpact(positionOrCFrame, normal, options)
+	return self:SpawnWallShatter(positionOrCFrame, normal, options)
+end
+
+function VFXService:StartDivotTrail(character, attachmentsOrOffsets, options)
+	if not self.DebrisVFXService then return nil end
+	return self.DebrisVFXService:StartDivotTrail(character, attachmentsOrOffsets, options)
 end
 
 function VFXService:StartDebrisTrail(character, attachmentsOrOffsets, options)
-	if not self.DebrisVFXService then return nil end
-	return self.DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, options)
+	return self:StartDivotTrail(character, attachmentsOrOffsets, options)
+end
+
+function VFXService:StopDivotTrail(trailHandle)
+	if not self.DebrisVFXService then return end
+	self.DebrisVFXService:StopDivotTrail(trailHandle)
 end
 
 function VFXService:StopDebrisTrail(trailHandle)
+	self:StopDivotTrail(trailHandle)
+end
+
+function VFXService:SpawnFlyRocks(positionOrCFrame, options)
 	if not self.DebrisVFXService then return end
-	self.DebrisVFXService:StopDebrisTrail(trailHandle)
+	return self.DebrisVFXService:SpawnFlyRocks(positionOrCFrame, options)
 end
 
 function VFXService:PlayCharacterMoveVFX(character, moveName, targetCharacter, targetRoot)

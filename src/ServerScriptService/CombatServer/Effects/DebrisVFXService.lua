@@ -1,4 +1,5 @@
 local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
 
 local DebrisVFXService = {}
 DebrisVFXService.__index = DebrisVFXService
@@ -117,7 +118,49 @@ function DebrisVFXService:RaycastGround(position, distance, exclude)
 	)
 end
 
-function DebrisVFXService:CreateDebrisPart(name, size, cframe, color, material, lifetime)
+function DebrisVFXService:ScheduleRemovalTween(part, lifetime, removeTweenTime, options)
+	if not part then
+		return
+	end
+
+	lifetime = lifetime or 1
+	removeTweenTime = removeTweenTime or 0
+	options = options or {}
+
+	if removeTweenTime <= 0 then
+		Debris:AddItem(part, lifetime)
+		return
+	end
+
+	task.delay(math.max(lifetime, 0), function()
+		if not part or not part.Parent then
+			return
+		end
+
+		local goal = {
+			Transparency = 1,
+			Size = Vector3.new(
+				math.max(part.Size.X * 0.18, 0.05),
+				math.max(part.Size.Y * 0.18, 0.05),
+				math.max(part.Size.Z * 0.18, 0.05)
+			),
+		}
+
+		if options.SinkDistance and options.SinkDistance > 0 then
+			goal.CFrame = part.CFrame * CFrame.new(0, -options.SinkDistance, 0)
+		end
+
+		TweenService:Create(
+			part,
+			TweenInfo.new(removeTweenTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			goal
+		):Play()
+	end)
+
+	Debris:AddItem(part, lifetime + removeTweenTime + 0.08)
+end
+
+function DebrisVFXService:CreateDebrisPart(name, size, cframe, color, material, lifetime, removeTweenTime, removeOptions)
 	local part = Instance.new("Part")
 	part.Name = name or "BlockyDebris"
 	part.Anchored = true
@@ -132,12 +175,12 @@ function DebrisVFXService:CreateDebrisPart(name, size, cframe, color, material, 
 	part.CFrame = cframe
 	part.Parent = self:GetRuntimeFolder()
 
-	Debris:AddItem(part, lifetime or 1)
+	self:ScheduleRemovalTween(part, lifetime or 1, removeTweenTime, removeOptions)
 
 	return part
 end
 
-function DebrisVFXService:SpawnGroundRing(positionOrCFrame, options)
+function DebrisVFXService:SpawnCrater(positionOrCFrame, options)
 	options = options or {}
 
 	local origin = getPosition(positionOrCFrame)
@@ -151,36 +194,179 @@ function DebrisVFXService:SpawnGroundRing(positionOrCFrame, options)
 	local surfaceColor = options.Color or (rayResult and rayResult.Instance and rayResult.Instance.Color) or DEFAULT_GROUND_COLOR
 	local surfaceMaterial = options.Material or (rayResult and rayResult.Instance and rayResult.Instance.Material) or Enum.Material.Concrete
 
-	local radius = options.Radius or 7
-	local count = math.clamp(options.Count or 14, 1, 36)
-	local minSize = options.MinSize or Vector3.new(0.8, 0.35, 0.8)
-	local maxSize = options.MaxSize or Vector3.new(2.2, 0.7, 1.6)
-	local lifetime = options.Lifetime or 1.25
-	local upTilt = math.rad(options.UpTiltDegrees or 20)
+	local radius = options.Radius or 8
+	local innerRadius = math.min(options.InnerRadius or 2.2, radius * 0.75)
+	local count = math.clamp(options.Count or 18, 1, 42)
+	local outerScatterCount = math.clamp(options.OuterScatterCount or 8, 0, 24)
+	local minSize = options.MinSize or Vector3.new(1.4, 0.25, 0.8)
+	local maxSize = options.MaxSize or Vector3.new(3.8, 0.55, 1.4)
+	local outerMinSize = options.OuterMinSize or Vector3.new(0.9, 0.18, 0.7)
+	local outerMaxSize = options.OuterMaxSize or Vector3.new(2.2, 0.35, 1.1)
+	local lifetime = options.Lifetime or 2.3
+	local removeTweenTime = options.RemoveTweenTime or 0.45
+	local upTiltDegrees = options.UpTiltDegrees or 12
+	local randomTiltDegrees = options.RandomTiltDegrees or 8
+	local sinkDistance = options.SinkDistance or 0.35
 
-	for index = 1, count do
-		local angle = ((index - 1) / count) * math.pi * 2
-		angle += math.rad(randomBetween(-9, 9))
+	local function spawnSlab(name, angle, slabRadius, size, tiltMultiplier, lifetimeMultiplier)
+		local radial = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		local position = surfacePosition + (radial * slabRadius) + Vector3.new(0, 0.09, 0)
+		local tangentYaw = angle + (math.pi / 2)
+		local yaw = tangentYaw + math.rad(randomBetween(-18, 18))
+		local outwardTilt = math.rad(randomBetween(4, upTiltDegrees) * (tiltMultiplier or 1))
+		local sideTilt = math.rad(randomBetween(-randomTiltDegrees, randomTiltDegrees))
 
-		local ringRadius = radius * randomBetween(0.72, 1.08)
-		local offset = Vector3.new(math.cos(angle) * ringRadius, 0, math.sin(angle) * ringRadius)
-		local position = surfacePosition + offset + Vector3.new(0, 0.08, 0)
-		local yaw = angle + math.rad(randomBetween(-18, 18))
-		local outwardTilt = CFrame.Angles(upTilt * randomBetween(0.6, 1.25), 0, math.rad(randomBetween(-8, 8)))
-		local cframe = CFrame.new(position) * CFrame.Angles(0, yaw, 0) * outwardTilt
+		local cframe = CFrame.new(position)
+			* CFrame.Angles(0, yaw, 0)
+			* CFrame.Angles(outwardTilt, 0, sideTilt)
 
 		self:CreateDebrisPart(
-			"GroundRingDebris",
-			randomVector3(minSize, maxSize),
+			name,
+			size,
 			cframe,
 			surfaceColor,
 			surfaceMaterial,
-			lifetime * randomBetween(0.85, 1.15)
+			lifetime * (lifetimeMultiplier or 1) * randomBetween(0.85, 1.15),
+			removeTweenTime,
+			{
+				SinkDistance = sinkDistance,
+			}
 		)
+	end
+
+	for index = 1, count do
+		local angle = ((index - 1) / count) * math.pi * 2
+		angle += math.rad(randomBetween(-16, 16))
+
+		local layerAlpha = (index % 3) / 2
+		local slabRadius = randomBetween(innerRadius, radius)
+
+		if layerAlpha == 0 then
+			slabRadius = randomBetween(innerRadius, innerRadius + ((radius - innerRadius) * 0.38))
+		elseif layerAlpha == 0.5 then
+			slabRadius = randomBetween(innerRadius + ((radius - innerRadius) * 0.25), radius * 0.88)
+		else
+			slabRadius = randomBetween(radius * 0.68, radius)
+		end
+
+		local size = randomVector3(minSize, maxSize)
+		if math.random() < 0.55 then
+			size = Vector3.new(size.X * randomBetween(1.15, 1.45), size.Y, size.Z * randomBetween(0.75, 0.95))
+		end
+
+		spawnSlab("CraterSlabDebris", angle, slabRadius, size, randomBetween(0.75, 1.25), 1)
+	end
+
+	for _ = 1, outerScatterCount do
+		local angle = math.rad(randomBetween(0, 360))
+		local slabRadius = randomBetween(radius * 0.9, radius * 1.35)
+		local size = randomVector3(outerMinSize, outerMaxSize)
+
+		spawnSlab("OuterCraterSlabDebris", angle, slabRadius, size, randomBetween(0.45, 0.9), randomBetween(0.85, 1))
 	end
 end
 
-function DebrisVFXService:SpawnWallImpact(positionOrCFrame, normal, options)
+function DebrisVFXService:SpawnGroundRing(positionOrCFrame, options)
+	return self:SpawnCrater(positionOrCFrame, options)
+end
+
+function DebrisVFXService:SpawnFlyRocks(positionOrCFrame, options)
+	options = options or {}
+
+	local origin = getPosition(positionOrCFrame)
+	if not origin then
+		return
+	end
+
+	local exclude = options.Exclude
+	local rayResult = self:RaycastGround(origin, options.RaycastDistance or 18, exclude)
+	if not rayResult then
+		return
+	end
+
+	local surfacePosition = rayResult.Position
+	local color = options.Color or (options.UseGroundColor ~= false and rayResult.Instance and rayResult.Instance.Color) or DEFAULT_GROUND_COLOR
+	local material = options.Material or (options.UseGroundColor ~= false and rayResult.Instance and rayResult.Instance.Material) or Enum.Material.Concrete
+	local count = math.clamp(options.Count or 12, 1, 18)
+	local minSize = options.MinSize or Vector3.new(0.35, 0.35, 0.35)
+	local maxSize = options.MaxSize or Vector3.new(1.0, 1.0, 1.0)
+	local minUpVelocity = options.MinUpVelocity or 38
+	local maxUpVelocity = options.MaxUpVelocity or 62
+	local outwardVelocity = options.OutwardVelocity or 20
+	local angularVelocity = options.AngularVelocity or 8
+	local lifetime = options.Lifetime or 1.35
+	local trailLifetime = options.TrailLifetime or 0.22
+
+	for index = 1, count do
+		local angle = ((index - 1) / count) * math.pi * 2 + math.rad(randomBetween(-25, 25))
+		local direction = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		local size = randomVector3(minSize, maxSize)
+		local spawnPosition = surfacePosition + (direction * randomBetween(0.35, 1.6)) + Vector3.new(0, 0.35, 0)
+
+		local rock = Instance.new("Part")
+		rock.Name = "FlyRockDebris"
+		rock.Anchored = false
+		rock.CanCollide = false
+		rock.CanTouch = false
+		rock.CanQuery = false
+		rock.Massless = true
+		rock.CastShadow = false
+		rock.Material = material
+		rock.Color = color
+		rock.Size = size
+		rock.CFrame = CFrame.new(spawnPosition)
+			* CFrame.Angles(
+				math.rad(randomBetween(-30, 30)),
+				math.rad(randomBetween(0, 360)),
+				math.rad(randomBetween(-30, 30))
+			)
+		rock.Parent = self:GetRuntimeFolder()
+
+		local topAttachment = Instance.new("Attachment")
+		topAttachment.Position = Vector3.new(0, size.Y * 0.3, 0)
+		topAttachment.Parent = rock
+
+		local bottomAttachment = Instance.new("Attachment")
+		bottomAttachment.Position = Vector3.new(0, -size.Y * 0.3, 0)
+		bottomAttachment.Parent = rock
+
+		local trail = Instance.new("Trail")
+		trail.Name = "FlyRockTrail"
+		trail.Attachment0 = topAttachment
+		trail.Attachment1 = bottomAttachment
+		trail.Lifetime = trailLifetime
+		trail.LightEmission = 0.15
+		trail.LightInfluence = 0.7
+		trail.Color = ColorSequence.new(color)
+		trail.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.45),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		trail.Enabled = true
+		trail.Parent = rock
+
+		rock.AssemblyLinearVelocity = (direction * outwardVelocity * randomBetween(0.7, 1.25))
+			+ Vector3.new(0, randomBetween(minUpVelocity, maxUpVelocity), 0)
+		rock.AssemblyAngularVelocity = Vector3.new(
+			randomBetween(-angularVelocity, angularVelocity),
+			randomBetween(-angularVelocity * 1.25, angularVelocity * 1.25),
+			randomBetween(-angularVelocity, angularVelocity)
+		)
+
+		task.delay(math.max(lifetime - 0.22, 0.05), function()
+			if rock and rock.Parent then
+				TweenService:Create(rock, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					Transparency = 1,
+					Size = rock.Size * 0.25,
+				}):Play()
+			end
+		end)
+
+		Debris:AddItem(rock, lifetime + 0.08)
+	end
+end
+
+function DebrisVFXService:SpawnWallShatter(positionOrCFrame, normal, options)
 	options = options or {}
 
 	local origin = getPosition(positionOrCFrame)
@@ -189,49 +375,58 @@ function DebrisVFXService:SpawnWallImpact(positionOrCFrame, normal, options)
 	end
 
 	local wallNormal = typeof(normal) == "Vector3" and normal.Magnitude > 0.05 and normal.Unit or Vector3.zAxis
-	local color = options.Color or DEFAULT_WALL_COLOR
+	local scale = options.Scale or 3
+	local crackColor = options.CrackColor or options.Color or Color3.fromRGB(220, 220, 230)
+	local chunkColor = options.ChunkColor or options.Color or Color3.fromRGB(185, 185, 195)
 	local material = options.Material or Enum.Material.Neon
-	local lifetime = options.Lifetime or 0.75
-	local position = origin + wallNormal * 0.045
+	local lifetime = options.Lifetime or 1.8
+	local removeTweenTime = options.RemoveTweenTime or 0.35
+	local position = origin + wallNormal * (options.WallOffset or 0.18)
 
 	local crackCount = math.clamp(options.CrackCount or 7, 3, 14)
 	for index = 1, crackCount do
 		local angle = ((index - 1) / crackCount) * math.pi * 2 + math.rad(randomBetween(-18, 18))
-		local length = randomBetween(1.1, 3.2)
-		local thickness = randomBetween(0.045, 0.09)
-		local offsetDistance = randomBetween(0.35, 1.25)
+		local length = randomBetween(1.1, 3.2) * scale
+		local thickness = randomBetween(0.045, 0.09) * math.max(scale * 0.55, 1)
+		local offsetDistance = randomBetween(0.35, 1.25) * scale
 		local localOffset = CFrame.Angles(0, 0, angle):VectorToWorldSpace(Vector3.new(offsetDistance, 0, 0))
 		local cframe = getPlaneCFrame(position, wallNormal, angle) * CFrame.new(localOffset.X, localOffset.Y, 0)
 
 		self:CreateDebrisPart(
-			"WallCrackDebris",
+			"WallShatterCrackDebris",
 			Vector3.new(length, thickness, 0.035),
 			cframe,
-			color,
+			crackColor,
 			material,
-			lifetime
+			lifetime,
+			removeTweenTime
 		)
 	end
 
 	local chunkCount = math.clamp(options.ChunkCount or 6, 0, 16)
 	for _ = 1, chunkCount do
 		local tangentAngle = math.rad(randomBetween(0, 360))
-		local cframe = getPlaneCFrame(position + wallNormal * randomBetween(0.04, 0.16), wallNormal, tangentAngle)
-			* CFrame.new(randomBetween(-2.2, 2.2), randomBetween(-1.8, 1.8), 0)
+		local cframe = getPlaneCFrame(position + wallNormal * randomBetween(0.08, 0.22), wallNormal, tangentAngle)
+			* CFrame.new(randomBetween(-2.2, 2.2) * scale, randomBetween(-1.8, 1.8) * scale, 0)
 			* CFrame.Angles(math.rad(randomBetween(-25, 25)), math.rad(randomBetween(-25, 25)), math.rad(randomBetween(-25, 25)))
 
 		self:CreateDebrisPart(
-			"WallChunkDebris",
+			"WallShatterChunkDebris",
 			randomVector3(
-				options.MinChunkSize or Vector3.new(0.25, 0.18, 0.08),
-				options.MaxChunkSize or Vector3.new(0.75, 0.45, 0.2)
+				options.MinChunkSize or Vector3.new(0.25, 0.18, 0.08) * scale,
+				options.MaxChunkSize or Vector3.new(0.75, 0.45, 0.2) * scale
 			),
 			cframe,
-			color,
+			chunkColor,
 			Enum.Material.Concrete,
-			lifetime * randomBetween(0.8, 1.15)
+			lifetime * randomBetween(0.8, 1.15),
+			removeTweenTime
 		)
 	end
+end
+
+function DebrisVFXService:SpawnWallImpact(positionOrCFrame, normal, options)
+	return self:SpawnWallShatter(positionOrCFrame, normal, options)
 end
 
 function DebrisVFXService:GetTrailWorldPositions(character, attachmentsOrOffsets)
@@ -257,7 +452,7 @@ function DebrisVFXService:GetTrailWorldPositions(character, attachmentsOrOffsets
 	return points
 end
 
-function DebrisVFXService:SpawnTrailChunk(position, options, exclude)
+function DebrisVFXService:SpawnDivotChunk(position, options, exclude)
 	local rayResult = self:RaycastGround(position, options.RaycastDistance or 8, exclude)
 	if not rayResult then
 		return
@@ -280,10 +475,10 @@ function DebrisVFXService:SpawnTrailChunk(position, options, exclude)
 	end
 
 	self:CreateDebrisPart(
-		"DashTrailDebris",
+		"DivotDebris",
 		randomVector3(
-			options.MinSize or Vector3.new(0.25, 0.15, 0.25),
-			options.MaxSize or Vector3.new(0.75, 0.35, 0.75)
+			options.MinSize or Vector3.new(0.5, 0.25, 0.5),
+			options.MaxSize or Vector3.new(1.1, 0.45, 1.1)
 		),
 		CFrame.new(basePosition)
 			* CFrame.Angles(
@@ -293,20 +488,29 @@ function DebrisVFXService:SpawnTrailChunk(position, options, exclude)
 			),
 		color or DEFAULT_GROUND_COLOR,
 		material or Enum.Material.Concrete,
-		options.Lifetime or 0.8
+		options.Lifetime or 1.4,
+		options.RemoveTweenTime or 0.3,
+		{
+			SinkDistance = options.SinkDistance or 0.22,
+		}
 	)
 end
 
-function DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, options)
+function DebrisVFXService:SpawnTrailChunk(position, options, exclude)
+	return self:SpawnDivotChunk(position, options, exclude)
+end
+
+function DebrisVFXService:StartDivotTrail(character, attachmentsOrOffsets, options)
 	options = options or {}
 
 	local handle = {
 		Active = true,
 		Connections = {},
+		LastSpawnPositionByPoint = {},
 	}
 
 	local function stop()
-		self:StopDebrisTrail(handle)
+		self:StopDivotTrail(handle)
 	end
 
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -323,8 +527,9 @@ function DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, opti
 	end
 
 	task.spawn(function()
-		local tickRate = math.max(options.TickRate or 0.05, 0.03)
-		local spawnPerSide = math.clamp(options.SpawnPerSide or 1, 1, 4)
+		local tickRate = math.max(options.TickRate or 0.035, 0.02)
+		local minDistance = math.max(options.MinDistanceBetweenSpawns or 1.8, 0)
+		local spawnPerPoint = math.clamp(options.SpawnPerPoint or options.SpawnPerSide or 1, 1, 4)
 		local exclude = options.Exclude or character
 
 		while handle.Active do
@@ -337,9 +542,18 @@ function DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, opti
 				break
 			end
 
-			for _, position in ipairs(self:GetTrailWorldPositions(character, attachmentsOrOffsets)) do
-				for _ = 1, spawnPerSide do
-					self:SpawnTrailChunk(position, options, exclude)
+			for index, position in ipairs(self:GetTrailWorldPositions(character, attachmentsOrOffsets)) do
+				local lastPosition = handle.LastSpawnPositionByPoint[index]
+				local shouldSpawn = lastPosition == nil
+					or minDistance <= 0
+					or (position - lastPosition).Magnitude >= minDistance
+
+				if shouldSpawn then
+					handle.LastSpawnPositionByPoint[index] = position
+
+					for _ = 1, spawnPerPoint do
+						self:SpawnDivotChunk(position, options, exclude)
+					end
 				end
 			end
 
@@ -352,7 +566,7 @@ function DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, opti
 	return handle
 end
 
-function DebrisVFXService:StopDebrisTrail(handle)
+function DebrisVFXService:StopDivotTrail(handle)
 	if not handle or handle.Active == false then
 		return
 	end
@@ -364,6 +578,14 @@ function DebrisVFXService:StopDebrisTrail(handle)
 	end
 
 	table.clear(handle.Connections or {})
+end
+
+function DebrisVFXService:StartDebrisTrail(character, attachmentsOrOffsets, options)
+	return self:StartDivotTrail(character, attachmentsOrOffsets, options)
+end
+
+function DebrisVFXService:StopDebrisTrail(handle)
+	return self:StopDivotTrail(handle)
 end
 
 return DebrisVFXService
