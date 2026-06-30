@@ -17,9 +17,9 @@ local KnifeDash = {
 	Damage = 5,
 	Stun = 0.95,
 
-	WhiffEndlag = 0.42,
-	HitEndlag = 0.08,
-	BlockEndlag = 0.14,
+	WhiffEndlag = 0.52,
+	HitEndlag = 0.1,
+	BlockEndlag = 0.42,
 
 	AnimationCancelAfterHit = 0.25,
 
@@ -361,16 +361,16 @@ function KnifeDash.Execute(ctx)
 
 		if result == "Blocked" then
 			print("[Chara] Knife Dash blocked")
-			ctx:FinishMove(moveData.BlockEndlag or 0.14)
+			ctx:FinishMove(moveData.BlockEndlag or 0.42)
 		elseif result == "Countered" then
 			print("[Chara] Knife Dash countered")
-			ctx:FinishMove(moveData.HitEndlag or 0.08)
+			ctx:FinishMove(moveData.HitEndlag or 0.1)
 		elseif result == "Guardbreak" then
 			print("[Chara] Knife Dash guardbreak")
-			ctx:FinishMove(moveData.HitEndlag or 0.08)
+			ctx:FinishMove(moveData.HitEndlag or 0.1)
 		else
 			print("[Chara] Knife Dash hit")
-			ctx:FinishMove(moveData.HitEndlag or 0.08)
+			ctx:FinishMove(moveData.HitEndlag or 0.1)
 		end
 	end
 
@@ -533,7 +533,7 @@ function KnifeDash.Execute(ctx)
 
 			print("[Chara] Knife Dash whiffed")
 
-			ctx:FinishMove(moveData.WhiffEndlag or 0.42)
+			ctx:FinishMove(moveData.WhiffEndlag or 0.52)
 		end
 	end)
 
@@ -552,7 +552,7 @@ function KnifeDash.Execute(ctx)
 
 		print("[Chara] Knife Dash timeout whiff")
 
-		ctx:FinishMove(moveData.WhiffEndlag or 0.42)
+		ctx:FinishMove(moveData.WhiffEndlag or 0.52)
 	end)
 end
 

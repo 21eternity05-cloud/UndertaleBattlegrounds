@@ -81,6 +81,7 @@ function SoulBurstService:InitializeCharacter(player, character)
 		character:SetAttribute("SoulBurst", value)
 		character:SetAttribute("Soul", value)
 		character:SetAttribute("SoulBursting", false)
+		character:SetAttribute("SoulBurstIFrameActive", false)
 		character:SetAttribute("SoulBurstCooldownUntil", character:GetAttribute("SoulBurstCooldownUntil") or 0)
 		character:SetAttribute("SoulBurstIFrameId", character:GetAttribute("SoulBurstIFrameId") or 0)
 	end
@@ -377,13 +378,75 @@ function SoulBurstService:ApplyBurstIFrames(character)
 	local duration = self.Config.SoulBurstIFrameDuration or 1
 
 	character:SetAttribute("SoulBurstIFrameId", iframeId)
+	character:SetAttribute("SoulBurstIFrameActive", true)
 	character:SetAttribute("IFrameActive", true)
 
+	if self.VFXService and self.VFXService.EnsureSoulBurstHighlight then
+		self.VFXService:EnsureSoulBurstHighlight(character)
+	end
+
+	local connections = {}
+	local cleaned = false
+
+	local function disconnect()
+		for _, connection in ipairs(connections) do
+			connection:Disconnect()
+		end
+
+		table.clear(connections)
+	end
+
+	local function clearSoulBurstVisualState()
+		if cleaned then
+			return
+		end
+
+		cleaned = true
+
+		if character and character.Parent then
+			character:SetAttribute("SoulBurstIFrameActive", false)
+		end
+
+		if self.VFXService and self.VFXService.ClearSoulBurstHighlight then
+			self.VFXService:ClearSoulBurstHighlight(character)
+		end
+
+		disconnect()
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		table.insert(connections, humanoid.Died:Connect(clearSoulBurstVisualState))
+	end
+
+	for _, attributeName in ipairs({ "Morphing", "CharacterSwitchDebounce" }) do
+		table.insert(connections, character:GetAttributeChangedSignal(attributeName):Connect(function()
+			if character:GetAttribute(attributeName) == true then
+				clearSoulBurstVisualState()
+			end
+		end))
+	end
+
+	table.insert(connections, character.AncestryChanged:Connect(function(_, parent)
+		if parent then
+			return
+		end
+
+		clearSoulBurstVisualState()
+	end))
+
 	task.delay(duration, function()
-		if not character or not character.Parent then return end
-		if character:GetAttribute("SoulBurstIFrameId") ~= iframeId then return end
+		if not character or not character.Parent then
+			clearSoulBurstVisualState()
+			return
+		end
+		if character:GetAttribute("SoulBurstIFrameId") ~= iframeId then
+			disconnect()
+			return
+		end
 
 		character:SetAttribute("SoulBursting", false)
+		clearSoulBurstVisualState()
 
 		if character:GetAttribute("UsingMove") == true and character:GetAttribute("CurrentMoveId") ~= nil then
 			return

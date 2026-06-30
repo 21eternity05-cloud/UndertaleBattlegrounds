@@ -58,16 +58,16 @@ local BadTime = {
 	BoneShotTravelTime = 0.34,
 
 	BoneZoneCount = 4,
-	BoneZoneDamage = 4,
+	BoneZoneDamage = 3,
 
 	BoneWallCount = 8,
-	BoneWallDamage = 4,
+	BoneWallDamage = 3,
 	BoneWallFireInterval = 0.4,
 	BoneWallTravelTime = 0.48,
 
 	BlasterCircleRounds = 6,
 	BlasterRingCount = 14,
-	BlasterDamage = 2,
+	BlasterDamage = 1.5,
 	BlasterScale = 1,
 	BlasterChargeTime = 0.52,
 	BlasterShotInterval = 0.055,
@@ -81,7 +81,7 @@ local BadTime = {
 	BlasterMoveInDistance = 6,
 	BlasterMoveOutDistance = 7,
 
-	GiantBlasterDamage = 6,
+	GiantBlasterDamage = 5,
 	GiantBlasterScale = 2.2,
 	GiantBlasterChargeTime = 0.72,
 	GiantBlasterBeamRadius = 9,
@@ -92,8 +92,8 @@ local BadTime = {
 	GiantBlasterMoveOutDistance = 10,
 	GiantBlasterSpawnRadius = 36,
 
-	GravitySpamTotalDamage = 10,
-	FinalSlamDamage = 35,
+	GravitySpamTotalDamage = 8,
+	FinalSlamDamage = 24,
 
 	TransitionBlackTime = 0.14,
 
@@ -1071,7 +1071,7 @@ local function spawnBoneZoneAtVictim(ctx, data)
 		end
 		hitOnce = true
 
-		blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, position, data.BoneZoneDamage or 4, BLOCK_MODE_ALL_ROUND)
+		blockableSequenceDamage(ctx, hitCharacter, hitHumanoid, hitRoot, position, data.BoneZoneDamage or 3, BLOCK_MODE_ALL_ROUND)
 	end)
 
 	task.delay(0.5, function()
@@ -1177,7 +1177,7 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 						hitHumanoid,
 						hitRoot,
 						wallCFrame.Position,
-						data.BoneWallDamage or 4,
+						data.BoneWallDamage or 3,
 						BLOCK_MODE_NORMAL
 					)
 
@@ -1767,7 +1767,7 @@ local function runBlasterRing(ctx, data)
 					data,
 					angle,
 					data.BlasterScale or 1,
-					data.BlasterDamage or 2,
+					data.BlasterDamage or 1.5,
 					data.BlasterChargeTime or 0.52,
 					data.BlasterBeamLength or 78,
 					data.BlasterBeamRadius or 5.2,
@@ -1809,7 +1809,7 @@ local function runGiantBlasters(ctx, data)
 				data,
 				angle,
 				data.GiantBlasterScale or 2.2,
-				data.GiantBlasterDamage or 6,
+				data.GiantBlasterDamage or 5,
 				data.GiantBlasterChargeTime or 0.72,
 				data.GiantBlasterBeamLength or 120,
 				data.GiantBlasterBeamRadius or 9,
@@ -1832,7 +1832,7 @@ local function runBlueGravityFinale(ctx, data)
 		return
 	end
 
-	local totalDamage = data.GravitySpamTotalDamage or 10
+	local totalDamage = data.GravitySpamTotalDamage or 8
 	local perHit = totalDamage / 4
 
 	local velocities = {
@@ -1913,7 +1913,7 @@ local function finalSlam(ctx, data)
 	task.wait(0.08)
 
 	if targetHumanoid.Health > 0 then
-		lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 35)
+		lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 24)
 	end
 end
 

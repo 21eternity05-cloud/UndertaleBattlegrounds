@@ -3,11 +3,12 @@ local BoneShot = {
 	AnimationName = "BoneShot",
 
 	Cooldown = 9.2,
-	MaxLockTime = 0.45,
+	MaxLockTime = 0.6,
 
 	RequiresTarget = true,
 
-	Startup = 0.2,
+	Startup = 0.25,
+	Endlag = 0.14,
 	Shots = 5,
 
 	FormationTime = 0.18,
@@ -340,7 +341,7 @@ function BoneShot.Execute(ctx)
 		return
 	end
 
-	task.wait(data.Startup or 0.18)
+	task.wait(data.Startup or 0.25)
 
 	if isMoveInterrupted(ctx) then
 		ctx:FinishMove(0)
@@ -503,7 +504,7 @@ function BoneShot.Execute(ctx)
 		task.wait(data.ShotInterval or 0.12)
 	end
 
-	ctx:FinishMove(0)
+	ctx:FinishMove(data.Endlag or 0.14)
 end
 
 return BoneShot

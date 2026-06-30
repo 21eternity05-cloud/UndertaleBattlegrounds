@@ -9,6 +9,7 @@ local RedSlash = {
 
 	Damage = 10,
 	Stun = 1,
+	WhiffEndlag = 0.5,
 
 	Radius = 9,
 	Offset = CFrame.new(0, 0, -6.4),
@@ -265,6 +266,7 @@ function RedSlash.Execute(context)
 	local finished = false
 	local chargeTriggered = false
 	local trailStarted = false
+	local didConnect = false
 
 	local chargeConnection
 	local stoppedConnection
@@ -417,6 +419,7 @@ function RedSlash.Execute(context)
 					or result == "Guardbreak"
 					or result == "Blocked"
 				then
+					didConnect = true
 					-- Put this Sound inside:
 					-- ReplicatedStorage > Assets > Characters > Chara > SFX > RedSlashHit
 					playCharaSFX("RedSlashHit", targetRoot, 2)
@@ -445,7 +448,7 @@ function RedSlash.Execute(context)
 	-- Do NOT stop trail here.
 	-- Trail stops when the animation ends/stops, or when finishMove runs.
 
-	task.wait(ENDLAG_TIME)
+	task.wait(didConnect and ENDLAG_TIME or (moveData.WhiffEndlag or RedSlash.WhiffEndlag or 0.5))
 
 	if not finished then
 		finishMove(0)

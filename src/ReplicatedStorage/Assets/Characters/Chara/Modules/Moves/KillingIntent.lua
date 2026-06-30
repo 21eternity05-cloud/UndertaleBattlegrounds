@@ -48,7 +48,6 @@ local KillingIntent = {
 	HasIFrames = false,
 	HasArmor = false,
 
-	CounterWindow = 0.7,
 	CounterRange = 22,
 
 	-- Counter-confirm polish.

@@ -8,6 +8,7 @@ VFXService.__index = VFXService
 local BLOCK_BILLBOARD_NAME = "ActiveBlockBillboard"
 local BLOCK_ATTACHMENT_NAME = "ActiveBlockVFX"
 local IMMUNITY_HIGHLIGHT_NAME = "ActiveImmunityHighlight"
+local SOUL_BURST_HIGHLIGHT_NAME = "ActiveSoulBurstHighlight"
 
 local function forceBlockBillboardVisible(billboard)
 	if not billboard then return end
@@ -506,6 +507,90 @@ function VFXService:ReconcileImmunityHighlight(character)
 		self:EnsureImmunityHighlight(character)
 	else
 		self:ClearImmunityHighlight(character)
+	end
+end
+
+function VFXService:GetSoulBurstHighlightColor(character)
+	local function asColor(value)
+		if typeof(value) == "Color3" then
+			return value
+		end
+
+		return nil
+	end
+
+	if character then
+		local color = asColor(character:GetAttribute("HeartColor"))
+			or asColor(character:GetAttribute("SoulColor"))
+
+		if color then
+			return color
+		end
+
+		local player = game:GetService("Players"):GetPlayerFromCharacter(character)
+		if player then
+			color = asColor(player:GetAttribute("HeartColor"))
+				or asColor(player:GetAttribute("SoulColor"))
+
+			if color then
+				return color
+			end
+		end
+	end
+
+	return Color3.fromRGB(255, 55, 80)
+end
+
+function VFXService:EnsureSoulBurstHighlight(character, color)
+	if not character or not character.Parent then return nil end
+
+	local highlight = character:FindFirstChild(SOUL_BURST_HIGHLIGHT_NAME)
+	if highlight and highlight:IsA("Highlight") then
+		for _, child in ipairs(character:GetChildren()) do
+			if child ~= highlight and child.Name == SOUL_BURST_HIGHLIGHT_NAME then
+				child:Destroy()
+			end
+		end
+	else
+		if highlight then
+			highlight:Destroy()
+		end
+
+		highlight = Instance.new("Highlight")
+		highlight.Name = SOUL_BURST_HIGHLIGHT_NAME
+		highlight.Parent = character
+	end
+
+	local soulColor = color or self:GetSoulBurstHighlightColor(character)
+	highlight.FillColor = soulColor
+	highlight.OutlineColor = soulColor
+	highlight.FillTransparency = 0.92
+	highlight.OutlineTransparency = 0.08
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+
+	return highlight
+end
+
+function VFXService:ClearSoulBurstHighlight(character)
+	if not character then return end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if child.Name == SOUL_BURST_HIGHLIGHT_NAME then
+			child:Destroy()
+		end
+	end
+end
+
+function VFXService:ReconcileSoulBurstHighlight(character)
+	if not character or not character.Parent then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local alive = humanoid and humanoid.Health > 0
+
+	if alive and character:GetAttribute("SoulBurstIFrameActive") == true then
+		self:EnsureSoulBurstHighlight(character)
+	else
+		self:ClearSoulBurstHighlight(character)
 	end
 end
 

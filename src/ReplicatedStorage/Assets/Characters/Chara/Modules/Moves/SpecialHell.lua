@@ -8,7 +8,7 @@ local SpecialHell = {
 	Cooldown = 3,
 	Duration = 8.5,
 	LockTime = 8.5,
-	MaxLockTime = 9,
+	MaxLockTime = 9.5,
 
 	RequiresTarget = false,
 
@@ -19,9 +19,10 @@ local SpecialHell = {
 	Radius = 7,
 	Offset = CFrame.new(0, 0, -5),
 
+	StartupAnimationSpeed = 0.85,
 	GrabActiveTime = 0.15,
 	GrabTickRate = 0.03,
-	WhiffEndlag = 0.22,
+	WhiffEndlag = 1.05,
 
 	ForwardDriftSpeed = 0,
 	ForwardDriftMaxForce = 65000,
@@ -993,7 +994,14 @@ function SpecialHell.Execute(ctx)
 		ArmorPreventsHitCancel = true,
 	})
 
-	local startupTrack = select(1, playFirstAnimation(ctx, character, STARTUP_ANIMATIONS, 0.04, 1, false))
+	local startupTrack = select(1, playFirstAnimation(
+		ctx,
+		character,
+		STARTUP_ANIMATIONS,
+		0.04,
+		moveData.StartupAnimationSpeed or 1,
+		false
+	))
 
 	if not startupTrack then
 		warn("[SpecialHell] Missing startup animation")
@@ -1050,7 +1058,7 @@ function SpecialHell.Execute(ctx)
 
 		if not confirmed and not finished then
 			print("[SpecialHell] Whiffed")
-			finish(moveData.WhiffEndlag or 0.22)
+			finish(moveData.WhiffEndlag or 1.05)
 		end
 	end))
 
@@ -1063,10 +1071,10 @@ function SpecialHell.Execute(ctx)
 			warn("[SpecialHell] Startup ended before Grab marker")
 		end
 
-		finish(moveData.WhiffEndlag or 0.22)
+		finish(moveData.WhiffEndlag or 1.05)
 	end))
 
-	task.delay(moveData.MaxLockTime or 9, function()
+	task.delay(moveData.MaxLockTime or 9.5, function()
 		if not finished then
 			warn("[SpecialHell] Failsafe cleanup")
 			finish(0)

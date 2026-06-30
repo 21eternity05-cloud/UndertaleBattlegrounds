@@ -6,15 +6,15 @@ local GasterBlaster = {
 	AnimationName = "GasterBlaster",
 
 	Cooldown = 10, -- testing value; later use 10-14
-	Duration = 1.25,
-	LockTime = 0.9,
-	MaxLockTime = 1.35,
+	Duration = 1.4,
+	LockTime = 1.05,
+	MaxLockTime = 1.5,
 
 	RequiresTarget = false,
 	RequiresAim = true,
 
-	Startup = 0.18,
-	ChargeTime = 0.45,
+	Startup = 0.24,
+	ChargeTime = 0.52,
 	BeamActiveTime = 0.4,
 
 	BeamLength = 90,
@@ -40,9 +40,8 @@ local GasterBlaster = {
 	CanBeBlocked = true,
 	Unblockable = false,
 
-	-- Whole beam guardbreaks now, not just the final tick.
 	Guardbreak = true,
-	GuardbreakFinalOnly = false,
+	GuardbreakFinalOnly = true,
 	GuardbreakStun = 2.45,
 
 	CanBeCountered = true,
@@ -50,7 +49,7 @@ local GasterBlaster = {
 
 	-- Do not cancel the victim's current move/action.
 	HitCancelsTarget = false,
-	CancelableByHit = false,
+	CancelableByHit = true,
 
 	SpawnOffset = CFrame.new(0, 4.5, -5.5),
 
@@ -639,7 +638,7 @@ function GasterBlaster.Execute(ctx)
 
 	Debris:AddItem(blaster, data.BlasterLifetime or 2)
 
-	task.wait(data.Startup or 0.18)
+	task.wait(data.Startup or 0.24)
 
 	if not ctx:IsActive() then
 		fadeOutBlaster(blaster, blaster:GetPivot(), originalTransparencies, data)
@@ -653,7 +652,7 @@ function GasterBlaster.Execute(ctx)
 	openJaws(blaster, data)
 	forcePrimaryInvisible(blaster)
 
-	task.wait(data.ChargeTime or 0.45)
+	task.wait(data.ChargeTime or 0.52)
 
 	if not ctx:IsActive() then
 		fadeOutBlaster(blaster, blaster:GetPivot(), originalTransparencies, data)
@@ -690,8 +689,8 @@ function GasterBlaster.Execute(ctx)
 		beamAttackData[key] = value
 	end
 
-	beamAttackData.Guardbreak = true
-	beamAttackData.GuardbreakFinalOnly = false
+	beamAttackData.Guardbreak = data.Guardbreak == true
+	beamAttackData.GuardbreakFinalOnly = data.GuardbreakFinalOnly ~= false
 	beamAttackData.HitCancelsTarget = false
 
 	-- Important:

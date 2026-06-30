@@ -59,13 +59,13 @@ CombatConfig.WallImpactMinSpeed = 18
 -- Ultimate meter
 CombatConfig.UltMax = 100
 
-CombatConfig.UltDamageDealtMultiplier = 0.7
-CombatConfig.UltDamageTakenMultiplier = 0.35
+CombatConfig.UltDamageDealtMultiplier = 0.5
+CombatConfig.UltDamageTakenMultiplier = 0.25
 
-CombatConfig.UltGuardbreakGain = 8
-CombatConfig.UltCounterGain = 10
-CombatConfig.UltComboEnderGain = 5
-CombatConfig.UltKillGain = 15
+CombatConfig.UltGuardbreakGain = 6
+CombatConfig.UltCounterGain = 8
+CombatConfig.UltComboEnderGain = 4
+CombatConfig.UltKillGain = 12
 
 -- Keep true while testing on debug/arena dummies.
 -- Turn false later for real PvP balance.
@@ -79,7 +79,7 @@ CombatConfig.SoulBurstStunGainMultiplier = 5
 CombatConfig.SoulBurstComboExtenderBonus = 5
 
 CombatConfig.SoulBurstCost = 300
-CombatConfig.SoulBurstIFrameDuration = 2
+CombatConfig.SoulBurstIFrameDuration = 2.25
 CombatConfig.SoulBurstRadius = 15
 CombatConfig.SoulBurstDamage = 0
 CombatConfig.SoulBurstKnockbackSpeed = 55
@@ -209,7 +209,7 @@ CombatConfig.M1Data = {
 	},
 
 	[5] = {
-		Damage = 8,
+		Damage = 5,
 		Stun = 0.5,
 		Cooldown = 0.72,
 		HitDelay = 0.20,

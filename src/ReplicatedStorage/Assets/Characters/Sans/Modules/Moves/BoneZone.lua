@@ -12,7 +12,6 @@ local BoneZone = {
 	TargetRange = 40,
 
 	WarningTime = 0.5,
-	EarlyUnlockTime = 0.2,
 	ZoneLifetime = 1.4,
 
 	Radius = 9,
