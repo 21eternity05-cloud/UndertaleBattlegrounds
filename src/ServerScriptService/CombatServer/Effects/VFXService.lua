@@ -707,6 +707,11 @@ function VFXService:PlayImpactFrameForPlayer(player, presetName, options)
 	return self.ImpactFrameService:PlayForPlayer(player, presetName, options)
 end
 
+function VFXService:PlayImpactFrameForSubjects(attackerCharacter, victimCharacter, presetName, options)
+	if not self.ImpactFrameService then return end
+	return self.ImpactFrameService:PlayForSubjects(attackerCharacter, victimCharacter, presetName, options)
+end
+
 function VFXService:SpawnAfterImage(character, presetName, options)
 	if not self.AfterImageService then return end
 

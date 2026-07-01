@@ -1898,6 +1898,10 @@ local function finalSlam(ctx, data)
 	slamData.AirAnimationName = "DownslamAir"
 	slamData.SplatAnimationName = "DownslamSplat"
 
+	if ctx.VFXService and ctx.VFXService.PlayImpactFrameForSubjects then
+		ctx.VFXService:PlayImpactFrameForSubjects(ctx.Character, targetCharacter, "BadTimeFinalSlam")
+	end
+
 	playFinalSlamPolish(ctx, targetCharacter)
 
 	if ctx.MovementService and ctx.MovementService.ApplyGroundSplatDownslam then

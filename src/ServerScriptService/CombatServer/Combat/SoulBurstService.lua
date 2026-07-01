@@ -532,12 +532,6 @@ function SoulBurstService:ActivateSoulBurst(player)
 		self.VFXService:PlaySoulBurst(character)
 	end
 
-	if self.VFXService and self.VFXService.PlayImpactFrameRadius then
-		self.VFXService:PlayImpactFrameRadius(root.Position, 70, "SoulBurst", {
-			Character = character,
-		})
-	end
-
 	self:ApplyBurstHitbox(character, root)
 
 	if self.SoulBurstRemote then
@@ -583,12 +577,6 @@ function SoulBurstService:ActivateSoulBurstForCharacter(character)
 
 	if self.VFXService and self.VFXService.PlaySoulBurst then
 		self.VFXService:PlaySoulBurst(character)
-	end
-
-	if self.VFXService and self.VFXService.PlayImpactFrameRadius then
-		self.VFXService:PlayImpactFrameRadius(root.Position, 70, "SoulBurst", {
-			Character = character,
-		})
 	end
 
 	self:ApplyBurstHitbox(character, root)

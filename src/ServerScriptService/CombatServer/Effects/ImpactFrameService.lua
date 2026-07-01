@@ -6,23 +6,23 @@ ImpactFrameService.__index = ImpactFrameService
 
 local DEFAULT_IMPACT_FRAME = {
 	Duration = 0.1,
+	TintColor = Color3.fromRGB(255, 255, 255),
+	Brightness = 1,
 	UseUltColor = true,
-	BackgroundColor = Color3.fromRGB(0, 0, 0),
-	FlashColor = Color3.fromRGB(255, 255, 255),
-	HighlightColor = Color3.fromRGB(255, 255, 255),
-	BackgroundTransparency = 0.15,
-	FlashTransparency = 0.25,
-	FOVPunch = 3,
-	ShakeMagnitude = 0.6,
-	Contrast = 0.35,
-	Saturation = -0.2,
-	Brightness = 0.1,
+	VictimColor = Color3.fromRGB(0, 0, 0),
+	AttackerFillTransparency = 0,
+	VictimFillTransparency = 0,
+	OutlineTransparency = 1,
+	Contrast = 0,
+	Saturation = 0,
 	Radius = 70,
 }
 
 local INTERNAL_OPTION_KEYS = {
 	Character = true,
 	CharacterName = true,
+	Attacker = true,
+	Victim = true,
 }
 
 local function mergeInto(target, source)
@@ -154,8 +154,9 @@ end
 
 function ImpactFrameService:ResolvePreset(characterOrName, presetName, options)
 	options = options or {}
-	local character = options.Character or (typeof(characterOrName) == "Instance" and characterOrName:IsA("Model") and characterOrName or nil)
-	local characterName = self:GetCharacterName(character or options.CharacterName or characterOrName)
+	local attacker = options.Attacker or options.Character or (typeof(characterOrName) == "Instance" and characterOrName:IsA("Model") and characterOrName or nil)
+	local victim = options.Victim
+	local characterName = self:GetCharacterName(attacker or options.CharacterName or characterOrName)
 	local presetModule = self:GetPresetModule(characterName)
 	local characterPreset = presetModule
 		and presetModule.ImpactFrames
@@ -167,14 +168,17 @@ function ImpactFrameService:ResolvePreset(characterOrName, presetName, options)
 	mergeInto(resolved, stripInternalOptions(options))
 
 	if resolved.UseUltColor == true then
-		local color = self:GetCharacterColor(character or characterName)
-		if options.FlashColor == nil then
-			resolved.FlashColor = color
+		local color = self:GetCharacterColor(attacker or characterName)
+		if options.AttackerColor == nil then
+			resolved.AttackerColor = color
 		end
 		if options.HighlightColor == nil then
 			resolved.HighlightColor = color
 		end
 	end
+
+	resolved.Attacker = attacker
+	resolved.Victim = victim
 
 	return resolved
 end
@@ -203,6 +207,29 @@ function ImpactFrameService:PlayForCharacter(character, presetName, options)
 	options = options or {}
 	options.Character = options.Character or character
 	self:PlayForPlayer(player, presetName, options)
+end
+
+function ImpactFrameService:PlayForSubjects(attackerCharacter, victimCharacter, presetName, options)
+	options = options or {}
+	options.Attacker = attackerCharacter
+	options.Victim = victimCharacter
+	options.Character = attackerCharacter
+
+	local players = {}
+	local attackerPlayer = attackerCharacter and Players:GetPlayerFromCharacter(attackerCharacter)
+	local victimPlayer = victimCharacter and Players:GetPlayerFromCharacter(victimCharacter)
+
+	if attackerPlayer then
+		table.insert(players, attackerPlayer)
+	end
+
+	if victimPlayer and victimPlayer ~= attackerPlayer then
+		table.insert(players, victimPlayer)
+	end
+
+	for _, player in ipairs(players) do
+		self:PlayForPlayer(player, presetName, options)
+	end
 end
 
 function ImpactFrameService:PlayForPlayers(players, presetName, options)

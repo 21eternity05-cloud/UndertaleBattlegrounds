@@ -6,9 +6,9 @@ local AfterImageService = {}
 AfterImageService.__index = AfterImageService
 
 local DEFAULT_AFTERIMAGE = {
-	Lifetime = 0.35,
-	FadeTime = 0.25,
-	Transparency = 0.58,
+	Lifetime = 0.45,
+	FadeTime = 0.32,
+	Transparency = 0.42,
 	UseUltColor = true,
 	Material = Enum.Material.Neon,
 	MaxParts = 14,
@@ -216,6 +216,9 @@ function AfterImageService:SpawnAfterImage(character, options)
 	folder.Parent = self:GetRuntimeFolder()
 
 	local maxParts = math.max(1, resolved.MaxParts or DEFAULT_AFTERIMAGE.MaxParts)
+	local lifetime = resolved.Lifetime or DEFAULT_AFTERIMAGE.Lifetime
+	local fadeTime = resolved.FadeTime or DEFAULT_AFTERIMAGE.FadeTime
+	local fadeDelay = math.max(lifetime - fadeTime, 0)
 	local count = 0
 
 	for _, descendant in ipairs(character:GetDescendants()) do
@@ -232,15 +235,19 @@ function AfterImageService:SpawnAfterImage(character, options)
 			local ghost = self:PrepareGhostPart(descendant, resolved)
 			ghost.Parent = folder
 
-			TweenService:Create(
-				ghost,
-				TweenInfo.new(resolved.FadeTime or DEFAULT_AFTERIMAGE.FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ Transparency = 1 }
-			):Play()
+			task.delay(fadeDelay, function()
+				if ghost and ghost.Parent then
+					TweenService:Create(
+						ghost,
+						TweenInfo.new(fadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{ Transparency = 1 }
+					):Play()
+				end
+			end)
 		end
 	end
 
-	Debris:AddItem(folder, (resolved.Lifetime or DEFAULT_AFTERIMAGE.Lifetime) + 0.08)
+	Debris:AddItem(folder, lifetime + 0.08)
 	return folder
 end
 

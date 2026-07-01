@@ -1,114 +1,77 @@
 local Lighting = game:GetService("Lighting")
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-
-local player = Players.LocalPlayer
-local CameraShake = require(script.Parent:WaitForChild("CameraShake"))
 
 local ImpactFrame = {}
 
+local HIGHLIGHT_NAME = "UTBGImpactFrameHighlight"
+local COLOR_CORRECTION_NAME = "UTBGImpactFrameColorCorrection"
+
 local activeToken = 0
-local activeTweens = {}
-local activeHighlight = nil
-local originalFOV = nil
+local activeHighlights = {}
+local activeColorCorrection = nil
 
-local function cancelTweens()
-	for _, tween in ipairs(activeTweens) do
-		tween:Cancel()
+local function destroyHighlightOn(character)
+	if not character then
+		return
 	end
 
-	table.clear(activeTweens)
-end
-
-local function getGui()
-	local playerGui = player:WaitForChild("PlayerGui")
-	local gui = playerGui:FindFirstChild("UTBGImpactFrame")
-
-	if gui and not gui:IsA("ScreenGui") then
-		gui:Destroy()
-		gui = nil
-	end
-
-	if not gui then
-		gui = Instance.new("ScreenGui")
-		gui.Name = "UTBGImpactFrame"
-		gui.IgnoreGuiInset = true
-		gui.ResetOnSpawn = false
-		gui.DisplayOrder = 9000
-		gui.Enabled = false
-		gui.Parent = playerGui
-
-		local background = Instance.new("Frame")
-		background.Name = "Background"
-		background.BorderSizePixel = 0
-		background.Size = UDim2.fromScale(1, 1)
-		background.ZIndex = 1
-		background.Parent = gui
-
-		local flash = Instance.new("Frame")
-		flash.Name = "Flash"
-		flash.BorderSizePixel = 0
-		flash.Size = UDim2.fromScale(1, 1)
-		flash.ZIndex = 2
-		flash.Parent = gui
-	end
-
-	return gui
-end
-
-local function getColorCorrection()
-	local effect = Lighting:FindFirstChild("UTBGImpactFrameColor")
-
-	if effect and not effect:IsA("ColorCorrectionEffect") then
-		effect:Destroy()
-		effect = nil
-	end
-
-	if not effect then
-		effect = Instance.new("ColorCorrectionEffect")
-		effect.Name = "UTBGImpactFrameColor"
-		effect.Enabled = false
-		effect.Parent = Lighting
-	end
-
-	return effect
-end
-
-local function resetColorCorrection()
-	local effect = getColorCorrection()
-	effect.Enabled = false
-	effect.TintColor = Color3.new(1, 1, 1)
-	effect.Contrast = 0
-	effect.Saturation = 0
-	effect.Brightness = 0
-end
-
-local function clearHighlight()
-	if activeHighlight then
-		activeHighlight:Destroy()
-		activeHighlight = nil
+	for _, child in ipairs(character:GetChildren()) do
+		if child.Name == HIGHLIGHT_NAME and child:IsA("Highlight") then
+			child:Destroy()
+		end
 	end
 end
 
-local function restoreFOV()
-	local camera = workspace.CurrentCamera
-
-	if camera and originalFOV then
-		camera.FieldOfView = originalFOV
+local function clearHighlights()
+	for _, highlight in ipairs(activeHighlights) do
+		if highlight and highlight.Parent then
+			highlight:Destroy()
+		end
 	end
 
-	originalFOV = nil
+	table.clear(activeHighlights)
+end
+
+local function clearColorCorrection()
+	if activeColorCorrection then
+		activeColorCorrection:Destroy()
+		activeColorCorrection = nil
+	end
+
+	local existing = Lighting:FindFirstChild(COLOR_CORRECTION_NAME)
+	if existing then
+		existing:Destroy()
+	end
+
+	local oldExisting = Lighting:FindFirstChild("UTBGImpactFrameColor")
+	if oldExisting then
+		oldExisting:Destroy()
+	end
+end
+
+local function addSubjectHighlight(character, color, fillTransparency, outlineTransparency)
+	if not character or not character.Parent then
+		return nil
+	end
+
+	destroyHighlightOn(character)
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = HIGHLIGHT_NAME
+	highlight.FillColor = color or Color3.fromRGB(255, 255, 255)
+	highlight.OutlineColor = highlight.FillColor
+	highlight.FillTransparency = fillTransparency or 0
+	highlight.OutlineTransparency = outlineTransparency or 1
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = character
+
+	table.insert(activeHighlights, highlight)
+	return highlight
 end
 
 function ImpactFrame:Reset()
 	activeToken += 1
-	cancelTweens()
-	clearHighlight()
-	restoreFOV()
-	resetColorCorrection()
-
-	local gui = getGui()
-	gui.Enabled = false
+	clearHighlights()
+	clearColorCorrection()
 end
 
 function ImpactFrame:Play(options)
@@ -117,110 +80,45 @@ function ImpactFrame:Play(options)
 	activeToken += 1
 	local token = activeToken
 
-	cancelTweens()
-	clearHighlight()
+	clearHighlights()
+	clearColorCorrection()
 
 	local duration = math.max(options.Duration or 0.1, 0.03)
-	local outTime = math.max(options.OutTime or duration * 1.35, 0.04)
-	local backgroundColor = options.BackgroundColor or Color3.fromRGB(0, 0, 0)
-	local flashColor = options.FlashColor or options.HighlightColor or Color3.fromRGB(255, 255, 255)
-	local highlightColor = options.HighlightColor or flashColor
+	local tintColor = options.TintColor or options.BackgroundColor or Color3.fromRGB(255, 255, 255)
+	local brightness = typeof(options.Brightness) == "number" and options.Brightness or 1
+	local outlineTransparency = typeof(options.OutlineTransparency) == "number" and options.OutlineTransparency or 1
 
-	local gui = getGui()
-	local background = gui:FindFirstChild("Background")
-	local flash = gui:FindFirstChild("Flash")
-
-	gui.Enabled = true
-	background.BackgroundColor3 = backgroundColor
-	background.BackgroundTransparency = options.BackgroundTransparency or 0.15
-	flash.BackgroundColor3 = flashColor
-	flash.BackgroundTransparency = options.FlashTransparency or 0.25
-
-	local effect = getColorCorrection()
+	local effect = Instance.new("ColorCorrectionEffect")
+	effect.Name = COLOR_CORRECTION_NAME
 	effect.Enabled = true
-	effect.TintColor = flashColor
-	effect.Contrast = options.Contrast or 0.35
-	effect.Saturation = options.Saturation or -0.2
-	effect.Brightness = options.Brightness or 0.1
+	effect.TintColor = tintColor
+	effect.Brightness = brightness
+	effect.Contrast = options.Contrast or 0
+	effect.Saturation = options.Saturation or 0
+	effect.Parent = Lighting
+	activeColorCorrection = effect
 
-	local character = player.Character
-	if character and options.HighlightColor ~= false then
-		local highlight = Instance.new("Highlight")
-		highlight.Name = "UTBGImpactFrameHighlight"
-		highlight.FillColor = highlightColor
-		highlight.OutlineColor = highlightColor
-		highlight.FillTransparency = 0.35
-		highlight.OutlineTransparency = 0
-		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		highlight.Parent = character
-		activeHighlight = highlight
-	end
+	addSubjectHighlight(
+		options.Attacker,
+		options.AttackerColor or options.HighlightColor or Color3.fromRGB(255, 255, 255),
+		typeof(options.AttackerFillTransparency) == "number" and options.AttackerFillTransparency or 0,
+		outlineTransparency
+	)
 
-	local camera = workspace.CurrentCamera
-	local fovPunch = options.FOVPunch
-	if camera and typeof(fovPunch) == "number" and fovPunch ~= 0 then
-		originalFOV = originalFOV or camera.FieldOfView
-		camera.FieldOfView = math.clamp(originalFOV - fovPunch, 1, 120)
-	end
-
-	if player:GetAttribute("Setting_CameraShake") ~= false then
-		local shakeMagnitude = options.ShakeMagnitude
-		if typeof(shakeMagnitude) == "number" and shakeMagnitude > 0 then
-			CameraShake:ShakeOnce(shakeMagnitude, options.ShakeRoughness or 12, duration + outTime)
-		end
-	end
-
-	local function addTween(instance, tweenInfo, goal)
-		local tween = TweenService:Create(instance, tweenInfo, goal)
-		table.insert(activeTweens, tween)
-		tween:Play()
-		return tween
-	end
+	addSubjectHighlight(
+		options.Victim,
+		options.VictimColor or Color3.fromRGB(0, 0, 0),
+		typeof(options.VictimFillTransparency) == "number" and options.VictimFillTransparency or 0,
+		outlineTransparency
+	)
 
 	task.delay(duration, function()
 		if token ~= activeToken then
 			return
 		end
 
-		addTween(background, TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-		})
-
-		addTween(flash, TweenInfo.new(outTime * 0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-		})
-
-		addTween(effect, TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Contrast = 0,
-			Saturation = 0,
-			Brightness = 0,
-			TintColor = Color3.new(1, 1, 1),
-		})
-
-		if activeHighlight then
-			addTween(activeHighlight, TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				FillTransparency = 1,
-				OutlineTransparency = 1,
-			})
-		end
-
-		if camera and originalFOV then
-			addTween(camera, TweenInfo.new(outTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				FieldOfView = originalFOV,
-			})
-		end
-	end)
-
-	task.delay(duration + outTime + 0.08, function()
-		if token ~= activeToken then
-			return
-		end
-
-		cancelTweens()
-		clearHighlight()
-		restoreFOV()
-		resetColorCorrection()
-		gui.Enabled = false
+		clearHighlights()
+		clearColorCorrection()
 	end)
 end
 
