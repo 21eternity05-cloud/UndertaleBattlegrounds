@@ -464,6 +464,61 @@ function StateService:LockJump(character, duration)
 	end)
 end
 
+function StateService:CanRefreshHumanoidMovement(character)
+	if not character or not character.Parent then
+		return false
+	end
+
+	if character:GetAttribute("Ragdolled") == true then return false end
+	if character:GetAttribute("Stunned") == true then return false end
+	if character:GetAttribute("Guardbroken") == true then return false end
+	if character:GetAttribute("Grabbed") == true then return false end
+	if character:GetAttribute("CinematicLocked") == true then return false end
+	if character:GetAttribute("ReservedVictim") == true then return false end
+	if character:GetAttribute("UsingMove") == true then return false end
+	if character:GetAttribute("MovementLocked") == true then return false end
+	if character:GetAttribute("Blocking") == true then return false end
+	if character:GetAttribute("Emoting") == true then return false end
+
+	return true
+end
+
+function StateService:RefreshHumanoidMovement(character, _reason)
+	if not self:CanRefreshHumanoidMovement(character) then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
+		return
+	end
+
+	humanoid.PlatformStand = false
+	humanoid.AutoRotate = true
+
+	pcall(function()
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end)
+
+	task.defer(function()
+		if not self:CanRefreshHumanoidMovement(character) then
+			return
+		end
+		if not humanoid.Parent or humanoid.Health <= 0 then
+			return
+		end
+
+		humanoid.WalkSpeed = self.Config.DefaultWalkSpeed or 16
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+		humanoid.JumpPower = self.Config.DefaultJumpPower or 50
+		humanoid.JumpHeight = self.Config.DefaultJumpHeight or 7.2
+
+		pcall(function()
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end)
+	end)
+end
+
 function StateService:CanRestoreWhiffWalkSpeed(character)
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
@@ -573,6 +628,31 @@ function StateService:StopCurrentStunAnimations(character)
 	end
 end
 
+function StateService:RecoverFromStaleRagdollPhysics(character, humanoid)
+	if not character or not character.Parent then
+		return
+	end
+	if character:GetAttribute("Ragdolled") == true then
+		return
+	end
+	if character:GetAttribute("Grabbed") == true
+		or character:GetAttribute("CinematicLocked") == true
+		or character:GetAttribute("ReservedVictim") == true
+	then
+		return
+	end
+	if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
+		return
+	end
+
+	humanoid.PlatformStand = false
+	pcall(function()
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end)
+
+	self:RefreshHumanoidMovement(character, "RecoverFromStaleRagdollPhysics")
+end
+
 function StateService:StunCharacter(character, duration, animationKey)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
@@ -620,18 +700,13 @@ function StateService:StunCharacter(character, duration, animationKey)
 		self:StopCurrentStunAnimations(character)
 
 		character:SetAttribute("Stunned", false)
+		self:RecoverFromStaleRagdollPhysics(character, currentHumanoid)
 
 		if self.ClearDebugHighlight then
 			self:ClearDebugHighlight(character)
 		end
 
-		currentHumanoid.WalkSpeed = self.Config.DefaultWalkSpeed
-
-		if not character:GetAttribute("UsingMove") then
-			currentHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-			currentHumanoid.JumpPower = self.Config.DefaultJumpPower
-			currentHumanoid.JumpHeight = self.Config.DefaultJumpHeight
-		end
+		self:RefreshHumanoidMovement(character, "StunEnded")
 	end)
 end
 
@@ -684,21 +759,14 @@ function StateService:GuardbreakCharacter(character, duration)
 
 		if character:GetAttribute("StunId") == stunId then
 			character:SetAttribute("Stunned", false)
+			self:RecoverFromStaleRagdollPhysics(character, currentHumanoid)
 		end
 
 		if self.ClearDebugHighlight then
 			self:ClearDebugHighlight(character)
 		end
 
-		if not character:GetAttribute("Stunned") then
-			currentHumanoid.WalkSpeed = self.Config.DefaultWalkSpeed
-		end
-
-		if not character:GetAttribute("Stunned") and not character:GetAttribute("UsingMove") then
-			currentHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-			currentHumanoid.JumpPower = self.Config.DefaultJumpPower
-			currentHumanoid.JumpHeight = self.Config.DefaultJumpHeight
-		end
+		self:RefreshHumanoidMovement(character, "GuardbreakEnded")
 	end)
 end
 

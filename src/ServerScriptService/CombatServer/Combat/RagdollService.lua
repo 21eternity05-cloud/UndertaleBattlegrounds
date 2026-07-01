@@ -2,6 +2,10 @@ local RagdollService = {}
 RagdollService.__index = RagdollService
 
 local CONSTRAINT_FOLDER_NAME = "ActiveRagdollConstraints"
+local ATTACHMENT_PREFIX_0 = "RagdollAttachment0_"
+local ATTACHMENT_PREFIX_1 = "RagdollAttachment1_"
+local MOVEMENT_LOCK_TOKEN_ATTRIBUTE = "RagdollMovementLockToken"
+local DASH_LOCK_TOKEN_ATTRIBUTE = "RagdollDashLockToken"
 
 function RagdollService.new(config, stateService, movementService)
 	local self = setmetatable({}, RagdollService)
@@ -25,18 +29,35 @@ function RagdollService:DestroyConstraintFolder(character)
 	end
 end
 
+function RagdollService:DestroyLooseRagdollAttachments(character)
+	if not character then
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Attachment")
+			and (
+				string.sub(descendant.Name, 1, #ATTACHMENT_PREFIX_0) == ATTACHMENT_PREFIX_0
+				or string.sub(descendant.Name, 1, #ATTACHMENT_PREFIX_1) == ATTACHMENT_PREFIX_1
+			)
+		then
+			descendant:Destroy()
+		end
+	end
+end
+
 function RagdollService:CreateJointConstraint(folder, motor)
 	if not motor.Part0 or not motor.Part1 then
 		return nil
 	end
 
 	local attachment0 = Instance.new("Attachment")
-	attachment0.Name = "RagdollAttachment0_" .. motor.Name
+	attachment0.Name = ATTACHMENT_PREFIX_0 .. motor.Name
 	attachment0.CFrame = motor.C0
 	attachment0.Parent = motor.Part0
 
 	local attachment1 = Instance.new("Attachment")
-	attachment1.Name = "RagdollAttachment1_" .. motor.Name
+	attachment1.Name = ATTACHMENT_PREFIX_1 .. motor.Name
 	attachment1.CFrame = motor.C1
 	attachment1.Parent = motor.Part1
 
@@ -61,6 +82,7 @@ end
 
 function RagdollService:BuildConstraints(character)
 	self:DestroyConstraintFolder(character)
+	self:DestroyLooseRagdollAttachments(character)
 
 	local folder = Instance.new("Folder")
 	folder.Name = CONSTRAINT_FOLDER_NAME
@@ -84,6 +106,12 @@ function RagdollService:BuildConstraints(character)
 		end
 	end
 
+	if #motors <= 0 then
+		folder:Destroy()
+		warn("[RagdollService] Skipping ragdoll: no valid Motor6D rig")
+		return nil, nil
+	end
+
 	return folder, motors
 end
 
@@ -96,6 +124,51 @@ function RagdollService:CanRestoreMovement(character)
 		and character:GetAttribute("CinematicLocked") ~= true
 		and character:GetAttribute("UsingMove") ~= true
 		and character:GetAttribute("MovementLocked") ~= true
+end
+
+function RagdollService:RecoverHumanoidPhysics(character, humanoid, state)
+	if not humanoid or not humanoid.Parent or humanoid.Health <= 0 then
+		return
+	end
+
+	humanoid.PlatformStand = state and state.PlatformStand == true
+	humanoid.AutoRotate = state and state.AutoRotate ~= false
+
+	pcall(function()
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end)
+
+	task.defer(function()
+		if not character
+			or not character.Parent
+			or character:GetAttribute("Ragdolled") == true
+			or not humanoid
+			or not humanoid.Parent
+			or humanoid.Health <= 0
+		then
+			return
+		end
+
+		pcall(function()
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end)
+	end)
+end
+
+function RagdollService:RestoreOwnedLock(character, attributeName, ownerAttributeName, token, previousValue)
+	if not character or not character.Parent then
+		return
+	end
+
+	if character:GetAttribute(ownerAttributeName) ~= token then
+		return
+	end
+
+	character:SetAttribute(ownerAttributeName, nil)
+
+	if character:GetAttribute(attributeName) == true then
+		character:SetAttribute(attributeName, previousValue == true)
+	end
 end
 
 function RagdollService:RestoreCharacter(character, state, reason)
@@ -123,24 +196,35 @@ function RagdollService:RestoreCharacter(character, state, reason)
 	end
 
 	self:DestroyConstraintFolder(character)
+	self:DestroyLooseRagdollAttachments(character)
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid and humanoid.Parent and humanoid.Health > 0 then
-		humanoid.PlatformStand = state and state.PlatformStand == true
-		humanoid.AutoRotate = state and state.AutoRotate ~= false
-	end
 
 	character:SetAttribute("Ragdolled", false)
 	character:SetAttribute("RagdollReason", nil)
 	character:SetAttribute("RagdollType", nil)
 
+	self:RecoverHumanoidPhysics(character, humanoid, state)
+
 	if state then
 		if state.MovementLockedByRagdoll then
-			character:SetAttribute("MovementLocked", state.PreviousMovementLocked == true)
+			self:RestoreOwnedLock(
+				character,
+				"MovementLocked",
+				MOVEMENT_LOCK_TOKEN_ATTRIBUTE,
+				state.Token,
+				state.PreviousMovementLocked
+			)
 		end
 
 		if state.DashLockedByRagdoll then
-			character:SetAttribute("DashLocked", state.PreviousDashLocked == true)
+			self:RestoreOwnedLock(
+				character,
+				"DashLocked",
+				DASH_LOCK_TOKEN_ATTRIBUTE,
+				state.Token,
+				state.PreviousDashLocked
+			)
 		end
 	end
 
@@ -149,7 +233,10 @@ function RagdollService:RestoreCharacter(character, state, reason)
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 		humanoid.JumpPower = state and state.JumpPower or self.Config.DefaultJumpPower or 50
 		humanoid.JumpHeight = state and state.JumpHeight or self.Config.DefaultJumpHeight or 7.2
-		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
+
+	if self.StateService and self.StateService.RefreshHumanoidMovement then
+		self.StateService:RefreshHumanoidMovement(character, reason or "RagdollEnded")
 	end
 
 	self.Active[character] = nil
@@ -160,7 +247,12 @@ function RagdollService:CancelRagdoll(character, reason)
 	if not state then
 		if character then
 			character:SetAttribute("Ragdolled", false)
+			character:SetAttribute("RagdollReason", nil)
+			character:SetAttribute("RagdollType", nil)
+			character:SetAttribute(MOVEMENT_LOCK_TOKEN_ATTRIBUTE, nil)
+			character:SetAttribute(DASH_LOCK_TOKEN_ATTRIBUTE, nil)
 			self:DestroyConstraintFolder(character)
+			self:DestroyLooseRagdollAttachments(character)
 		end
 		return
 	end
@@ -194,6 +286,10 @@ function RagdollService:ApplyRagdoll(character, duration, options)
 
 	local token = (character:GetAttribute("RagdollToken") or 0) + 1
 	local folder, motors = self:BuildConstraints(character)
+	if not folder or not motors or #motors <= 0 then
+		return nil
+	end
+
 	local state = {
 		Token = token,
 		Folder = folder,
@@ -221,9 +317,11 @@ function RagdollService:ApplyRagdoll(character, duration, options)
 	character:SetAttribute("BlockBufferToken", (character:GetAttribute("BlockBufferToken") or 0) + 1)
 
 	if state.MovementLockedByRagdoll then
+		character:SetAttribute(MOVEMENT_LOCK_TOKEN_ATTRIBUTE, token)
 		character:SetAttribute("MovementLocked", true)
 	end
 	if state.DashLockedByRagdoll then
+		character:SetAttribute(DASH_LOCK_TOKEN_ATTRIBUTE, token)
 		character:SetAttribute("DashLocked", true)
 	end
 

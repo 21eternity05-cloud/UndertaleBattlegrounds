@@ -23,6 +23,7 @@ local SpecialHell = {
 	GrabActiveTime = 0.15,
 	GrabTickRate = 0.03,
 	WhiffEndlag = 1.05,
+	EarlyStartupDashWindow = 0.3,
 
 	ForwardDriftSpeed = 0,
 	ForwardDriftMaxForce = 65000,
@@ -62,6 +63,9 @@ local SpecialHell = {
 	HellBeamHeight = 60,
 
 	-- Impact polish.
+	CrossfireDamage = 35,
+	CrossfireRadius = 13.5,
+
 	HellAttackerShakeMagnitude = 4.2,
 	HellAttackerShakeRoughness = 20,
 	HellAttackerShakeDuration = 0.65,
@@ -688,6 +692,53 @@ local function playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 	return groundPosition
 end
 
+local function applyPillarCrossfire(ctx, primaryVictim, groundPosition)
+	if not ctx or not ctx.HitboxService or not groundPosition then
+		return
+	end
+
+	local moveData = ctx.MoveData or SpecialHell
+	local radius = moveData.CrossfireRadius or 13.5
+	local damage = moveData.CrossfireDamage or 35
+
+	if damage <= 0 or radius <= 0 then
+		return
+	end
+
+	local attackData = {}
+	for key, value in pairs(moveData) do
+		attackData[key] = value
+	end
+
+	attackData.Damage = damage
+	attackData.Stun = 0
+	attackData.Knockback = 0
+	attackData.UpwardKnockback = 0
+	attackData.Blockable = false
+	attackData.CanBeBlocked = false
+	attackData.Unblockable = true
+	attackData.Guardbreak = false
+	attackData.CanBeCountered = false
+	attackData.HitCancelsTarget = false
+	attackData.PlayMoveHitVFX = true
+	attackData.AwardsUlt = false
+	attackData.NoUltGain = true
+	attackData.NoSoulBurstGain = true
+	attackData.Source = "SpecialHellCrossfire"
+	attackData.IsCrossfire = true
+
+	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, groundPosition, radius, function(targetCharacter, targetHumanoid, targetRoot)
+		if targetCharacter == primaryVictim then
+			return
+		end
+		if not ctx:IsActive() then
+			return
+		end
+
+		ctx:ApplyStandardHit(targetCharacter, targetHumanoid, targetRoot, attackData, "SpecialHellCrossfire")
+	end)
+end
+
 function SpecialHell.Execute(ctx)
 	print("[SpecialHell] Execute started")
 
@@ -701,8 +752,11 @@ function SpecialHell.Execute(ctx)
 		return
 	end
 
-	-- Dash lock starts immediately, even before the grab confirms.
-	setUltimateDashLock(character, true)
+	local dashPhaseToken = (character:GetAttribute("SpecialHellDashPhaseToken") or 0) + 1
+	character:SetAttribute("SpecialHellDashPhaseToken", dashPhaseToken)
+
+	-- Startup starts dashable, then re-locks before the grab confirm window.
+	setUltimateDashLock(character, false)
 
 	forceKnifeCollisionOffForAWhile(character, 0.5)
 
@@ -726,6 +780,23 @@ function SpecialHell.Execute(ctx)
 	local victimRoot = nil
 	local oldVictimState = nil
 	local attackerGrabState = nil
+
+	task.delay(moveData.EarlyStartupDashWindow or 0.3, function()
+		if not character or not character.Parent then
+			return
+		end
+		if character:GetAttribute("SpecialHellDashPhaseToken") ~= dashPhaseToken then
+			return
+		end
+		if finished or confirmed then
+			return
+		end
+		if not ctx:IsActive() then
+			return
+		end
+
+		setUltimateDashLock(character, true)
+	end)
 
 	local function addConnection(connection)
 		if connection then
@@ -783,6 +854,10 @@ function SpecialHell.Execute(ctx)
 		else
 			-- If the grab never confirmed, unlock the startup dash lock here.
 			setUltimateDashLock(character, false)
+		end
+
+		if character and character.Parent and character:GetAttribute("SpecialHellDashPhaseToken") == dashPhaseToken then
+			character:SetAttribute("SpecialHellDashPhaseToken", nil)
 		end
 
 		if character and character.Parent then
@@ -844,6 +919,7 @@ function SpecialHell.Execute(ctx)
 		local groundPosition = playSpecialHellVFX(ctx, victimCharacter, victimRoot)
 
 		playHellScreenShake(ctx, victimCharacter, groundPosition)
+		applyPillarCrossfire(ctx, victimCharacter, groundPosition)
 
 		if ctx.CinematicService then
 			local hitFlashDuration = moveData.HellHitFlashDuration or moveData.HellImpactFrameDuration or 0.12
@@ -1020,6 +1096,9 @@ function SpecialHell.Execute(ctx)
 		warn("[SpecialHell] Missing startup animation")
 		clearTempStatus(character)
 		setUltimateDashLock(character, false)
+		if character:GetAttribute("SpecialHellDashPhaseToken") == dashPhaseToken then
+			character:SetAttribute("SpecialHellDashPhaseToken", nil)
+		end
 		ctx:FinishMove(0)
 		return
 	end
@@ -1045,6 +1124,7 @@ function SpecialHell.Execute(ctx)
 		end
 
 		grabMarkerReached = true
+		setUltimateDashLock(character, true)
 
 		local hitOnce = false
 		local startTime = os.clock()

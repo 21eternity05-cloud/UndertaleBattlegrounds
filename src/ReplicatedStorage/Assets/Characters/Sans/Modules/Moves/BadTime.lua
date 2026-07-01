@@ -94,6 +94,8 @@ local BadTime = {
 
 	GravitySpamTotalDamage = 8,
 	FinalSlamDamage = 24,
+	FinalSlamCrossfireDamage = 24,
+	FinalSlamCrossfireRadius = 13,
 
 	TransitionBlackTime = 0.14,
 
@@ -769,6 +771,87 @@ local function lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, da
 	reportDamage(ctx, targetCharacter, targetRoot, damage)
 end
 
+local function makeBadTimeCrossfireAttackData(data, damage, sourceName)
+	local attackData = {}
+	for key, value in pairs(data or {}) do
+		attackData[key] = value
+	end
+
+	attackData.Damage = damage
+	attackData.Stun = 0
+	attackData.Knockback = 0
+	attackData.UpwardKnockback = 0
+	attackData.Blockable = false
+	attackData.CanBeBlocked = false
+	attackData.Unblockable = true
+	attackData.Guardbreak = false
+	attackData.CanBeCountered = false
+	attackData.HitCancelsTarget = false
+	attackData.PlayMoveHitVFX = true
+	attackData.AwardsUlt = false
+	attackData.NoUltGain = true
+	attackData.NoSoulBurstGain = true
+	attackData.Source = sourceName or "BadTimeCrossfire"
+	attackData.IsCrossfire = true
+
+	return attackData
+end
+
+local function applyBadTimeCrossfireHit(ctx, data, hitCharacter, hitHumanoid, hitRoot, damage, sourceName)
+	if not ctx or not ctx:IsActive() then
+		return false
+	end
+	if not hitCharacter or not hitCharacter.Parent then
+		return false
+	end
+	if hitCharacter == ctx.Character then
+		return false
+	end
+	if hitCharacter == ctx.BadTimeReservedTargetCharacter then
+		return false
+	end
+	if not hitHumanoid or hitHumanoid.Health <= 0 then
+		return false
+	end
+	if typeof(damage) ~= "number" or damage <= 0 then
+		return false
+	end
+
+	local attackData = makeBadTimeCrossfireAttackData(data, damage, sourceName)
+	ctx:ApplyStandardHit(hitCharacter, hitHumanoid, hitRoot, attackData, sourceName or "BadTimeCrossfire")
+
+	return true
+end
+
+local function applyFinalSlamCrossfire(ctx, data, primaryVictim, slamPosition)
+	if not ctx or not ctx.HitboxService or typeof(slamPosition) ~= "Vector3" then
+		return
+	end
+
+	local radius = data.FinalSlamCrossfireRadius or BadTime.FinalSlamCrossfireRadius or 13
+	local damage = data.FinalSlamCrossfireDamage or BadTime.FinalSlamCrossfireDamage or 24
+
+	if radius <= 0 or damage <= 0 then
+		return
+	end
+
+	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, slamPosition, radius, function(hitCharacter, hitHumanoid, hitRoot)
+		if hitCharacter == primaryVictim then
+			return
+		end
+
+		applyBadTimeCrossfireHit(
+			ctx,
+			data,
+			hitCharacter,
+			hitHumanoid,
+			hitRoot,
+			damage,
+			"BadTimeFinalSlamCrossfire"
+		)
+	end)
+end
+
 local function makeSequenceAttackData(blockMode)
 	local isAllRoundBlock = blockMode == BLOCK_MODE_ALL_ROUND
 
@@ -948,6 +1031,7 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 		end
 
 		local hitOnce = false
+		local crossfireHit = {}
 
 		ctx.HitboxService:PerformSphereAtPosition(
 			ctx.Character,
@@ -957,7 +1041,22 @@ local function spawnBoneShotAtVictim(ctx, data, index, count)
 				if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 					return
 				end
+
 				if not isReservedVictim(ctx, hitCharacter) then
+					if crossfireHit[hitCharacter] then
+						return
+					end
+					crossfireHit[hitCharacter] = true
+
+					applyBadTimeCrossfireHit(
+						ctx,
+						data,
+						hitCharacter,
+						hitHumanoid,
+						hitRoot,
+						data.BoneShotDamage or 1,
+						"BadTimeBoneShotCrossfire"
+					)
 					return
 				end
 				if hitOnce then
@@ -1060,12 +1159,28 @@ local function spawnBoneZoneAtVictim(ctx, data)
 	end
 
 	local hitOnce = false
+	local crossfireHit = {}
 
 	ctx.HitboxService:PerformSphereAtPosition(ctx.Character, position, 10, function(hitCharacter, hitHumanoid, hitRoot)
 		if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 			return
 		end
+
 		if not isReservedVictim(ctx, hitCharacter) then
+			if crossfireHit[hitCharacter] then
+				return
+			end
+			crossfireHit[hitCharacter] = true
+
+			applyBadTimeCrossfireHit(
+				ctx,
+				data,
+				hitCharacter,
+				hitHumanoid,
+				hitRoot,
+				data.BoneZoneDamage or 3,
+				"BadTimeBoneZoneCrossfire"
+			)
 			return
 		end
 		if hitOnce then
@@ -1115,6 +1230,7 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 	local duration = data.BoneWallTravelTime or 0.48
 	local startTime = os.clock()
 	local hitDone = false
+	local crossfireHit = {}
 
 	local baseAngle = math.rad((sideIndex - 1) * 180)
 	local angle = baseAngle + math.rad(math.random(-15, 15))
@@ -1156,7 +1272,7 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 			forcePrimaryInvisible(wall)
 		end
 
-		if not hitDone and ctx:IsActive() then
+		if ctx:IsActive() then
 			ctx.HitboxService:PerformSphereAtPosition(
 				ctx.Character,
 				wallCFrame.Position,
@@ -1165,7 +1281,22 @@ local function spawnTrackingBoneWall(ctx, data, sideIndex)
 					if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 						return
 					end
+
 					if not isReservedVictim(ctx, hitCharacter) then
+						if crossfireHit[hitCharacter] then
+							return
+						end
+						crossfireHit[hitCharacter] = true
+
+						applyBadTimeCrossfireHit(
+							ctx,
+							data,
+							hitCharacter,
+							hitHumanoid,
+							hitRoot,
+							data.BoneWallDamage or 3,
+							"BadTimeBoneWallCrossfire"
+						)
 						return
 					end
 					if hitDone then
@@ -1366,6 +1497,7 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 	end
 
 	local hitOnce = false
+	local crossfireHit = {}
 
 	ctx.HitboxService:PerformSphereChain(
 		ctx.Character,
@@ -1378,7 +1510,23 @@ local function hitVictimWithBeam(ctx, data, startPosition, direction, length, ra
 			if not ctx:IsActive() or shouldSkipToBadTimeFinale(ctx) then
 				return
 			end
+
 			if not isReservedVictim(ctx, hitCharacter) then
+				if crossfireHit[hitCharacter] then
+					return
+				end
+				crossfireHit[hitCharacter] = true
+
+				applyBadTimeCrossfireHit(
+					ctx,
+					data,
+					hitCharacter,
+					hitHumanoid,
+					hitRoot,
+					damage,
+					finalPulse and "BadTimeFinalRingBeamCrossfire"
+						or (giant and "BadTimeGiantBlasterCrossfire" or "BadTimeBlasterCrossfire")
+				)
 				return
 			end
 			if hitOnce then
@@ -1917,6 +2065,10 @@ local function finalSlam(ctx, data)
 	end
 
 	task.wait(0.08)
+
+	if targetRoot and targetRoot.Parent then
+		applyFinalSlamCrossfire(ctx, data, targetCharacter, targetRoot.Position)
+	end
 
 	if targetHumanoid.Health > 0 then
 		lethalDamage(ctx, targetCharacter, targetHumanoid, targetRoot, data.FinalSlamDamage or 24)

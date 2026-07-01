@@ -313,6 +313,11 @@ function MoveService:RestoreMoveMovement(character)
 		return
 	end
 
+	if self.StateService and self.StateService.RefreshHumanoidMovement then
+		self.StateService:RefreshHumanoidMovement(character, "MoveEnded")
+		return
+	end
+
 	humanoid.WalkSpeed = self.Config.DefaultWalkSpeed
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 	humanoid.JumpPower = self.Config.DefaultJumpPower
@@ -595,11 +600,11 @@ function MoveService:ApplyStandardHit(
 			self.DamageNumberService:ShowDamage(targetRoot, finalDamage)
 		end
 
-		if self.UltService and data.AwardsUlt ~= false then
+		if self.UltService and data.AwardsUlt ~= false and data.NoUltGain ~= true then
 			self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, finalDamage)
 		end
 
-		if self.SoulBurstService then
+		if self.SoulBurstService and data.NoSoulBurstGain ~= true then
 			self.SoulBurstService:AwardForHitTaken(targetCharacter, finalDamage, data.Stun, data)
 		end
 	end
@@ -1058,11 +1063,11 @@ function MoveService:ReportDamageEvent(attackerCharacter, targetCharacter, damag
 		self.DamageNumberService:ShowDamage(targetRoot, damageAmount)
 	end
 
-	if self.SoulBurstService then
+	if self.SoulBurstService and not (attackData and attackData.NoSoulBurstGain == true) then
 		self.SoulBurstService:AwardForHitTaken(targetCharacter, damageAmount, attackData and attackData.Stun, attackData)
 	end
 
-	if self.UltService and self.UltService.AwardDamageEvent then
+	if self.UltService and self.UltService.AwardDamageEvent and not (attackData and attackData.NoUltGain == true) then
 		self.UltService:AwardDamageEvent(attackerCharacter, targetCharacter, damageAmount)
 		return
 	end
