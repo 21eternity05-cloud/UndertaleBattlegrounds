@@ -866,14 +866,14 @@ function DevAdminService:FireNukeShake(intensity, roughness, duration)
 	})
 end
 
-function DevAdminService:FireNukeImpactFrame(mode, duration, intensity)
+function DevAdminService:FireNukeHitFlash(mode, duration, intensity)
 	local remote = self:GetCinematicRemote()
 	if not remote or not remote:IsA("RemoteEvent") then
 		return
 	end
 
 	remote:FireAllClients({
-		Action = "ImpactFrame",
+		Action = "HitFlash",
 		Mode = mode or "Invert",
 		Duration = duration or 0.18,
 
@@ -885,6 +885,10 @@ function DevAdminService:FireNukeImpactFrame(mode, duration, intensity)
 		Saturation = -1,
 		Brightness = 0.25,
 	})
+end
+
+function DevAdminService:FireNukeImpactFrame(...)
+	return self:FireNukeHitFlash(...)
 end
 
 function DevAdminService:GetNukeRoot(admin)
@@ -1367,7 +1371,7 @@ function DevAdminService:RunNukeSequence(admin, origin)
 	print("[DevAdminABUSE]", admin.Name, "launched server nuke.")
 
 	self:FireNukeShake(2.2, 18, 3.5)
-	self:FireNukeImpactFrame("RedBlack", 0.1, 1.8)
+	self:FireNukeHitFlash("RedBlack", 0.1, 1.8)
 
 	local siren = nukeModel and (nukeModel:FindFirstChild("Siren", true) or nukeModel:FindFirstChild("Alarm", true))
 	if siren and siren:IsA("Sound") then
@@ -1398,7 +1402,7 @@ function DevAdminService:RunNukeSequence(admin, origin)
 	)
 
 	self:FireNukeShake(4.2, 28, 1.8)
-	self:FireNukeImpactFrame("RedBlack", 0.08, 2.5)
+	self:FireNukeHitFlash("RedBlack", 0.08, 2.5)
 
 	local fallStart = missile:IsA("Model") and missile:GetPivot() or missile.CFrame
 	local fallTarget = CFrame.lookAt(
@@ -1427,10 +1431,10 @@ function DevAdminService:RunNukeSequence(admin, origin)
 	self:PlayNukeSound(boomTemplate, Workspace, impactPoint)
 
 	-- Impact frame: intentionally insane.
-	self:FireNukeImpactFrame("Invert", 0.48, 7.5)
+	self:FireNukeHitFlash("Invert", 0.48, 7.5)
 	self:FireNukeShake(16, 55, 1.4)
 	task.wait(0.1)
-	self:FireNukeImpactFrame("White", 0.32, 8.5)
+	self:FireNukeHitFlash("White", 0.32, 8.5)
 	self:FireNukeShake(20, 70, 1.1)
 
 	self:CreateNukeBlast(impactPoint, nukeModel)
@@ -1471,7 +1475,7 @@ function DevAdminService:StartNukeServer(admin)
 		if not ok then
 			warn("[DevAdminABUSE] Nuke sequence error:", err)
 			self:CreateNukeBlast(origin, nil)
-			self:FireNukeImpactFrame("Invert", 0.45, 7)
+			self:FireNukeHitFlash("Invert", 0.45, 7)
 			self:FireNukeShake(16, 55, 2.2)
 			task.wait(3)
 		end

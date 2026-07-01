@@ -72,8 +72,8 @@ local RedSlash = {
 	GuardbreakVictimShakeRoughness = 13,
 	GuardbreakVictimShakeDuration = 0.22,
 
-	ImpactFrameDuration = 0.055,
-	GuardbreakImpactFrameDuration = 0.075,
+	HitFlashDuration = 0.055,
+	GuardbreakHitFlashDuration = 0.075,
 }
 
 local ANIMATION_NAME = "RedSlash"
@@ -191,8 +191,8 @@ function RedSlash.Execute(context)
 		CharaImpactHelper.ShakeCharacter(context, targetCharacter, magnitude, roughness, duration)
 	end
 
-	local function playImpactFrame(targetCharacter, duration)
-		CharaImpactHelper.ImpactFrame(context, targetCharacter, duration)
+	local function playHitFlash(targetCharacter, duration)
+		CharaImpactHelper.HitFlash(context, targetCharacter, duration)
 	end
 
 	local function playHitPolish(result, targetCharacter)
@@ -211,8 +211,9 @@ function RedSlash.Execute(context)
 				moveData.HitVictimShakeDuration or RedSlash.HitVictimShakeDuration or 0.18
 			)
 
-			playImpactFrame(character, moveData.ImpactFrameDuration or RedSlash.ImpactFrameDuration or 0.055)
-			playImpactFrame(targetCharacter, moveData.ImpactFrameDuration or RedSlash.ImpactFrameDuration or 0.055)
+			local hitFlashDuration = moveData.HitFlashDuration or moveData.ImpactFrameDuration or RedSlash.HitFlashDuration or 0.055
+			playHitFlash(character, hitFlashDuration)
+			playHitFlash(targetCharacter, hitFlashDuration)
 
 			return
 		end
@@ -232,8 +233,9 @@ function RedSlash.Execute(context)
 				moveData.GuardbreakVictimShakeDuration or RedSlash.GuardbreakVictimShakeDuration or 0.22
 			)
 
-			playImpactFrame(character, moveData.GuardbreakImpactFrameDuration or RedSlash.GuardbreakImpactFrameDuration or 0.075)
-			playImpactFrame(targetCharacter, moveData.GuardbreakImpactFrameDuration or RedSlash.GuardbreakImpactFrameDuration or 0.075)
+			local guardbreakHitFlashDuration = moveData.GuardbreakHitFlashDuration or moveData.GuardbreakImpactFrameDuration or RedSlash.GuardbreakHitFlashDuration or 0.075
+			playHitFlash(character, guardbreakHitFlashDuration)
+			playHitFlash(targetCharacter, guardbreakHitFlashDuration)
 
 			return
 		end

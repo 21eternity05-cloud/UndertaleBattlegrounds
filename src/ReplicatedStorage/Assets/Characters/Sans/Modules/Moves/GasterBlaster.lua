@@ -103,7 +103,7 @@ local GasterBlaster = {
 	FinalBeamRadiusShakeDuration = 0.22,
 	FinalBeamRadiusShakeRange = 65,
 
-	FinalBeamImpactFrameDuration = 0.055,
+	FinalBeamHitFlashDuration = 0.055,
 }
 
 local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
@@ -128,8 +128,8 @@ local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, durati
 	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
-local function impactFrame(ctx, targetCharacter, duration)
-	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
+local function hitFlash(ctx, targetCharacter, duration)
+	SansImpactHelper.HitFlash(ctx, targetCharacter, duration)
 end
 
 local function playChargePolish(ctx, data)
@@ -185,10 +185,10 @@ local function playFinalBeamPolish(ctx, data, beamStart)
 		data.FinalBeamAttackerShakeDuration or GasterBlaster.FinalBeamAttackerShakeDuration or 0.28
 	)
 
-	impactFrame(
+	hitFlash(
 		ctx,
 		ctx.Character,
-		data.FinalBeamImpactFrameDuration or GasterBlaster.FinalBeamImpactFrameDuration or 0.055
+		data.FinalBeamHitFlashDuration or data.FinalBeamImpactFrameDuration or GasterBlaster.FinalBeamHitFlashDuration or 0.055
 	)
 
 	if ctx.CinematicService and ctx.CinematicService.ShakeRadius then

@@ -69,7 +69,7 @@ local KillingIntent = {
 	HitVictimShakeRoughness = 14,
 	HitVictimShakeDuration = 0.24,
 
-	HitImpactFrameDuration = 0.075,
+	HitFlashDuration = 0.075,
 
 	-- Counter-focus camera is combat polish, not a full cutscene takeover.
 	CameraPolicy = "ShiftLockAllowed",
@@ -463,8 +463,8 @@ function KillingIntent.Execute(context)
 		CharaImpactHelper.ShakeCharacter(context, targetCharacter, magnitude, roughness, duration)
 	end
 
-	local function impactFrame(targetCharacter, duration)
-		CharaImpactHelper.ImpactFrame(context, targetCharacter, duration)
+	local function hitFlash(targetCharacter, duration)
+		CharaImpactHelper.HitFlash(context, targetCharacter, duration)
 	end
 
 	local function setFOVOffset(targetCharacter, id, amount, tweenTime)
@@ -601,8 +601,9 @@ function KillingIntent.Execute(context)
 			moveData.HitVictimShakeDuration or KillingIntent.HitVictimShakeDuration or 0.24
 		)
 
-		impactFrame(character, moveData.HitImpactFrameDuration or KillingIntent.HitImpactFrameDuration or 0.075)
-		impactFrame(targetCharacter, moveData.HitImpactFrameDuration or KillingIntent.HitImpactFrameDuration or 0.075)
+		local hitFlashDuration = moveData.HitFlashDuration or moveData.HitImpactFrameDuration or KillingIntent.HitFlashDuration or 0.075
+		hitFlash(character, hitFlashDuration)
+		hitFlash(targetCharacter, hitFlashDuration)
 	end
 
 	startHardMovementLock()

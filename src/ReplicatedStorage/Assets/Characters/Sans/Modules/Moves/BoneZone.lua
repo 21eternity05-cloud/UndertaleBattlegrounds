@@ -66,7 +66,7 @@ local BoneZone = {
 	BlockVictimShakeRoughness = 7,
 	BlockVictimShakeDuration = 0.1,
 
-	HitImpactFrameDuration = 0.045,
+	HitFlashDuration = 0.045,
 }
 
 local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
@@ -101,8 +101,8 @@ local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, durati
 	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
-local function impactFrame(ctx, targetCharacter, duration)
-	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
+local function hitFlash(ctx, targetCharacter, duration)
+	SansImpactHelper.HitFlash(ctx, targetCharacter, duration)
 end
 
 local function playEruptionPolish(ctx, hitPosition, data)
@@ -153,10 +153,10 @@ local function playHitPolish(ctx, data, targetCharacter, result)
 			data.HitAttackerShakeDuration or BoneZone.HitAttackerShakeDuration or 0.08
 		)
 
-		impactFrame(
+		hitFlash(
 			ctx,
 			targetCharacter,
-			data.HitImpactFrameDuration or BoneZone.HitImpactFrameDuration or 0.045
+			data.HitFlashDuration or data.HitImpactFrameDuration or BoneZone.HitFlashDuration or 0.045
 		)
 
 		return

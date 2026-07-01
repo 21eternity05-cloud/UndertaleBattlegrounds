@@ -1,7 +1,7 @@
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 
-local ImpactFrame = {}
+local HitFlash = {}
 
 local effect = nil
 local activeTween = nil
@@ -13,7 +13,7 @@ local function getEffect()
 	end
 
 	effect = Instance.new("ColorCorrectionEffect")
-	effect.Name = "UTBGImpactFrame"
+	effect.Name = "UTBGHitFlash"
 	effect.Enabled = false
 	effect.Parent = Lighting
 
@@ -29,7 +29,7 @@ local function resetEffect()
 	current.Brightness = 0
 end
 
-function ImpactFrame:Flash(color, contrast, saturation, duration)
+function HitFlash:Flash(color, contrast, saturation, duration)
 	token += 1
 	local myToken = token
 
@@ -65,15 +65,15 @@ function ImpactFrame:Flash(color, contrast, saturation, duration)
 	end)
 end
 
-function ImpactFrame:RedBlack(duration)
+function HitFlash:RedBlack(duration)
 	self:Flash(Color3.fromRGB(255, 0, 0), 2.4, -1, duration or 0.08)
 end
 
-function ImpactFrame:Invert(duration)
+function HitFlash:Invert(duration)
 	self:Flash(Color3.fromRGB(0, 0, 0), -2, -1, duration or 0.08)
 end
 
-function ImpactFrame:Reset()
+function HitFlash:Reset()
 	token += 1
 
 	if activeTween then
@@ -84,4 +84,4 @@ function ImpactFrame:Reset()
 	resetEffect()
 end
 
-return ImpactFrame
+return HitFlash

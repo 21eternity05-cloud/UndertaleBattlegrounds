@@ -383,14 +383,16 @@ function DebrisVFXService:SpawnWallShatter(positionOrCFrame, normal, options)
 	local removeTweenTime = options.RemoveTweenTime or 0.35
 	local position = origin + wallNormal * (options.WallOffset or 0.18)
 
-	local crackCount = math.clamp(options.CrackCount or 7, 3, 14)
-	for index = 1, crackCount do
-		local angle = ((index - 1) / crackCount) * math.pi * 2 + math.rad(randomBetween(-18, 18))
-		local length = randomBetween(1.1, 3.2) * scale
-		local thickness = randomBetween(0.045, 0.09) * math.max(scale * 0.55, 1)
-		local offsetDistance = randomBetween(0.35, 1.25) * scale
-		local localOffset = CFrame.Angles(0, 0, angle):VectorToWorldSpace(Vector3.new(offsetDistance, 0, 0))
-		local cframe = getPlaneCFrame(position, wallNormal, angle) * CFrame.new(localOffset.X, localOffset.Y, 0)
+	local function createCrackSegment(startPoint, endPoint, thickness)
+		local delta = endPoint - startPoint
+		local length = delta.Magnitude
+		if length <= 0.05 then
+			return
+		end
+
+		local midpoint = (startPoint + endPoint) * 0.5
+		local angle = math.atan2(delta.Y, delta.X)
+		local cframe = getPlaneCFrame(position, wallNormal, angle) * CFrame.new(midpoint.X, midpoint.Y, 0)
 
 		self:CreateDebrisPart(
 			"WallShatterCrackDebris",
@@ -401,6 +403,36 @@ function DebrisVFXService:SpawnWallShatter(positionOrCFrame, normal, options)
 			lifetime,
 			removeTweenTime
 		)
+	end
+
+	local branchCount = math.clamp(options.BranchCount or options.CrackCount or 7, 5, 8)
+	for branchIndex = 1, branchCount do
+		local angle = ((branchIndex - 1) / branchCount) * math.pi * 2 + math.rad(randomBetween(-20, 20))
+		local totalLength = randomBetween(1.35, 3.15) * scale
+		local segmentCount = math.random(1, 3)
+		local cursor = Vector2.zero
+		local thickness = randomBetween(0.035, 0.07) * math.max(scale * 0.45, 1)
+
+		for segmentIndex = 1, segmentCount do
+			local remainingSegments = segmentCount - segmentIndex + 1
+			local remainingLength = totalLength - cursor.Magnitude
+			local segmentLength = (remainingLength / remainingSegments) * randomBetween(0.78, 1.18)
+			local direction = Vector2.new(math.cos(angle), math.sin(angle))
+			local nextPoint = cursor + (direction * segmentLength)
+
+			createCrackSegment(cursor, nextPoint, thickness * randomBetween(0.82, 1.08))
+
+			cursor = nextPoint
+			angle += math.rad(randomBetween(-18, 18))
+		end
+
+		if math.random() < 0.45 then
+			local sideAngle = angle + math.rad((math.random() < 0.5 and -1 or 1) * randomBetween(32, 62))
+			local sideLength = randomBetween(0.45, 0.95) * scale
+			local sideEnd = cursor + Vector2.new(math.cos(sideAngle), math.sin(sideAngle)) * sideLength
+
+			createCrackSegment(cursor, sideEnd, thickness * randomBetween(0.62, 0.82))
+		end
 	end
 
 	local chunkCount = math.clamp(options.ChunkCount or 6, 0, 16)

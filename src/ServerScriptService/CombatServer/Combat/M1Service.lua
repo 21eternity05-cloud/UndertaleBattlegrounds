@@ -522,31 +522,31 @@ function M1Service:PlayM5DownslamHitPolish(attackerCharacter, targetCharacter, t
 	local victimFOVInTime = 0.08
 	local victimFOVOutTime = 0.48
 
-	local attackerImpactDuration = 0.2
-	local victimImpactDuration = 0.25
+	local attackerHitFlashDuration = 0.2
+	local victimHitFlashDuration = 0.25
 
 	-- Attacker feedback.
 	cinematicService:ShakeOnce(attackerCharacter, attackerShakeIntensity, attackerShakeRoughness, attackerShakeDuration)
 	cinematicService:FOVPunch(attackerCharacter, attackerFOV, attackerFOVInTime, attackerFOVOutTime)
-	cinematicService:ImpactFrame(
+	cinematicService:HitFlash(
 		attackerCharacter,
 		"Flash",
 		Color3.fromRGB(255, 255, 255),
 		0.3,
 		-0.1,
-		attackerImpactDuration
+		attackerHitFlashDuration
 	)
 
 	-- Victim feedback.
 	cinematicService:ShakeOnce(targetCharacter, victimShakeIntensity, victimShakeRoughness, victimShakeDuration)
 	cinematicService:FOVPunch(targetCharacter, victimFOV, victimFOVInTime, victimFOVOutTime)
-	cinematicService:ImpactFrame(
+	cinematicService:HitFlash(
 		targetCharacter,
 		"Flash",
 		Color3.fromRGB(255, 255, 255),
 		0.42,
 		-0.18,
-		victimImpactDuration
+		victimHitFlashDuration
 	)
 
 	-- Nearby spectators only get environmental shake.
@@ -581,7 +581,7 @@ function M1Service:PlayM5GroundHitPolish(attackerCharacter, targetCharacter, tar
 	end
 
 	cinematicService:ShakeOnce(attackerCharacter, 0.65, 9, 0.42)
-	cinematicService:ImpactFrame(
+	cinematicService:HitFlash(
 		attackerCharacter,
 		"Flash",
 		Color3.fromRGB(255, 255, 255),
@@ -591,7 +591,7 @@ function M1Service:PlayM5GroundHitPolish(attackerCharacter, targetCharacter, tar
 	)
 
 	cinematicService:ShakeOnce(targetCharacter, 0.9, 10, 0.46)
-	cinematicService:ImpactFrame(
+	cinematicService:HitFlash(
 		targetCharacter,
 		"Flash",
 		Color3.fromRGB(255, 255, 255),

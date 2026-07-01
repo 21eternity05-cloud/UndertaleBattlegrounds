@@ -129,15 +129,19 @@ function CinematicService:ShakeOnce(character, intensity, roughness, duration)
 	})
 end
 
-function CinematicService:ImpactFrame(character, mode, color, contrast, saturation, duration)
+function CinematicService:HitFlash(character, mode, color, contrast, saturation, duration)
 	self:FireCamera(character, {
-		Action = "ImpactFrame",
+		Action = "HitFlash",
 		Mode = mode,
 		Color = color,
 		Contrast = contrast,
 		Saturation = saturation,
 		Duration = duration or 0.08,
 	})
+end
+
+function CinematicService:ImpactFrame(...)
+	return self:HitFlash(...)
 end
 
 function CinematicService:FOVPunch(character, targetFOV, inTime, outTime)

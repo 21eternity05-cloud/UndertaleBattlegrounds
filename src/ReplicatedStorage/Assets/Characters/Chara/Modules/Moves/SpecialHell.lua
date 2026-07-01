@@ -75,7 +75,7 @@ local SpecialHell = {
 	HellRadiusShakeDuration = 0.55,
 	HellRadiusShakeRange = 95,
 
-	HellImpactFrameDuration = 0.12,
+	HellHitFlashDuration = 0.12,
 }
 
 local STARTUP_ANIMATIONS = { "SpecialHellGrab", "UltGrab" }
@@ -530,19 +530,21 @@ local function unlockGrabVictim(victimCharacter, victimHumanoid, oldVictimState)
 	end
 end
 
-local function playImpactFrame(ctx, targetCharacter, duration)
+local function playHitFlash(ctx, targetCharacter, duration)
 	if not ctx.CinematicService then
 		return
 	end
 	if not targetCharacter or not targetCharacter.Parent then
 		return
 	end
-	if not ctx.CinematicService.ImpactFrame then
+	if not ctx.CinematicService.HitFlash and not ctx.CinematicService.ImpactFrame then
 		return
 	end
 
+	local hitFlash = ctx.CinematicService.HitFlash or ctx.CinematicService.ImpactFrame
+
 	local success = pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, "RedBlack", nil, nil, nil, duration)
+		hitFlash(ctx.CinematicService, targetCharacter, "RedBlack", nil, nil, nil, duration)
 	end)
 
 	if success then
@@ -550,7 +552,7 @@ local function playImpactFrame(ctx, targetCharacter, duration)
 	end
 
 	pcall(function()
-		ctx.CinematicService:ImpactFrame(targetCharacter, duration)
+		hitFlash(ctx.CinematicService, targetCharacter, duration)
 	end)
 end
 
@@ -844,10 +846,10 @@ function SpecialHell.Execute(ctx)
 		playHellScreenShake(ctx, victimCharacter, groundPosition)
 
 		if ctx.CinematicService then
-			local impactDuration = moveData.HellImpactFrameDuration or 0.12
+			local hitFlashDuration = moveData.HellHitFlashDuration or moveData.HellImpactFrameDuration or 0.12
 
-			playImpactFrame(ctx, character, impactDuration)
-			playImpactFrame(ctx, victimCharacter, impactDuration)
+			playHitFlash(ctx, character, hitFlashDuration)
+			playHitFlash(ctx, victimCharacter, hitFlashDuration)
 		end
 
 		local damage = moveData.Damage or 999

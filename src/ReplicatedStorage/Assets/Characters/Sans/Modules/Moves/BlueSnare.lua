@@ -81,7 +81,7 @@ local BlueSnare = {
 	FinalVictimShakeRoughness = 16,
 	FinalVictimShakeDuration = 0.3,
 
-	FinalImpactFrameDuration = 0.07,
+	FinalHitFlashDuration = 0.07,
 }
 
 local MoveHelpers = script.Parent.Parent:WaitForChild("MoveHelpers")
@@ -101,8 +101,8 @@ local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, durati
 	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
-local function playImpactFrame(ctx, targetCharacter, duration)
-	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
+local function playHitFlash(ctx, targetCharacter, duration)
+	SansImpactHelper.HitFlash(ctx, targetCharacter, duration)
 end
 
 local function playCatchPolish(ctx, targetCharacter)
@@ -156,9 +156,9 @@ local function playFinalSlamPolish(ctx, targetCharacter)
 		moveData.FinalVictimShakeDuration or BlueSnare.FinalVictimShakeDuration or 0.3
 	)
 
-	local impactDuration = moveData.FinalImpactFrameDuration or BlueSnare.FinalImpactFrameDuration or 0.07
-	playImpactFrame(ctx, ctx.Character, impactDuration)
-	playImpactFrame(ctx, targetCharacter, impactDuration)
+	local hitFlashDuration = moveData.FinalHitFlashDuration or moveData.FinalImpactFrameDuration or BlueSnare.FinalHitFlashDuration or 0.07
+	playHitFlash(ctx, ctx.Character, hitFlashDuration)
+	playHitFlash(ctx, targetCharacter, hitFlashDuration)
 end
 
 local function playHitAnimation(ctx)

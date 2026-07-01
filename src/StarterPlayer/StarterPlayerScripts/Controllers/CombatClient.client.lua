@@ -687,8 +687,8 @@ local activeCinematicAllowsShiftLock = false
 local activeCameraShakes = {}
 local lastShakeTransform = CFrame.new()
 
-local impactFrameToken = 0
-local impactFrameTween = nil
+local hitFlashToken = 0
+local hitFlashTween = nil
 
 local fovPunchToken = 0
 local fovPunchInTween = nil
@@ -984,8 +984,8 @@ player:GetAttributeChangedSignal("Setting_CameraShake"):Connect(function()
 	end
 end)
 
-local function getImpactFrameEffect()
-	local effect = Lighting:FindFirstChild("CombatImpactFrame")
+local function getHitFlashEffect()
+	local effect = Lighting:FindFirstChild("CombatHitFlash")
 
 	if effect and not effect:IsA("ColorCorrectionEffect") then
 		effect = nil
@@ -993,7 +993,7 @@ local function getImpactFrameEffect()
 
 	if not effect then
 		effect = Instance.new("ColorCorrectionEffect")
-		effect.Name = "CombatImpactFrame"
+		effect.Name = "CombatHitFlash"
 		effect.Enabled = false
 		effect.Parent = Lighting
 	end
@@ -1001,11 +1001,11 @@ local function getImpactFrameEffect()
 	return effect
 end
 
-local function playImpactFrame(payload)
-	local effect = getImpactFrameEffect()
+local function playHitFlash(payload)
+	local effect = getHitFlashEffect()
 
-	impactFrameToken += 1
-	local token = impactFrameToken
+	hitFlashToken += 1
+	local token = hitFlashToken
 
 	local holdTime = typeof(payload.Duration) == "number" and math.max(0.01, payload.Duration) or 0.18
 	local inTime = typeof(payload.InTime) == "number" and math.max(0, payload.InTime) or 0.035
@@ -1016,9 +1016,9 @@ local function playImpactFrame(payload)
 	local saturation = typeof(payload.Saturation) == "number" and payload.Saturation or -0.2
 	local brightness = typeof(payload.Brightness) == "number" and payload.Brightness or 0.05
 
-	if impactFrameTween then
-		impactFrameTween:Cancel()
-		impactFrameTween = nil
+	if hitFlashTween then
+		hitFlashTween:Cancel()
+		hitFlashTween = nil
 	end
 
 	effect.Enabled = true
@@ -1038,14 +1038,14 @@ local function playImpactFrame(payload)
 		}
 	)
 
-	impactFrameTween = tweenIn
+	hitFlashTween = tweenIn
 	tweenIn:Play()
 
 	tweenIn.Completed:Connect(function()
-		if token ~= impactFrameToken then return end
+		if token ~= hitFlashToken then return end
 
 		task.delay(holdTime, function()
-			if token ~= impactFrameToken then return end
+			if token ~= hitFlashToken then return end
 			if not effect or not effect.Parent then return end
 
 			local tweenOut = TweenService:Create(
@@ -1059,11 +1059,11 @@ local function playImpactFrame(payload)
 				}
 			)
 
-			impactFrameTween = tweenOut
+			hitFlashTween = tweenOut
 			tweenOut:Play()
 
 			tweenOut.Completed:Connect(function()
-				if token ~= impactFrameToken then return end
+				if token ~= hitFlashToken then return end
 				if not effect or not effect.Parent then return end
 
 				effect.Enabled = false
@@ -1071,7 +1071,7 @@ local function playImpactFrame(payload)
 				effect.Contrast = 0
 				effect.Saturation = 0
 				effect.Brightness = 0
-				impactFrameTween = nil
+				hitFlashTween = nil
 			end)
 		end)
 	end)
@@ -1205,8 +1205,8 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 	elseif payload.Action == "CameraShakeOnce" then
 		startCameraShake(payload.Intensity, payload.Roughness, payload.Duration)
 
-	elseif payload.Action == "ImpactFrame" then
-		playImpactFrame(payload)
+	elseif payload.Action == "HitFlash" or payload.Action == "ImpactFrame" then
+		playHitFlash(payload)
 
 	elseif payload.Action == "FOVPunch" then
 		playFOVPunch(payload.TargetFOV, payload.InTime, payload.OutTime, payload.HoldTime)

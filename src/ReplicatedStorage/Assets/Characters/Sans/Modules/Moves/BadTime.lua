@@ -146,7 +146,7 @@ local BadTime = {
 	FinalRingBeamVictimShakeRoughness = 16,
 	FinalRingBeamVictimShakeDuration = 0.28,
 
-	FinalRingBeamImpactFrameDuration = 0.06,
+	FinalRingBeamHitFlashDuration = 0.06,
 
 	GravitySpamShakeMagnitude = 0.7,
 	GravitySpamShakeRoughness = 9,
@@ -160,7 +160,7 @@ local BadTime = {
 	FinalSlamVictimShakeRoughness = 20,
 	FinalSlamVictimShakeDuration = 0.45,
 
-	FinalSlamImpactFrameDuration = 0.09,
+	FinalSlamHitFlashDuration = 0.09,
 
 	AwardsUlt = false,
 }
@@ -235,8 +235,8 @@ local function shakeCharacter(ctx, targetCharacter, magnitude, roughness, durati
 	SansImpactHelper.ShakeCharacter(ctx, targetCharacter, magnitude, roughness, duration)
 end
 
-local function impactFrame(ctx, targetCharacter, duration)
-	SansImpactHelper.ImpactFrame(ctx, targetCharacter, duration)
+local function hitFlash(ctx, targetCharacter, duration)
+	SansImpactHelper.HitFlash(ctx, targetCharacter, duration)
 end
 
 local function playSequenceDamagePolish(ctx, targetCharacter, blockMode)
@@ -313,8 +313,9 @@ local function playBlasterHitPolish(ctx, targetCharacter, giant, finalPulse)
 			data.FinalRingBeamVictimShakeDuration or BadTime.FinalRingBeamVictimShakeDuration or 0.28
 		)
 
-		impactFrame(ctx, ctx.Character, data.FinalRingBeamImpactFrameDuration or BadTime.FinalRingBeamImpactFrameDuration or 0.06)
-		impactFrame(ctx, targetCharacter, data.FinalRingBeamImpactFrameDuration or BadTime.FinalRingBeamImpactFrameDuration or 0.06)
+		local finalRingBeamHitFlashDuration = data.FinalRingBeamHitFlashDuration or data.FinalRingBeamImpactFrameDuration or BadTime.FinalRingBeamHitFlashDuration or 0.06
+		hitFlash(ctx, ctx.Character, finalRingBeamHitFlashDuration)
+		hitFlash(ctx, targetCharacter, finalRingBeamHitFlashDuration)
 
 		return
 	end
@@ -371,8 +372,9 @@ local function playFinalSlamPolish(ctx, targetCharacter)
 		data.FinalSlamVictimShakeDuration or BadTime.FinalSlamVictimShakeDuration or 0.45
 	)
 
-	impactFrame(ctx, ctx.Character, data.FinalSlamImpactFrameDuration or BadTime.FinalSlamImpactFrameDuration or 0.09)
-	impactFrame(ctx, targetCharacter, data.FinalSlamImpactFrameDuration or BadTime.FinalSlamImpactFrameDuration or 0.09)
+	local finalSlamHitFlashDuration = data.FinalSlamHitFlashDuration or data.FinalSlamImpactFrameDuration or BadTime.FinalSlamHitFlashDuration or 0.09
+	hitFlash(ctx, ctx.Character, finalSlamHitFlashDuration)
+	hitFlash(ctx, targetCharacter, finalSlamHitFlashDuration)
 end
 
 local function setReservedVictim(character, victimCharacter)
