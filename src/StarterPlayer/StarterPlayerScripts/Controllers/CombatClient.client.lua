@@ -1205,7 +1205,7 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 	elseif payload.Action == "CameraShakeOnce" then
 		startCameraShake(payload.Intensity, payload.Roughness, payload.Duration)
 
-	elseif payload.Action == "HitFlash" or payload.Action == "ImpactFrame" then
+	elseif payload.Action == "HitFlash" then
 		playHitFlash(payload)
 
 	elseif payload.Action == "FOVPunch" then

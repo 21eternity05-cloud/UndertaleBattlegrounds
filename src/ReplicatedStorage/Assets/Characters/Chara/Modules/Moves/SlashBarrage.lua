@@ -232,6 +232,10 @@ function SlashBarrage.Execute(context)
 
 		print("[SlashBarrage] Hit marker reached")
 
+		if context.VFXService and context.VFXService.SpawnAfterImage then
+			context.VFXService:SpawnAfterImage(character, "SlashBarrageHit")
+		end
+
 		playSlashVFX()
 		playCharaSFX("KnifeSwing", 2)
 

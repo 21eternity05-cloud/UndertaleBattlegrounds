@@ -692,6 +692,49 @@ function VFXService:SpawnFlyRocks(positionOrCFrame, options)
 	return self.DebrisVFXService:SpawnFlyRocks(positionOrCFrame, options)
 end
 
+function VFXService:PlayImpactFrameForCharacter(character, presetName, options)
+	if not self.ImpactFrameService then return end
+	return self.ImpactFrameService:PlayForCharacter(character, presetName, options)
+end
+
+function VFXService:PlayImpactFrameRadius(position, radius, presetName, options)
+	if not self.ImpactFrameService then return end
+	return self.ImpactFrameService:PlayRadius(position, radius, presetName, options)
+end
+
+function VFXService:PlayImpactFrameForPlayer(player, presetName, options)
+	if not self.ImpactFrameService then return end
+	return self.ImpactFrameService:PlayForPlayer(player, presetName, options)
+end
+
+function VFXService:SpawnAfterImage(character, presetName, options)
+	if not self.AfterImageService then return end
+
+	options = options or {}
+	options.PresetName = presetName or options.PresetName or options.Preset or "Default"
+
+	return self.AfterImageService:SpawnAfterImage(character, options)
+end
+
+function VFXService:StartAfterImageTrail(character, presetName, options)
+	if not self.AfterImageService then return nil end
+
+	options = options or {}
+	options.PresetName = presetName or options.PresetName or options.Preset or "Default"
+
+	return self.AfterImageService:StartTrail(character, options)
+end
+
+function VFXService:StopAfterImageTrail(handle)
+	if not self.AfterImageService then return end
+	self.AfterImageService:StopTrail(handle)
+end
+
+function VFXService:StopAfterImagesForCharacter(character)
+	if not self.AfterImageService then return end
+	self.AfterImageService:StopAllForCharacter(character)
+end
+
 function VFXService:PlayCharacterMoveVFX(character, moveName, targetCharacter, targetRoot)
 	local characterName = self:GetCharacterName(character)
 	local module = self:GetCharacterVFXModule(characterName)

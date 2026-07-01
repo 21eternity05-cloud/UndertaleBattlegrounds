@@ -50,6 +50,8 @@ local AwakeningMusicService = require(effectsFolder:WaitForChild("AwakeningMusic
 -- Status / utility services
 local CombatStatusService = require(coreFolder:WaitForChild("CombatStatusService")).new(Config)
 local CinematicService = require(effectsFolder:WaitForChild("CinematicService")).new(Config)
+local ImpactFrameService = require(effectsFolder:WaitForChild("ImpactFrameService")).new(Config)
+local AfterImageService = require(effectsFolder:WaitForChild("AfterImageService")).new(Config)
 local CharacterIntroService = require(characterFolder:WaitForChild("CharacterIntroService")).new(
 	Config,
 	AnimationService,
@@ -184,8 +186,11 @@ CounterService.UltService = UltService
 UltService.ProgressionService = ProgressionService
 UltService.KillCreditService = KillCreditService
 DebugService.SoulBurstService = SoulBurstService
+VFXService.ImpactFrameService = ImpactFrameService
+VFXService.AfterImageService = AfterImageService
 
 _G.UTBGDevServices = {
+	AfterImageService = AfterImageService,
 	BlockService = BlockService,
 	CharacterService = CharacterService,
 	CharacterMorphService = CharacterMorphService,
@@ -194,6 +199,7 @@ _G.UTBGDevServices = {
 	CounterService = CounterService,
 	DebugService = DebugService,
 	HitboxService = HitboxService,
+	ImpactFrameService = ImpactFrameService,
 	KillCreditService = KillCreditService,
 	LeaderboardService = LeaderboardService,
 	MovementService = MovementService,

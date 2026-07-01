@@ -8,6 +8,7 @@ local cinematicRemote = remotes:WaitForChild("CinematicRemote")
 local modules = script.Parent.Parent:WaitForChild("ClientModules")
 local CameraShake = require(modules:WaitForChild("CameraShake"))
 local HitFlash = require(modules:WaitForChild("HitFlash"))
+local ImpactFrame = require(modules:WaitForChild("ImpactFrame"))
 
 local function isCameraShakeEnabled()
 	return player:GetAttribute("Setting_CameraShake") ~= false
@@ -22,6 +23,7 @@ end
 local function resetEffects()
 	CameraShake:StopAll()
 	HitFlash:Reset()
+	ImpactFrame:Reset()
 end
 
 player:GetAttributeChangedSignal("Setting_CameraShake"):Connect(refreshCameraShakeSetting)
@@ -44,7 +46,7 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 		CameraShake:ShakeSustain(payload.Id, payload.Intensity, payload.Roughness)
 	elseif payload.Action == "CameraShakeStop" then
 		CameraShake:StopSustain(payload.Id)
-	elseif payload.Action == "HitFlash" or payload.Action == "ImpactFrame" then
+	elseif payload.Action == "HitFlash" then
 		if payload.Mode == "RedBlack" then
 			HitFlash:RedBlack(payload.Duration)
 		elseif payload.Mode == "Invert" then
@@ -52,6 +54,8 @@ cinematicRemote.OnClientEvent:Connect(function(payload)
 		else
 			HitFlash:Flash(payload.Color, payload.Contrast, payload.Saturation, payload.Duration)
 		end
+	elseif payload.Action == "ImpactFrame" then
+		ImpactFrame:Play(payload.Options or {})
 	elseif payload.Action == "ResetCamera" then
 		resetEffects()
 	end

@@ -154,6 +154,10 @@
                 "$properties": {
                   "Value": [0.72, 0.06, 0.06]
                 }
+              },
+
+              "VFXPresets": {
+                "$path": "src/ReplicatedStorage/Assets/Characters/Chara/VFX/VFXPresets.lua"
               }
             },
 
@@ -180,6 +184,10 @@
                 "$properties": {
                   "Value": [0.12, 0.42, 1]
                 }
+              },
+
+              "VFXPresets": {
+                "$path": "src/ReplicatedStorage/Assets/Characters/Sans/VFX/VFXPresets.lua"
               }
             },
 
@@ -240,6 +248,10 @@
             "$path": "src/ServerScriptService/CombatServer/Effects/AwakeningMusicService.lua"
           },
 
+          "AfterImageService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/AfterImageService.lua"
+          },
+
           "CinematicService": {
             "$path": "src/ServerScriptService/CombatServer/Effects/CinematicService.lua"
           },
@@ -250,6 +262,10 @@
 
           "DebrisVFXService": {
             "$path": "src/ServerScriptService/CombatServer/Effects/DebrisVFXService.lua"
+          },
+
+          "ImpactFrameService": {
+            "$path": "src/ServerScriptService/CombatServer/Effects/ImpactFrameService.lua"
           },
 
           "VFXService": {
