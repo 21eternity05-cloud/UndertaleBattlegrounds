@@ -248,6 +248,10 @@ function StateService:SetupCharacter(character)
 	character:SetAttribute("CombatMode", "Base")
 	character:SetAttribute("AwakeningActive", false)
 	character:SetAttribute("AwakeningEndsAt", 0)
+	character:SetAttribute("Ragdolled", false)
+	character:SetAttribute("RagdollReason", nil)
+	character:SetAttribute("RagdollType", nil)
+	character:SetAttribute("RagdollToken", character:GetAttribute("RagdollToken") or 0)
 
 	character:SetAttribute("IFrameActive", false)
 	character:SetAttribute("ArmorActive", false)
@@ -274,6 +278,10 @@ function StateService:SetupCharacter(character)
 
 	self:HookBlockingVisualState(character)
 	self:HookImmunityVisualState(character)
+
+	if self.RagdollService and self.RagdollService.CleanupCharacter then
+		self.RagdollService:CleanupCharacter(character)
+	end
 end
 
 function StateService:StartCharacterSetup()
@@ -319,6 +327,7 @@ function StateService:CanAttack(character)
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Ragdolled") then return false end
 
 	return true
 end
@@ -334,8 +343,33 @@ function StateService:CanUseMove(character)
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Ragdolled") then return false end
 
 	return true
+end
+
+function StateService:ApplyRagdoll(character, duration, options)
+	if not self.RagdollService or not self.RagdollService.ApplyRagdoll then
+		return nil
+	end
+
+	return self.RagdollService:ApplyRagdoll(character, duration, options)
+end
+
+function StateService:CancelRagdoll(character, reason)
+	if not self.RagdollService or not self.RagdollService.CancelRagdoll then
+		return
+	end
+
+	self.RagdollService:CancelRagdoll(character, reason)
+end
+
+function StateService:IsRagdolled(character)
+	if self.RagdollService and self.RagdollService.IsRagdolled then
+		return self.RagdollService:IsRagdolled(character)
+	end
+
+	return character ~= nil and character:GetAttribute("Ragdolled") == true
 end
 
 function StateService:IsAirborne(humanoid)
@@ -438,6 +472,7 @@ function StateService:CanRestoreWhiffWalkSpeed(character)
 	if character:GetAttribute("MovementLocked") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Emoting") then return false end
+	if character:GetAttribute("Ragdolled") then return false end
 
 	return true
 end
@@ -449,6 +484,7 @@ function StateService:HasNonWhiffDashLock(character)
 		or character:GetAttribute("IntroLocked") == true
 		or character:GetAttribute("MovementLocked") == true
 		or character:GetAttribute("CinematicLocked") == true
+		or character:GetAttribute("Ragdolled") == true
 		or character:GetAttribute("Grabbed") == true
 		or character:GetAttribute("Grabbing") == true
 		or character:GetAttribute("UltimateLocked") == true

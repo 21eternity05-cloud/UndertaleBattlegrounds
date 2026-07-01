@@ -77,6 +77,7 @@ function BlockService:CanBlockNow(character)
 	if character:GetAttribute("Attacking") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Ragdolled") then return false end
 	if os.clock() < (character:GetAttribute("BlockLockedUntil") or 0) then return false end
 	if character:GetAttribute("Grabbed") then return false end
 	if character:GetAttribute("GrabLocked") then return false end
@@ -140,6 +141,7 @@ function BlockService:HookBlockWakeSignals(player, character)
 		"Blocking",
 		"Stunned",
 		"Guardbroken",
+		"Ragdolled",
 		"Grabbed",
 		"GrabLocked",
 		"CinematicLocked",
@@ -305,6 +307,7 @@ function BlockService:SetCharacterBlocking(character, isBlocking)
 
 		if not character:GetAttribute("Stunned")
 			and not character:GetAttribute("Guardbroken")
+			and not character:GetAttribute("Ragdolled")
 			and not character:GetAttribute("UsingMove")
 			and not character:GetAttribute("Emoting")
 		then
@@ -347,6 +350,7 @@ function BlockService:SetBlocking(player, isBlocking)
 
 		if not character:GetAttribute("Stunned")
 			and not character:GetAttribute("Guardbroken")
+			and not character:GetAttribute("Ragdolled")
 			and not character:GetAttribute("UsingMove")
 			and not character:GetAttribute("Emoting")
 		then

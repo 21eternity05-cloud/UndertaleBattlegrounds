@@ -293,6 +293,7 @@ local function canRequestAttack()
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Ragdolled") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Emoting") then return false end
 
@@ -306,6 +307,7 @@ local function canRequestMove()
 	if character:GetAttribute("Stunned") then return false end
 	if character:GetAttribute("Blocking") then return false end
 	if character:GetAttribute("Guardbroken") then return false end
+	if character:GetAttribute("Ragdolled") then return false end
 	if character:GetAttribute("UsingMove") then return false end
 	if character:GetAttribute("Emoting") then return false end
 

@@ -440,6 +440,26 @@ function RedSlash.Execute(context)
 						knockbackData,
 						"RedSlashPreset"
 					)
+
+					if context.StateService and context.StateService.ApplyRagdoll then
+						task.delay(0.05, function()
+							if not targetCharacter
+								or not targetCharacter.Parent
+								or not targetHumanoid
+								or targetHumanoid.Health <= 0
+							then
+								return
+							end
+
+							context.StateService:ApplyRagdoll(targetCharacter, 0.9, {
+								Reason = "RedSlash",
+								Type = "HardRagdoll",
+								MovementLocked = true,
+								DashLocked = true,
+								CancelExistingMovement = true,
+							})
+						end)
+					end
 				end
 			end
 		)

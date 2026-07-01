@@ -234,6 +234,9 @@ function MoveService:CanUseMove(player, character, humanoid, moveSlot, moveId)
 	if character:GetAttribute("Guardbroken") then
 		return false
 	end
+	if character:GetAttribute("Ragdolled") then
+		return false
+	end
 
 	if moveSlot ~= "Ultimate" and self:IsOnCooldown(player, moveId) then
 		return false
@@ -295,6 +298,9 @@ function MoveService:RestoreMoveMovement(character)
 		return
 	end
 	if character:GetAttribute("Guardbroken") then
+		return
+	end
+	if character:GetAttribute("Ragdolled") then
 		return
 	end
 	if character:GetAttribute("Blocking") then
@@ -430,6 +436,9 @@ function MoveService:CanAttackContinue(character, moveData)
 		return false
 	end
 	if character:GetAttribute("Guardbroken") then
+		return false
+	end
+	if character:GetAttribute("Ragdolled") then
 		return false
 	end
 	if character:GetAttribute("Stunned")

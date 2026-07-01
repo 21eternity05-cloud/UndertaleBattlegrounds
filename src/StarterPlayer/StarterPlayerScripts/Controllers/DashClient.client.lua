@@ -64,6 +64,10 @@ local function isDashLocked(character)
 		return true
 	end
 
+	if character:GetAttribute("Ragdolled") then
+		return true
+	end
+
 	if character:GetAttribute("MovementLocked") then
 		return true
 	end
